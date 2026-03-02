@@ -15,6 +15,8 @@ func Params() (*appconfig.Parameters, error) {
 	return registry.ModuleParams(ModuleName)
 }
 
+// TODO: add healthcheck endpoint
+
 func NewListTasksModule(listTasks *http.ListTasks) *rest.Module {
 	return &rest.Module{
 		Path:        "/_/tasks",
