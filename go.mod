@@ -5,11 +5,13 @@ go 1.24.2
 require (
 	github.com/ensoria/config v0.0.15
 	github.com/ensoria/grpcgear v0.0.4
+	github.com/ensoria/loggear v0.0.1
 	github.com/ensoria/mb v0.0.5
 	github.com/ensoria/rest v0.0.14
-	github.com/ensoria/validator v0.0.4
+	github.com/ensoria/validator v0.0.5
 	github.com/ensoria/websocket v0.0.2
 	github.com/google/uuid v1.6.0
+	github.com/spf13/pflag v1.0.10
 	go.uber.org/fx v1.24.0
 	google.golang.org/grpc v1.79.1
 	google.golang.org/protobuf v1.36.10
@@ -21,7 +23,6 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/ensoria/loggear v0.0.1 // indirect
 	github.com/ensoria/testutil v0.0.1 // indirect
 	github.com/go-sql-driver/mysql v1.9.3 // indirect
 	github.com/lib/pq v1.10.9 // indirect
@@ -29,7 +30,6 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.32 // indirect
 	github.com/ncruces/go-strftime v0.1.9 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
-	github.com/spf13/pflag v1.0.10 // indirect
 	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b // indirect
 	modernc.org/libc v1.66.10 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
