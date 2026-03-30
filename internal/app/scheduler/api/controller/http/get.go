@@ -3,7 +3,7 @@ package http
 import (
 	"net/http"
 
-	"github.com/ensoria/projecttemplate/internal/app/scheduler/api/controller/dto"
+	"github.com/ensoria/ensoria-template/internal/app/scheduler/api/controller/dto"
 	"github.com/ensoria/rest/pkg/rest"
 	"github.com/ensoria/scheduler/pkg/scheduler"
 )

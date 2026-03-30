@@ -3,9 +3,9 @@ package system
 import (
 	"github.com/ensoria/config/pkg/appconfig"
 	"github.com/ensoria/config/pkg/registry"
-	"github.com/ensoria/projecttemplate/internal/app/worker/api/controller/http"
-	"github.com/ensoria/projecttemplate/internal/app/worker/api/middleware"
-	"github.com/ensoria/projecttemplate/internal/plamo/dikit"
+	"github.com/ensoria/ensoria-template/internal/app/worker/api/controller/http"
+	"github.com/ensoria/ensoria-template/internal/app/worker/api/middleware"
+	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
 	"github.com/ensoria/rest/pkg/rest"
 )
 

@@ -1,7 +1,7 @@
 package grpcclt
 
 import (
-	"github.com/ensoria/projecttemplate/internal/plamo/dikit"
+	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
 )
 
 func init() {

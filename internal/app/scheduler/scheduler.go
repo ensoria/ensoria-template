@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
+	_ "github.com/ensoria/ensoria-template/internal/app/scheduler/api"
+	"github.com/ensoria/ensoria-template/internal/app/scheduler/task"
+	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
 	"github.com/ensoria/loggear/pkg/loggear"
-	_ "github.com/ensoria/projecttemplate/internal/app/scheduler/api"
-	"github.com/ensoria/projecttemplate/internal/app/scheduler/task"
-	"github.com/ensoria/projecttemplate/internal/plamo/dikit"
 	"github.com/ensoria/scheduler/pkg/control"
 	"github.com/ensoria/scheduler/pkg/database"
 	"github.com/ensoria/scheduler/pkg/distributed"

@@ -6,21 +6,21 @@ import (
 
 	"github.com/ensoria/config/pkg/appconfig"
 	"github.com/ensoria/config/pkg/registry"
+	usergrpc "github.com/ensoria/ensoria-template/internal/module/user/controller/grpc"
+	"github.com/ensoria/ensoria-template/internal/module/user/controller/http"
+	usermb "github.com/ensoria/ensoria-template/internal/module/user/controller/mb"
+	"github.com/ensoria/ensoria-template/internal/module/user/controller/ws"
+	"github.com/ensoria/ensoria-template/internal/module/user/job"
+	"github.com/ensoria/ensoria-template/internal/module/user/service"
+	"github.com/ensoria/ensoria-template/internal/module/user/task"
+	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
 	"github.com/ensoria/mb/pkg/mb"
-	usergrpc "github.com/ensoria/projecttemplate/internal/module/user/controller/grpc"
-	"github.com/ensoria/projecttemplate/internal/module/user/controller/http"
-	usermb "github.com/ensoria/projecttemplate/internal/module/user/controller/mb"
-	"github.com/ensoria/projecttemplate/internal/module/user/controller/ws"
-	"github.com/ensoria/projecttemplate/internal/module/user/job"
-	"github.com/ensoria/projecttemplate/internal/module/user/service"
-	"github.com/ensoria/projecttemplate/internal/module/user/task"
-	"github.com/ensoria/projecttemplate/internal/plamo/dikit"
 	"github.com/ensoria/rest/pkg/rest"
 	"github.com/ensoria/websocket/pkg/wsconfig"
 
-	"github.com/ensoria/projecttemplate/internal/infra/grpcclt"
-	pbPost "github.com/ensoria/projecttemplate/pb/post"
-	pb "github.com/ensoria/projecttemplate/pb/user"
+	"github.com/ensoria/ensoria-template/internal/infra/grpcclt"
+	pbPost "github.com/ensoria/ensoria-template/pb/post"
+	pb "github.com/ensoria/ensoria-template/pb/user"
 )
 
 // TODO: encliでモジュールを作成したら、このファイルに

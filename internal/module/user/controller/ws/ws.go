@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/ensoria/projecttemplate/internal/module/user/service"
+	"github.com/ensoria/ensoria-template/internal/module/user/service"
 	"github.com/ensoria/websocket/pkg/wsconfig"
 	"github.com/ensoria/websocket/pkg/wsevent"
 	"github.com/ensoria/websocket/pkg/wssend"

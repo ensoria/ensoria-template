@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/ensoria/projecttemplate/internal/app/scheduler/api/controller/dto"
-	"github.com/ensoria/projecttemplate/internal/plamo/vkit"
+	"github.com/ensoria/ensoria-template/internal/app/scheduler/api/controller/dto"
+	"github.com/ensoria/ensoria-template/internal/plamo/vkit"
 	"github.com/ensoria/rest/pkg/rest"
 	"github.com/ensoria/scheduler/pkg/scheduler"
 	"github.com/ensoria/validator/pkg/rule"

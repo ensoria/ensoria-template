@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/ensoria/projecttemplate/internal/app/worker/api/dto"
+	"github.com/ensoria/ensoria-template/internal/app/worker/api/dto"
 	"github.com/ensoria/rest/pkg/rest"
 	"github.com/ensoria/worker/pkg/worker"
 )

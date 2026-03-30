@@ -3,11 +3,11 @@ package post
 import (
 	"github.com/ensoria/config/pkg/appconfig"
 	"github.com/ensoria/config/pkg/registry"
-	postgrpc "github.com/ensoria/projecttemplate/internal/module/post/controller/grpc"
-	"github.com/ensoria/projecttemplate/internal/module/post/controller/http"
-	"github.com/ensoria/projecttemplate/internal/module/post/service"
-	"github.com/ensoria/projecttemplate/internal/plamo/dikit"
-	pb "github.com/ensoria/projecttemplate/pb/post"
+	postgrpc "github.com/ensoria/ensoria-template/internal/module/post/controller/grpc"
+	"github.com/ensoria/ensoria-template/internal/module/post/controller/http"
+	"github.com/ensoria/ensoria-template/internal/module/post/service"
+	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
+	pb "github.com/ensoria/ensoria-template/pb/post"
 	"github.com/ensoria/rest/pkg/rest"
 )
 

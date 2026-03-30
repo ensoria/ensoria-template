@@ -4,17 +4,17 @@ import (
 	"fmt"
 
 	"github.com/ensoria/config/pkg/registry"
-	"github.com/ensoria/projecttemplate/internal/infra/cache"
-	"github.com/ensoria/projecttemplate/internal/infra/db"
-	"github.com/ensoria/projecttemplate/internal/infra/mb"
+	"github.com/ensoria/ensoria-template/internal/infra/cache"
+	"github.com/ensoria/ensoria-template/internal/infra/db"
+	"github.com/ensoria/ensoria-template/internal/infra/mb"
 	"github.com/ensoria/websocket/pkg/wsrouter"
 
-	httpApp "github.com/ensoria/projecttemplate/internal/app/http"
-	mbApp "github.com/ensoria/projecttemplate/internal/app/mb"
-	schedulerApp "github.com/ensoria/projecttemplate/internal/app/scheduler"
-	workerApp "github.com/ensoria/projecttemplate/internal/app/worker"
-	_ "github.com/ensoria/projecttemplate/internal/module"
-	"github.com/ensoria/projecttemplate/internal/plamo/dikit"
+	httpApp "github.com/ensoria/ensoria-template/internal/app/http"
+	mbApp "github.com/ensoria/ensoria-template/internal/app/mb"
+	schedulerApp "github.com/ensoria/ensoria-template/internal/app/scheduler"
+	workerApp "github.com/ensoria/ensoria-template/internal/app/worker"
+	_ "github.com/ensoria/ensoria-template/internal/module"
+	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
 )
 
 func Start(envVal *string) error {

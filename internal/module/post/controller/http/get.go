@@ -3,7 +3,7 @@ package http
 import (
 	"net/http"
 
-	"github.com/ensoria/projecttemplate/internal/module/post/service"
+	"github.com/ensoria/ensoria-template/internal/module/post/service"
 	"github.com/ensoria/rest/pkg/rest"
 )
 

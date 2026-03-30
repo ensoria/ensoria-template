@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
 	"github.com/ensoria/loggear/pkg/loggear"
-	"github.com/ensoria/projecttemplate/internal/plamo/dikit"
 	schedulerDB "github.com/ensoria/scheduler/pkg/database"
 	workerDB "github.com/ensoria/worker/pkg/database"
 )

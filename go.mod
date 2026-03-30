@@ -1,4 +1,4 @@
-module github.com/ensoria/projecttemplate
+module github.com/ensoria/ensoria-template
 
 go 1.24.2
 

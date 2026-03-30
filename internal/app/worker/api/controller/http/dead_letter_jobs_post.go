@@ -3,8 +3,8 @@ package http
 import (
 	"net/http"
 
-	"github.com/ensoria/projecttemplate/internal/app/worker/api/dto"
-	"github.com/ensoria/projecttemplate/internal/plamo/vkit"
+	"github.com/ensoria/ensoria-template/internal/app/worker/api/dto"
+	"github.com/ensoria/ensoria-template/internal/plamo/vkit"
 	"github.com/ensoria/rest/pkg/rest"
 	"github.com/ensoria/validator/pkg/rule"
 	"github.com/ensoria/worker/pkg/worker"

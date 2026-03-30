@@ -1,6 +1,6 @@
 package dto
 
-import "github.com/ensoria/projecttemplate/internal/module/user/model"
+import "github.com/ensoria/ensoria-template/internal/module/user/model"
 
 type CreateUser struct {
 	Id   int    `json:"id"`

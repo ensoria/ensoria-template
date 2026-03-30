@@ -6,10 +6,10 @@ import (
 	"net"
 
 	"github.com/ensoria/config/pkg/env"
+	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
 	"github.com/ensoria/grpcgear/pkg/interceptor/logging/logsrv"
 	"github.com/ensoria/grpcgear/pkg/interceptor/recovery/recoverysrv"
 	"github.com/ensoria/loggear/pkg/loggear"
-	"github.com/ensoria/projecttemplate/internal/plamo/dikit"
 	"go.uber.org/fx"
 	ggrpc "google.golang.org/grpc"
 	"google.golang.org/grpc/reflection"

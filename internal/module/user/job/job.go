@@ -7,7 +7,7 @@ import (
 	"log"
 	"time"
 
-	appJob "github.com/ensoria/projecttemplate/internal/app/worker/job" // TODO: 名前を考え直す
+	appJob "github.com/ensoria/ensoria-template/internal/app/worker/job" // TODO: 名前を考え直す
 	libWorker "github.com/ensoria/worker/pkg/job"
 )
 

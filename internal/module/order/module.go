@@ -3,9 +3,9 @@ package order
 import (
 	"github.com/ensoria/config/pkg/appconfig"
 	"github.com/ensoria/config/pkg/registry"
-	"github.com/ensoria/projecttemplate/internal/module/order/controller/http"
-	"github.com/ensoria/projecttemplate/internal/module/order/service"
-	"github.com/ensoria/projecttemplate/internal/plamo/dikit"
+	"github.com/ensoria/ensoria-template/internal/module/order/controller/http"
+	"github.com/ensoria/ensoria-template/internal/module/order/service"
+	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
 	"github.com/ensoria/rest/pkg/rest"
 )
 

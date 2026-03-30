@@ -3,10 +3,10 @@ package worker
 import (
 	"context"
 
+	_ "github.com/ensoria/ensoria-template/internal/app/worker/api"
+	appJob "github.com/ensoria/ensoria-template/internal/app/worker/job"
+	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
 	"github.com/ensoria/loggear/pkg/loggear"
-	_ "github.com/ensoria/projecttemplate/internal/app/worker/api"
-	appJob "github.com/ensoria/projecttemplate/internal/app/worker/job"
-	"github.com/ensoria/projecttemplate/internal/plamo/dikit"
 	"github.com/ensoria/worker/pkg/database"
 	"github.com/ensoria/worker/pkg/history"
 	"github.com/ensoria/worker/pkg/queue"

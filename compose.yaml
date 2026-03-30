@@ -1,6 +1,6 @@
 services:
-  ensoria-projecttemplate-localstack:
-    container_name: "ensoria-projecttemplate-localstack"
+  ensoria-ensoria-template-localstack:
+    container_name: "ensoria-ensoria-template-localstack"
     image: localstack/localstack
     ports:
       - "127.0.0.1:4566:4566"            # LocalStack Gateway
@@ -21,9 +21,9 @@ services:
       - "./.localstack/init:/etc/localstack/init"
       - "/var/run/docker.sock:/var/run/docker.sock"
     networks:
-      - ensoria-projecttemplate-network
+      - ensoria-ensoria-template-network
 
-  ensoria-projecttemplate-rabbitmq:
+  ensoria-ensoria-template-rabbitmq:
     image: rabbitmq:4-management
     container_name: ensoria-mb-rabbitmq
     environment:
@@ -35,11 +35,11 @@ services:
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
     networks:
-      - ensoria-projecttemplate-network
+      - ensoria-ensoria-template-network
 
-  ensoria-projecttemplate-redis:
+  ensoria-ensoria-template-redis:
     image: redis:7.4-alpine
-    container_name: ensoria-projecttemplate-redis
+    container_name: ensoria-ensoria-template-redis
     ports:
       - "6379:6379"
     command: redis-server --appendonly yes
@@ -52,12 +52,12 @@ services:
       retries: 3
     restart: unless-stopped
     networks:
-      - ensoria-projecttemplate-network
+      - ensoria-ensoria-template-network
 
 
-  ensoria-projecttemplate-postgres:
+  ensoria-ensoria-template-postgres:
     image: postgres:16-alpine
-    container_name: ensoria-projecttemplate-postgres
+    container_name: ensoria-ensoria-template-postgres
     ports:
       - "5432:5432"
     environment:
@@ -73,11 +73,11 @@ services:
       retries: 3
     restart: unless-stopped
     networks:
-      - ensoria-projecttemplate-network
+      - ensoria-ensoria-template-network
 
 
 networks:
-  ensoria-projecttemplate-network:
+  ensoria-ensoria-template-network:
     driver: bridge
 
 volumes:

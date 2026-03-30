@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/ensoria/projecttemplate/internal/module/user/service"
-	"github.com/ensoria/projecttemplate/internal/plamo/dikit"
-	pb "github.com/ensoria/projecttemplate/pb/user"
+	"github.com/ensoria/ensoria-template/internal/module/user/service"
+	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
+	pb "github.com/ensoria/ensoria-template/pb/user"
 	"google.golang.org/grpc"
 )
 

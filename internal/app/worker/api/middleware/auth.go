@@ -3,7 +3,7 @@ package middleware
 import (
 	"net/http"
 
-	"github.com/ensoria/projecttemplate/internal/app/http/dto"
+	"github.com/ensoria/ensoria-template/internal/app/http/dto"
 	"github.com/ensoria/rest/pkg/rest"
 )
 

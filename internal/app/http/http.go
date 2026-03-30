@@ -8,9 +8,9 @@ import (
 	"net/http"
 
 	"github.com/ensoria/config/pkg/registry"
+	"github.com/ensoria/ensoria-template/internal/app/http/dto"
+	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
 	"github.com/ensoria/loggear/pkg/loggear"
-	"github.com/ensoria/projecttemplate/internal/app/http/dto"
-	"github.com/ensoria/projecttemplate/internal/plamo/dikit"
 	"github.com/ensoria/rest/pkg/mw"
 	"github.com/ensoria/rest/pkg/pipeline"
 	"github.com/ensoria/rest/pkg/rest"

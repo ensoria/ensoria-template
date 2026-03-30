@@ -3,10 +3,10 @@ package grpcclt
 import (
 	"context"
 
+	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
 	"github.com/ensoria/grpcgear/pkg/interceptor/metadata/metaclt"
 	"github.com/ensoria/grpcgear/pkg/interceptor/retry/retryclt"
 	"github.com/ensoria/loggear/pkg/loggear"
-	"github.com/ensoria/projecttemplate/internal/plamo/dikit"
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"

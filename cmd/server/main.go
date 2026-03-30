@@ -3,7 +3,7 @@ package main
 import (
 	"log"
 
-	"github.com/ensoria/projecttemplate/internal/app/bootstrap/server"
+	"github.com/ensoria/ensoria-template/internal/app/bootstrap/server"
 	"github.com/spf13/pflag"
 )
 

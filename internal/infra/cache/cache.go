@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
 	"github.com/ensoria/loggear/pkg/loggear"
-	"github.com/ensoria/projecttemplate/internal/plamo/dikit"
 	goredis "github.com/redis/go-redis/v9"
 )
 

@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/ensoria/ensoria-template/internal/module/user/dto"
+	"github.com/ensoria/ensoria-template/internal/module/user/service"
 	"github.com/ensoria/mb/pkg/mb"
-	"github.com/ensoria/projecttemplate/internal/module/user/dto"
-	"github.com/ensoria/projecttemplate/internal/module/user/service"
 	"github.com/ensoria/rest/pkg/rest"
 )
 

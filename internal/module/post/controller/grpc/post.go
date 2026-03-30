@@ -3,9 +3,9 @@ package grpc
 import (
 	"context"
 
-	"github.com/ensoria/projecttemplate/internal/module/post/service"
-	"github.com/ensoria/projecttemplate/internal/plamo/dikit"
-	pb "github.com/ensoria/projecttemplate/pb/post"
+	"github.com/ensoria/ensoria-template/internal/module/post/service"
+	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
+	pb "github.com/ensoria/ensoria-template/pb/post"
 	"google.golang.org/grpc"
 )
 

@@ -1,7 +1,7 @@
 package ws
 
 import (
-	"github.com/ensoria/projecttemplate/internal/plamo/dikit"
+	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
 	"github.com/ensoria/websocket/pkg/wsconfig"
 	"github.com/ensoria/websocket/pkg/wsrouter"
 	"go.uber.org/fx"

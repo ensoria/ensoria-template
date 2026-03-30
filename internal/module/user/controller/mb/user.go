@@ -1,8 +1,8 @@
 package mb
 
 import (
+	"github.com/ensoria/ensoria-template/internal/module/user/service"
 	"github.com/ensoria/loggear/pkg/loggear"
-	"github.com/ensoria/projecttemplate/internal/module/user/service"
 )
 
 type UserSubscriber struct {

@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	order "github.com/ensoria/projecttemplate/internal/module/order/service"
-	pbPost "github.com/ensoria/projecttemplate/pb/post"
+	order "github.com/ensoria/ensoria-template/internal/module/order/service"
+	pbPost "github.com/ensoria/ensoria-template/pb/post"
 	"github.com/ensoria/worker/pkg/worker"
 )
 

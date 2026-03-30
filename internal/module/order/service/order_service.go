@@ -3,7 +3,7 @@ package service
 import (
 	"fmt"
 
-	"github.com/ensoria/projecttemplate/internal/module/order/dto"
+	"github.com/ensoria/ensoria-template/internal/module/order/dto"
 )
 
 type OrderService interface {

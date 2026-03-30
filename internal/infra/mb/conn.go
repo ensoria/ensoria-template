@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
 	"github.com/ensoria/loggear/pkg/loggear"
 	enmb "github.com/ensoria/mb/pkg/mb"
 	"github.com/ensoria/mb/pkg/mq"
-	"github.com/ensoria/projecttemplate/internal/plamo/dikit"
 )
 
 // message brokerに関する接続
