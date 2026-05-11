@@ -75,6 +75,22 @@ services:
     networks:
       - ensoria-ensoria-template-network
 
+  encli-ensoria-template-mysql:
+    image: mysql:latest
+    container_name: ensoria-ensoria-template-mysql
+    restart: always
+    environment:
+      MYSQL_USER: ensoria
+      MYSQL_PASSWORD: ensoria
+      MYSQL_ROOT_PASSWORD: ensoria
+      MYSQL_DATABASE: ensoria
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks:
+      - ensoria-ensoria-template-network
+
 
 networks:
   ensoria-ensoria-template-network:
@@ -86,5 +102,7 @@ volumes:
   redis-data:
     driver: local
   postgres-data:
+    driver: local
+  mysql-data:
     driver: local
 
