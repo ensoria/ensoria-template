@@ -1,5 +1,5 @@
 app_name: "app_name1"
-module_name: "user"
+module_name: "order"
 # NOTICE: developなど、サーバーの環境では、ssmparamとsecretsmanagerで切り替えるしかない。
 # 環境変数はdefaultと同じになるし、dotenvはセキュリティ上使えないため
 var_locations: [ssmparam, secretsmanager]

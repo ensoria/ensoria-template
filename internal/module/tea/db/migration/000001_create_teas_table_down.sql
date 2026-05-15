@@ -1,0 +1,3 @@
+-- SQLite
+
+DROP TABLE IF EXISTS teas;

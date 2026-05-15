@@ -1,4 +1,4 @@
-module_name: "user"
+module_name: "order"
 # NOTICE: localだと、モジュールごとのvar_locationsでは、envが使えない。
 # 環境によって、1つしか環境変数は設定できないため。
 var_locations: [dotenv]
