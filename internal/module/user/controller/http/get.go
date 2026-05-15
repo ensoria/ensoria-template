@@ -44,6 +44,6 @@ func (c *Get) Handle(r *rest.Request) *rest.Response {
 		Xml:        true,
 		Code:       http.StatusOK,
 		AddHeaders: map[string]string{"Server": "net/http"},
-		Body:       &dto.GetUser{Id: 1, Name: "hoge"},
+		Body:       &dto.GetUser{ID: 1, Name: "hoge"},
 	}
 }

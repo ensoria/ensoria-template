@@ -6,7 +6,7 @@ import "time"
 // そこまで厳密でないものにしたいため、modelにする
 
 type User struct {
-	Id        int       `db:"id"`
+	ID        int       `db:"id"`
 	Name      string    `db:"name"`
 	CreatedAt time.Time `db:"created_at"`
 	UpdatedAt time.Time `db:"updated_at"`

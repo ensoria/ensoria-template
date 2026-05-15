@@ -8,5 +8,7 @@ CREATE TABLE IF NOT EXISTS order_details(
     price INT NOT NULL,
     quantity INT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_order_details_user_id (user_id),
+    INDEX idx_order_details_order_id (order_id)
 );
