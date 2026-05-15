@@ -33,6 +33,6 @@ func (s *OrderDetailSeeder) Seed(f faker.Faker) []model.OrderDetail {
 }
 
 func init() {
-	encliseeder.Add(&OrderSeeder{})
-	encliseeder.Add(&OrderDetailSeeder{})
+	encliseeder.Add("order", &OrderSeeder{})
+	encliseeder.Add("order", &OrderDetailSeeder{})
 }

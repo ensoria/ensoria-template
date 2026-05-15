@@ -23,5 +23,5 @@ func (s *UserSeeder) Seed(f faker.Faker) []model.User {
 }
 
 func init() {
-	encliseeder.Add(&UserSeeder{})
+	encliseeder.Add("user", &UserSeeder{})
 }

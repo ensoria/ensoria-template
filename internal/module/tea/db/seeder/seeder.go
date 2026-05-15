@@ -22,5 +22,5 @@ func (s *TeaSeeder) Seed(f faker.Faker) []model.Tea {
 }
 
 func init() {
-	encliseeder.Add(&TeaSeeder{})
+	encliseeder.Add("tea", &TeaSeeder{})
 }

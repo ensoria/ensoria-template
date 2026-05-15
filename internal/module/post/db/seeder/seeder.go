@@ -22,5 +22,5 @@ func (s *PostSeeder) Seed(f faker.Faker) []model.Post {
 }
 
 func init() {
-	encliseeder.Add(&PostSeeder{})
+	encliseeder.Add("post", &PostSeeder{})
 }
