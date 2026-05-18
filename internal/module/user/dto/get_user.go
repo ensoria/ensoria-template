@@ -3,12 +3,12 @@ package dto
 import "github.com/ensoria/ensoria-template/internal/module/user/model"
 
 type GetUser struct {
-	ID   int    `json:"id"`
+	ID   uint   `json:"id"`
 	Name string `json:"name"`
 }
 
 // dtoで、New***は、引数にフィールドを渡して作るもの
-func NewGetUser(id int, name string) *GetUser {
+func NewGetUser(id uint, name string) *GetUser {
 	return &GetUser{
 		ID:   id,
 		Name: name,

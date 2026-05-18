@@ -3,12 +3,12 @@ package dto
 import "github.com/ensoria/ensoria-template/internal/module/user/model"
 
 type CreateUser struct {
-	ID   int    `json:"id"`
+	ID   uint   `json:"id"`
 	Name string `json:"name"`
 }
 
 // dtoで、New***は、引数にフィールドを渡して作るもの
-func NewCreateUser(id int, name string) *CreateUser {
+func NewCreateUser(id uint, name string) *CreateUser {
 	return &CreateUser{
 		ID:   id,
 		Name: name,

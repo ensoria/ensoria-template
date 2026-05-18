@@ -9,7 +9,7 @@ import (
 // そこまで厳密でないものにしたいため、modelにする
 
 type User struct {
-	ID        int            `db:"id"`
+	ID        uint           `db:"id"`
 	Name      string         `db:"name"`
 	Birthdate *time.Time     `db:"birthdate"` // NULL許容の例
 	Gender    *int           `db:"gender"`    // NULL許容の例
