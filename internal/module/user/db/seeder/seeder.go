@@ -37,7 +37,7 @@ func (s *UserSeeder) Seed(f faker.Faker) []model.User {
 			UpdatedAt: now,
 		},
 		{Name: f.Person.Name(), CreatedAt: now, UpdatedAt: now},
-		{Name: f.Person.Name(), CreatedAt: now, UpdatedAt: now},
+		{Name: f.Person.Name()}, // null以外のフィールドで、ゼロ値の場合は、カラムに設定された`DEFAULT`が適用される
 	}
 }
 

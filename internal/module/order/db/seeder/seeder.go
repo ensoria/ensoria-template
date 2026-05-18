@@ -31,7 +31,7 @@ func (s *OrderDetailSeeder) Seed(_ faker.Faker) []model.OrderDetail {
 		{UserID: 1, OrderID: 1, ProductName: "Product A", Price: 1000, Quantity: 1, CreatedAt: now, UpdatedAt: now},
 		{UserID: 1, OrderID: 1, ProductName: "Product B", Price: 500, Quantity: 2, CreatedAt: now, UpdatedAt: now},
 		{UserID: 2, OrderID: 2, ProductName: "Product C", Price: 2000, Quantity: 1, CreatedAt: now, UpdatedAt: now},
-		{UserID: 3, OrderID: 3, ProductName: "Product D", Price: 1500, Quantity: 2, CreatedAt: now, UpdatedAt: now},
+		{UserID: 3, OrderID: 3, ProductName: "Product D", Price: 1500, Quantity: 2},
 	}
 }
 

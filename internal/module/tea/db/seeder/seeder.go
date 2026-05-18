@@ -17,7 +17,7 @@ func (s *TeaSeeder) Seed(f faker.Faker) []model.Tea {
 	return []model.Tea{
 		{Name: "Green Tea", Price: 100, CreatedAt: now, UpdatedAt: now},
 		{Name: "Black Tea", Price: 150, CreatedAt: now, UpdatedAt: now},
-		{Name: "Oolong Tea", Price: 200, CreatedAt: now, UpdatedAt: now},
+		{Name: "Oolong Tea", Price: 200},
 	}
 }
 
