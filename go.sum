@@ -36,6 +36,8 @@ github.com/dustin/go-humanize v1.0.1 h1:GzkhY7T5VNhEkwH0PVJgjz+fX1rhBrR7pRT3mDkp
 github.com/dustin/go-humanize v1.0.1/go.mod h1:Mu1zIs6XwVuF/gI1OepvI0qD18qycQx+mFykh5fBlto=
 github.com/ensoria/config v0.0.15 h1:oNXfSkk2XeHPpxfyzbMeF3MAk8ouXYqhy/21SwMMas8=
 github.com/ensoria/config v0.0.15/go.mod h1:npr1RSStUt8oKBcxfAUmCirXWG9CD9locIKKuZ79hUo=
+github.com/ensoria/config v0.0.16 h1:risALPB9Q8uJsdnzyZ07c+vfTQy7vURO4uALLhmQoAU=
+github.com/ensoria/config v0.0.16/go.mod h1:npr1RSStUt8oKBcxfAUmCirXWG9CD9locIKKuZ79hUo=
 github.com/ensoria/encli v0.0.1 h1:WBELyW1dsEQPFwEMbJHnlHTDticBCMcZRqlCfPrusRQ=
 github.com/ensoria/encli v0.0.1/go.mod h1:vHUI7tY9UMWTX9EEgfEUrm6H4oXDCX81g24J0Wb/B2A=
 github.com/ensoria/encli v0.0.2 h1:YT+mTleiaZ+j2lnIFjU/b4TB795JDERaGsFKDqt02Pk=
