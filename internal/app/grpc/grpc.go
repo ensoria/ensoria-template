@@ -23,7 +23,7 @@ func NewGRPCApp(envVal *string) func(lc dikit.LC, shutdowner dikit.Shutdowner, g
 
 		// reflectionは開発環境でのみ有効にする
 		// TODO: config/env にIsLocal()を作って、それを使う
-		if envVal != nil && (*envVal == string(env.Local) || *envVal == string(env.Develop)) {
+		if envVal != nil && (*envVal == string(env.Local) || *envVal == string(env.Development)) {
 			reflection.Register(grpcSrv)
 			loggear.Info("gRPC reflection enabled for development environment", "env", *envVal)
 		}

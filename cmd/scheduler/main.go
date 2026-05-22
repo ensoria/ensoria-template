@@ -10,7 +10,7 @@ import (
 func main() {
 	// FIXME: configのenvを使って、ここのリストを修正する
 	// envList := slices.Join(env.StringList, ", ")
-	envVal := pflag.StringP("env", "e", "local", "it must be either [local], [develop], [staging], [production] or [testing].")
+	envVal := pflag.StringP("env", "e", "local", "it must be either [local], [development], [staging], [production] or [test].")
 	pflag.Parse()
 
 	if err := scheduler.Start(envVal); err != nil {
