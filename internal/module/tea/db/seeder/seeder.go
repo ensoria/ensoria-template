@@ -15,14 +15,15 @@ func (s *TeaSeeder) TableName() string { return "teas" }
 func (s *TeaSeeder) Seed(f faker.Faker) []model.Tea {
 	now := time.Now()
 	notAvailable := false
+	bestBefore := time.Date(2030, 12, 31, 0, 0, 0, 0, time.UTC)
 	return []model.Tea{
-		{Name: "Green Tea", Price: 100, CreatedAt: now, UpdatedAt: now},
+		{Name: "Green Tea", Price: 100, BestBefore: bestBefore, CreatedAt: now, UpdatedAt: now},
 		// IsAvailable: &notAvailable で明示的に false を挿入。
 		// *bool の nil はゼロ値としてスキップされ、DB の DEFAULT TRUE が使われる。
-		{Name: "Black Tea", Price: 150, IsAvailable: &notAvailable, CreatedAt: now, UpdatedAt: now},
-		{Name: "Oolong Tea", Price: 200},
+		{Name: "Black Tea", Price: 150, BestBefore: bestBefore, IsAvailable: &notAvailable, CreatedAt: now, UpdatedAt: now},
+		{Name: "Oolong Tea", Price: 200, BestBefore: bestBefore},
 		// priceが0のゼロ値でもINSERTに含めるため、seed:"force" タグをモデルのPriceフィールドに付けている。
-		{Name: "Yomogi Tea", Price: 0},
+		{Name: "Yomogi Tea", Price: 0, BestBefore: bestBefore},
 	}
 }
 

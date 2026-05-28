@@ -6,7 +6,6 @@ CREATE TABLE IF NOT EXISTS order_details(
     order_id INT NOT NULL,
     product_name VARCHAR(255) NOT NULL,
     price INT NOT NULL,
-    quantity INT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_order_details_user_id (user_id),
