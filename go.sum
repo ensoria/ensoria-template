@@ -56,6 +56,8 @@ github.com/ensoria/loggear v0.0.1 h1:ievXmBZvGF7Hukp4FUA/W27CcIbsGACoP4QPunJURDY
 github.com/ensoria/loggear v0.0.1/go.mod h1:4YSuVmzAxjqGhNG6mII6Ga7pzvMF3gU9s2QV3MLvfMg=
 github.com/ensoria/mb v0.0.5 h1:f0Sz6c5EF/g3DhGklnF6wOA04Yog5GLmlxUyVDz6uj4=
 github.com/ensoria/mb v0.0.5/go.mod h1:2e8Yk+0XlKt4GNh41kQR4FFBtNBkTJc3YtZH8uU3PkQ=
+github.com/ensoria/mb v0.0.6 h1:jnm185Rbk5jnF2SMjGscMYnq6ZRGmZABjTFcjzK6W3w=
+github.com/ensoria/mb v0.0.6/go.mod h1:2e8Yk+0XlKt4GNh41kQR4FFBtNBkTJc3YtZH8uU3PkQ=
 github.com/ensoria/rest v0.0.14 h1:c16JJtquX8YpgmRzFSoSA98QnBdjhj89nlgSLPkhdA4=
 github.com/ensoria/rest v0.0.14/go.mod h1:Ss1UsDCzO1DVHT41SvKZ7tnrUeZzl7WzZ6623MDR7y0=
 github.com/ensoria/scheduler v0.0.2 h1:RNTBvRq03yhP2o0AG74L3J8mzP6uPdlzParfPwnLQ7E=

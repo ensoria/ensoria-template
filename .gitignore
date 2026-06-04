@@ -1,6 +1,7 @@
 
 main
 encli
+enclix
 .env
 tmp/*
 # Created by https://www.toptal.com/developers/gitignore/api/macos,windows,linux,go

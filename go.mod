@@ -8,7 +8,7 @@ require (
 	github.com/ensoria/gofake v0.0.6
 	github.com/ensoria/grpcgear v0.0.4
 	github.com/ensoria/loggear v0.0.1
-	github.com/ensoria/mb v0.0.5
+	github.com/ensoria/mb v0.0.6
 	github.com/ensoria/rest v0.0.14
 	github.com/ensoria/validator v0.0.5
 	github.com/ensoria/websocket v0.0.2
