@@ -40,6 +40,7 @@ func Start(envVal *string) error {
 		// タグ名の付いたキャッシュクライアントを注入
 		dikit.InjectWithTags(schedulerApp.NewScheduler, `name:"schedulerCache"`, ``),
 
+		// FIXME: schedulerだけでなく、moduleのものも全部うごいてしまっているので修正
 		// scheduler管理用のエンドポイントのみ
 		httpApp.InjectHTTPModules(httpApp.CreateHTTPPipeline),
 		NewEmptyWSRouter,
