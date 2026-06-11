@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	"github.com/ensoria/config/pkg/registry"
-	ensoriatemplate "github.com/ensoria/ensoria-template"
+	assets "github.com/ensoria/ensoria-template"
 	grpcApp "github.com/ensoria/ensoria-template/internal/app/grpc"
 	httpApp "github.com/ensoria/ensoria-template/internal/app/http"
 	mbApp "github.com/ensoria/ensoria-template/internal/app/mb"
@@ -20,7 +20,7 @@ import (
 )
 
 func Run(envVal *string) error {
-	registry.InitializeConfiguration(envVal, ensoriatemplate.ConfigFS(*envVal), "internal", "config")
+	registry.InitializeConfiguration(envVal, assets.ConfigFS(*envVal), "internal", "config")
 
 	dikit.AppendConstructors([]any{
 		// infra

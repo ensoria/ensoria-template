@@ -1,4 +1,4 @@
-package ensoriatemplate
+package assets
 
 import (
 	"embed"
