@@ -1,9 +1,9 @@
 module github.com/ensoria/ensoria-template
 
-go 1.24.2
+go 1.25.0
 
 require (
-	github.com/ensoria/config v0.0.18
+	github.com/ensoria/config v0.0.21
 	github.com/ensoria/encli v0.0.3
 	github.com/ensoria/gofake v0.0.6
 	github.com/ensoria/grpcgear v0.0.4
@@ -13,6 +13,7 @@ require (
 	github.com/ensoria/validator v0.0.5
 	github.com/ensoria/websocket v0.0.2
 	github.com/google/uuid v1.6.0
+	github.com/spf13/cobra v1.9.1
 	github.com/spf13/pflag v1.0.10
 	go.uber.org/fx v1.24.0
 	google.golang.org/grpc v1.79.1
@@ -26,7 +27,6 @@ require (
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/ensoria/testutil v0.0.1 // indirect
-	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/go-sql-driver/mysql v1.9.3 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/lib/pq v1.10.9 // indirect
@@ -34,7 +34,6 @@ require (
 	github.com/mattn/go-sqlite3 v1.14.32 // indirect
 	github.com/ncruces/go-strftime v0.1.9 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
-	github.com/spf13/cobra v1.9.1 // indirect
 	golang.org/x/exp v0.0.0-20250620022241-b7579e27df2b // indirect
 	modernc.org/libc v1.66.10 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
@@ -66,10 +65,10 @@ require (
 	go.uber.org/dig v1.19.0 // indirect
 	go.uber.org/multierr v1.10.0 // indirect
 	go.uber.org/zap v1.26.0 // indirect
-	golang.org/x/crypto v0.47.0 // indirect
-	golang.org/x/net v0.49.0 // indirect
-	golang.org/x/sys v0.40.0 // indirect
-	golang.org/x/text v0.33.0 // indirect
+	golang.org/x/crypto v0.50.0 // indirect
+	golang.org/x/net v0.53.0 // indirect
+	golang.org/x/sys v0.43.0 // indirect
+	golang.org/x/text v0.36.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
