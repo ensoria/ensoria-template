@@ -34,8 +34,8 @@ github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f h1:lO4WD4F/r
 github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f/go.mod h1:cuUVRXasLTGF7a8hSLbxyZXjz+1KgoB3wDUb6vlszIc=
 github.com/dustin/go-humanize v1.0.1 h1:GzkhY7T5VNhEkwH0PVJgjz+fX1rhBrR7pRT3mDkpeCY=
 github.com/dustin/go-humanize v1.0.1/go.mod h1:Mu1zIs6XwVuF/gI1OepvI0qD18qycQx+mFykh5fBlto=
-github.com/ensoria/config v0.0.21 h1:EX2w+fSyvXLK9sxByW4MhiCSt2h9a8eVRyAWSOEYEuA=
-github.com/ensoria/config v0.0.21/go.mod h1:TPr0Y2W5SVPm47GJdduOR9tqTlQLZz48Xzf0N0mVBcs=
+github.com/ensoria/config v0.0.22 h1:hZWc4TKkdaDxYAfGBSNozF/Y0CD/V0C/SEbnvGOYR2k=
+github.com/ensoria/config v0.0.22/go.mod h1:TPr0Y2W5SVPm47GJdduOR9tqTlQLZz48Xzf0N0mVBcs=
 github.com/ensoria/encli v0.0.3 h1:lqx3X8iKoBsgbykbbOQQ4bZRUfUqqkpRKj1vD3Iv8Qs=
 github.com/ensoria/encli v0.0.3/go.mod h1:vHUI7tY9UMWTX9EEgfEUrm6H4oXDCX81g24J0Wb/B2A=
 github.com/ensoria/gofake v0.0.6 h1:mLikBeQzCIjP+YOuDzcRw4FzBbIIE5whzC6w/4qBAXY=
