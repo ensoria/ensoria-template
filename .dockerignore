@@ -1,0 +1,8 @@
+# build コンテキストを縮小し、秘匿/不要ファイルをイメージに入れない。
+.git
+build
+tmp
+.localstack
+
+# .env はシークレット。config の Spec YAML(*.yml/*.yaml) は go:embed のため残す。
+**/.env

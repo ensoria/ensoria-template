@@ -75,6 +75,19 @@ services:
     networks:
       - ensoria-ensoria-template-network
 
+  # ローカルのモックレジストリ（encli build image --push の動作確認用）。
+  # 認証不要。localhost 宛は Docker が HTTP push を許可するため insecure 設定も不要。
+  # macOS では 5000 番が AirPlay と衝突するため 5001 を使う。
+  ensoria-ensoria-template-registry:
+    image: registry:2
+    container_name: ensoria-ensoria-template-registry
+    ports:
+      - "127.0.0.1:5001:5000"
+    volumes:
+      - registry-data:/var/lib/registry
+    networks:
+      - ensoria-ensoria-template-network
+
   encli-ensoria-template-mysql:
     image: mysql:latest
     container_name: ensoria-ensoria-template-mysql
@@ -104,5 +117,7 @@ volumes:
   postgres-data:
     driver: local
   mysql-data:
+    driver: local
+  registry-data:
     driver: local
 
