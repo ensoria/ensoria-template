@@ -13,6 +13,11 @@ import (
 // SecretsManager / Parameter Store から取得し、イメージには焼かない）。
 // go:embed は `..` を使えず埋め込み元ファイルと同階層以下しか対象にできないため、
 // `internal` を子に持つモジュールルートにこのファイルを置いている。
+// なお、以下、 internal/module/*/config と internal/query/*/config では、
+// これらの場所に `config` ディレクトリがないと、 `go list` のエラー
+// "no matching files found" が表示されます。
+// ただし、 `encli run` もしくは、 `encli build` を使うと、
+// 自動的に`internal/module/_embed/config`フォルダが作成されるため、ビルドは正常に動作します。
 //
 //go:embed internal/config internal/module/*/config internal/query/*/config
 var embeddedConfigFS embed.FS
