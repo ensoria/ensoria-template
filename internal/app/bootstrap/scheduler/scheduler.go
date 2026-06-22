@@ -16,6 +16,7 @@ import (
 	workerApp "github.com/ensoria/ensoria-template/internal/app/worker"
 	_ "github.com/ensoria/ensoria-template/internal/module"
 	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
+	_ "github.com/ensoria/ensoria-template/internal/query"
 )
 
 func Start(envVal *string) error {

@@ -2,9 +2,9 @@ package ws
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/ensoria/ensoria-template/internal/module/user/service"
+	"github.com/ensoria/loggear/pkg/loggear"
 	"github.com/ensoria/websocket/pkg/wsconfig"
 	"github.com/ensoria/websocket/pkg/wsevent"
 	"github.com/ensoria/websocket/pkg/wssend"
@@ -30,7 +30,7 @@ func (c *OnOpen) OnOpen() wsconfig.OnOpenHandler {
 
 func LogOnOpen(next wsconfig.OnOpenHandler) wsconfig.OnOpenHandler {
 	return func(event *wsevent.Open) error {
-		log.Printf("WebSocket %s connected", event.Conn.RemoteAddr().String())
+		loggear.Info("WebSocket connection opened", "remote_addr", event.Conn.RemoteAddr().String())
 		if next != nil {
 			return next(event)
 		}
@@ -58,7 +58,7 @@ func (c *OnMessage) OnMessage() wsconfig.OnMessageHandler {
 
 func LogOnMessage(next wsconfig.OnMessageHandler) wsconfig.OnMessageHandler {
 	return func(event *wsevent.Message) error {
-		log.Printf("WebSocket %s received message: %s", event.Conn.RemoteAddr().String(), string(event.MessageData))
+		loggear.Info("WebSocket message received", "remote_addr", event.Conn.RemoteAddr().String(), "message", string(event.MessageData))
 		if next != nil {
 			return next(event)
 		}

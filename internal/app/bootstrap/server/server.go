@@ -17,6 +17,7 @@ import (
 	_ "github.com/ensoria/ensoria-template/internal/infra/mb"
 	_ "github.com/ensoria/ensoria-template/internal/module"
 	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
+	_ "github.com/ensoria/ensoria-template/internal/query"
 )
 
 func Run(envVal *string) error {

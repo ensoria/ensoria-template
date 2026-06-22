@@ -1,6 +1,6 @@
 package job
 
-import libWorker "github.com/ensoria/worker/pkg/job" // TODO: 名前を考え直す
+import libWorker "github.com/ensoria/worker/pkg/job"
 
 type JobHandler struct {
 	Name    string

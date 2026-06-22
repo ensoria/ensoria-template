@@ -1,2 +1,0 @@
-module_name: "user_post"
-var_locations: [dotenv]
