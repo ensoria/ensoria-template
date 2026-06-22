@@ -1,4 +1,25 @@
 package repository
 
-// repositoryが返す値はmodelにすること
-// それをserviceでいろいろ処理する。
+import (
+	"time"
+
+	"github.com/ensoria/ensoria-template/internal/module/user/model"
+)
+
+type UserRepository interface {
+	GetByID(id int64) *model.User
+}
+
+type userRepository struct{}
+
+func NewUserRepository() *userRepository {
+	return &userRepository{}
+}
+
+func (r *userRepository) GetByID(id int64) *model.User {
+	return &model.User{
+		ID:        1,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+}
