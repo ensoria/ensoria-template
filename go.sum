@@ -62,6 +62,10 @@ github.com/ensoria/websocket v0.0.2 h1:nK88cjLn1LXBv7WnLtoqt/ojz24w0nwKAFJrRNE7+
 github.com/ensoria/websocket v0.0.2/go.mod h1:YvZHeHLmpLDgTXy+Pv9oRNrlMI8KHF93nAHoXQ3n2iY=
 github.com/ensoria/worker v0.0.2 h1:4r7F8u4PC0Z1MItTRictScFVjwmrCcuPfW5dmkfmVCA=
 github.com/ensoria/worker v0.0.2/go.mod h1:TX4cl8cl6G3mtv5PTK1yA3hwSafqCkRK/Ple3MtWTwg=
+github.com/ensoria/worker v0.0.3 h1:5NoZF//7MHXRheUYC/SIBtvkLdnxKM+O0eeoV0+66Mw=
+github.com/ensoria/worker v0.0.3/go.mod h1:FDPsOvXHOQllfGr3zmBmUvXlbULLwnyxT0L4KQF3d3k=
+github.com/ensoria/worker v0.0.4 h1:tA/PlIN3SzsNH1VX8NoZ4wUkv4I8zZ5IBVxVaXNYtO0=
+github.com/ensoria/worker v0.0.4/go.mod h1:FDPsOvXHOQllfGr3zmBmUvXlbULLwnyxT0L4KQF3d3k=
 github.com/go-logr/logr v1.4.3 h1:CjnDlHq8ikf6E492q6eKboGOC0T8CDaOvkHCIg8idEI=
 github.com/go-logr/logr v1.4.3/go.mod h1:9T104GzyrTigFIr8wt5mBrctHMim0Nb2HLGrmQ40KvY=
 github.com/go-logr/stdr v1.2.2 h1:hSWxHoqTgW2S2qGc0LTAI563KZ5YKYRhT3MFKZMbjag=
