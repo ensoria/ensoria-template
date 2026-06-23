@@ -56,6 +56,8 @@ github.com/ensoria/testutil v0.0.1 h1:8gOgdMbo0nIInc/faQGWNLn1hS6LUlGU6XjPm09lY1
 github.com/ensoria/testutil v0.0.1/go.mod h1:1U4elcdFYBNV5/w9mye/bON7PvMwW0outL/ystkbFqk=
 github.com/ensoria/testutil v0.0.2 h1:HvYH9+W2xit6rpSjrwS/LxNdE+qZvAGNX7teKwEXZno=
 github.com/ensoria/testutil v0.0.2/go.mod h1:1Csmwalgkm71KWNuE1vkr0pS6/Ajrcm4QFyMPLKkOB4=
+github.com/ensoria/testutil v0.0.3 h1:nhfGooBv+6w8Og9XM3qhxAb7OpoWojkAfb9p9qnxVoY=
+github.com/ensoria/testutil v0.0.3/go.mod h1:1Csmwalgkm71KWNuE1vkr0pS6/Ajrcm4QFyMPLKkOB4=
 github.com/ensoria/validator v0.0.5 h1:WqGITK8+OaUKFtJQXwMIDPqNjt/9sO98ht/fcIL6rdA=
 github.com/ensoria/validator v0.0.5/go.mod h1:VCeVsdf2F7rC4q/ClqJwbZ7XrwQLM+kMzA4hLG39wSA=
 github.com/ensoria/websocket v0.0.2 h1:nK88cjLn1LXBv7WnLtoqt/ojz24w0nwKAFJrRNE7+o8=
@@ -66,6 +68,8 @@ github.com/ensoria/worker v0.0.3 h1:5NoZF//7MHXRheUYC/SIBtvkLdnxKM+O0eeoV0+66Mw=
 github.com/ensoria/worker v0.0.3/go.mod h1:FDPsOvXHOQllfGr3zmBmUvXlbULLwnyxT0L4KQF3d3k=
 github.com/ensoria/worker v0.0.4 h1:tA/PlIN3SzsNH1VX8NoZ4wUkv4I8zZ5IBVxVaXNYtO0=
 github.com/ensoria/worker v0.0.4/go.mod h1:FDPsOvXHOQllfGr3zmBmUvXlbULLwnyxT0L4KQF3d3k=
+github.com/ensoria/worker v0.0.5 h1:2f9YJel5Clv0C4Ti3rmwOzYfo26Jby7QbtgdocDO5c8=
+github.com/ensoria/worker v0.0.5/go.mod h1:AGPRTRbL2Cp8Zr6uBcYDxCvbGdI1YXgXxPGq7hyj4Pg=
 github.com/go-logr/logr v1.4.3 h1:CjnDlHq8ikf6E492q6eKboGOC0T8CDaOvkHCIg8idEI=
 github.com/go-logr/logr v1.4.3/go.mod h1:9T104GzyrTigFIr8wt5mBrctHMim0Nb2HLGrmQ40KvY=
 github.com/go-logr/stdr v1.2.2 h1:hSWxHoqTgW2S2qGc0LTAI563KZ5YKYRhT3MFKZMbjag=
