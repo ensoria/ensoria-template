@@ -58,6 +58,8 @@ github.com/ensoria/testutil v0.0.2 h1:HvYH9+W2xit6rpSjrwS/LxNdE+qZvAGNX7teKwEXZn
 github.com/ensoria/testutil v0.0.2/go.mod h1:1Csmwalgkm71KWNuE1vkr0pS6/Ajrcm4QFyMPLKkOB4=
 github.com/ensoria/testutil v0.0.3 h1:nhfGooBv+6w8Og9XM3qhxAb7OpoWojkAfb9p9qnxVoY=
 github.com/ensoria/testutil v0.0.3/go.mod h1:1Csmwalgkm71KWNuE1vkr0pS6/Ajrcm4QFyMPLKkOB4=
+github.com/ensoria/testutil v0.0.4 h1:zqDrNfs66TFciV8F/C7iBJ9+mq7DfFUWns+R5CUJ+9M=
+github.com/ensoria/testutil v0.0.4/go.mod h1:1Csmwalgkm71KWNuE1vkr0pS6/Ajrcm4QFyMPLKkOB4=
 github.com/ensoria/validator v0.0.5 h1:WqGITK8+OaUKFtJQXwMIDPqNjt/9sO98ht/fcIL6rdA=
 github.com/ensoria/validator v0.0.5/go.mod h1:VCeVsdf2F7rC4q/ClqJwbZ7XrwQLM+kMzA4hLG39wSA=
 github.com/ensoria/websocket v0.0.2 h1:nK88cjLn1LXBv7WnLtoqt/ojz24w0nwKAFJrRNE7+o8=
