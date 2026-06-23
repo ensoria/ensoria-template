@@ -1,9 +1,0 @@
-app_name: "app_name1"
-module_name: "order"
-# NOTICE: developmentなど、サーバーの環境では、ssmparamとsecretsmanagerで切り替えるしかない。
-# 環境変数はdefaultと同じになるし、dotenvはセキュリティ上使えないため
-var_locations: [ssmparam, secretsmanager]
-ssm_param_paths:
-  "/app_name1/local/service_name1": ["DB_HOST", "DB_PORT", "DB_USER", "DB_PASSWORD", "DB_NAME"]
-secrets_manager_ids: ["test-secret1", "test-secret2"]
-

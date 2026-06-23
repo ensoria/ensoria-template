@@ -11,6 +11,7 @@ import (
 	usermb "github.com/ensoria/ensoria-template/internal/module/user/controller/mb"
 	"github.com/ensoria/ensoria-template/internal/module/user/controller/ws"
 	"github.com/ensoria/ensoria-template/internal/module/user/job"
+	"github.com/ensoria/ensoria-template/internal/module/user/repository"
 	"github.com/ensoria/ensoria-template/internal/module/user/service"
 	"github.com/ensoria/ensoria-template/internal/module/user/task"
 	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
@@ -23,22 +24,23 @@ import (
 	pb "github.com/ensoria/ensoria-template/pb/user"
 )
 
-// TODO: encliでモジュールを作成したら、このファイルに
-// 自動的に、NewModuleと、Constructorsを追加する
-// さらに、moduler.goにもimportを追加すること
-
 const ModuleName = "user"
 
-// TODO: 便利機能として、この関数も自動的にencliで生成する
 func Params() (*appconfig.Parameters, error) {
 	return registry.ModuleParams(ModuleName)
 }
 
 // rest
-func NewModule(get *http.Get, post *http.Post) *rest.Module {
+func NewUserByIDModule(get *http.Get) *rest.Module {
 	return &rest.Module{
-		Path: "/user",
+		Path: "/users/{id}",
 		Get:  get,
+	}
+}
+
+func NewUsersCollectionModule(post *http.Post) *rest.Module {
+	return &rest.Module{
+		Path: "/users",
 		Post: post,
 	}
 }
@@ -71,10 +73,12 @@ func NewSubscribeModule(lc dikit.LC, subscribe mb.StartSubscription, handler mb.
 
 func init() {
 	dikit.AppendConstructors([]any{
+		dikit.ProvideAs[repository.UserRepository](repository.NewUserRepository),
 		dikit.ProvideAs[service.UserService](service.NewUserService),
 		http.NewGet,
 		http.NewPost,
-		dikit.AsHTTPModule(NewModule),
+		dikit.AsHTTPModule(NewUserByIDModule),
+		dikit.AsHTTPModule(NewUsersCollectionModule),
 
 		// WebSocket
 		ws.NewOnOpen,

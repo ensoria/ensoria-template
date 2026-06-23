@@ -6,6 +6,8 @@ import (
 	"time"
 
 	order "github.com/ensoria/ensoria-template/internal/module/order/service"
+	"github.com/ensoria/ensoria-template/internal/module/user/model"
+	"github.com/ensoria/ensoria-template/internal/module/user/repository"
 	pbPost "github.com/ensoria/ensoria-template/pb/post"
 	"github.com/ensoria/worker/pkg/worker"
 )
@@ -20,30 +22,34 @@ import (
 type UserService interface {
 	Something() string
 	GetPostContent(postId string) (string, error)
+	GetById(id int64) (*model.User, error)
 }
 
 // gRPCクライアントが必要な場合は、クライアントの型を指定する
 // order serviceについては、すでにorderのモジュールでAsされているので、
 // このmoduleの`init`でAsする必要はなく、dikitが自動的に解決してくれる
 func NewUserService(
+	repository repository.UserRepository,
 	postClient pbPost.PostClient,
 	orderService order.OrderService,
 	jobQueue worker.Enqueuer,
-) UserService {
-	return &UserServiceImpl{
+) *userService {
+	return &userService{
+		repository:   repository,
 		postClient:   postClient,
 		orderService: orderService,
 		jobQueue:     jobQueue,
 	}
 }
 
-type UserServiceImpl struct {
+type userService struct {
+	repository   repository.UserRepository
 	postClient   pbPost.PostClient
 	orderService order.OrderService
 	jobQueue     worker.Enqueuer
 }
 
-func (s *UserServiceImpl) Something() string {
+func (s *userService) Something() string {
 	fmt.Printf("injected orderService: %T\n", s.orderService)
 	s.orderService.GetOrder()
 
@@ -61,7 +67,7 @@ func (s *UserServiceImpl) Something() string {
 	return "hoge"
 }
 
-func (s *UserServiceImpl) GetPostContent(postId string) (string, error) {
+func (s *userService) GetPostContent(postId string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -73,4 +79,8 @@ func (s *UserServiceImpl) GetPostContent(postId string) (string, error) {
 	}
 	return p.Content, nil
 
+}
+
+func (s *userService) GetById(id int64) (*model.User, error) {
+	return s.repository.GetByID(id)
 }

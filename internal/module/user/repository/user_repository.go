@@ -7,7 +7,7 @@ import (
 )
 
 type UserRepository interface {
-	GetByID(id int64) *model.User
+	GetByID(id int64) (*model.User, error)
 }
 
 type userRepository struct{}
@@ -16,10 +16,10 @@ func NewUserRepository() *userRepository {
 	return &userRepository{}
 }
 
-func (r *userRepository) GetByID(id int64) *model.User {
+func (r *userRepository) GetByID(id int64) (*model.User, error) {
 	return &model.User{
 		ID:        1,
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
-	}
+	}, nil
 }
