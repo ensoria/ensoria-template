@@ -38,7 +38,7 @@ func NewUserByIDModule(get *http.Get) *rest.Module {
 	}
 }
 
-func NewUsersCollectionModule(post *http.Post) *rest.Module {
+func NewUserCollectionModule(post *http.Post) *rest.Module {
 	return &rest.Module{
 		Path: "/users",
 		Post: post,
@@ -78,7 +78,7 @@ func init() {
 		http.NewGet,
 		http.NewPost,
 		dikit.AsHTTPModule(NewUserByIDModule),
-		dikit.AsHTTPModule(NewUsersCollectionModule),
+		dikit.AsHTTPModule(NewUserCollectionModule),
 
 		// WebSocket
 		ws.NewOnOpen,
