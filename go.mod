@@ -3,15 +3,15 @@ module github.com/ensoria/ensoria-template
 go 1.25.0
 
 require (
-	github.com/ensoria/config v0.0.23
+	github.com/ensoria/config v0.0.24
 	github.com/ensoria/encli v0.0.3
 	github.com/ensoria/gofake v0.0.6
 	github.com/ensoria/grpcgear v0.0.4
 	github.com/ensoria/loggear v0.0.1
 	github.com/ensoria/mb v0.0.6
-	github.com/ensoria/rest v0.0.14
+	github.com/ensoria/rest v0.0.16
 	github.com/ensoria/validator v0.0.5
-	github.com/ensoria/websocket v0.0.2
+	github.com/ensoria/websocket v0.0.3
 	github.com/google/uuid v1.6.0
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/pflag v1.0.10
@@ -65,10 +65,10 @@ require (
 	go.uber.org/dig v1.19.0 // indirect
 	go.uber.org/multierr v1.10.0 // indirect
 	go.uber.org/zap v1.26.0 // indirect
-	golang.org/x/crypto v0.50.0 // indirect
-	golang.org/x/net v0.53.0 // indirect
-	golang.org/x/sys v0.43.0 // indirect
-	golang.org/x/text v0.36.0 // indirect
+	golang.org/x/crypto v0.53.0 // indirect
+	golang.org/x/net v0.56.0 // indirect
+	golang.org/x/sys v0.46.0 // indirect
+	golang.org/x/text v0.38.0 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

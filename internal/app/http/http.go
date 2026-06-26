@@ -21,9 +21,6 @@ import (
 // HTTPサーバーの初期化
 func NewHTTPApp(envVal *string) func(lc dikit.LC, shutdowner dikit.Shutdowner, httpPipeline *pipeline.HTTP, wsRouter *wsrouter.Router) *http.Server {
 	return func(lc dikit.LC, shutdowner dikit.Shutdowner, httpPipeline *pipeline.HTTP, wsRouter *wsrouter.Router) *http.Server {
-		httpPipeline.Register()
-		wsRouter.Register()
-
 		// TODO: envValを使うこと
 		params, err := registry.ModuleParams("default")
 		if err != nil {
@@ -32,8 +29,24 @@ func NewHTTPApp(envVal *string) func(lc dikit.LC, shutdowner dikit.Shutdowner, h
 		// FIXME: 別の場所に移す
 		loggear.SetLogLevel(params.Log.Level)
 
+		// HTTPパイプラインとWebSocketルータを同一のmuxに登録する。
+		// グローバルなhttp.DefaultServeMuxを使わないことで、ハンドラを分離でき、
+		// テストの並列化や複数サーバの起動が可能になる。
+		mux := http.NewServeMux()
+		httpPipeline.Register(mux)
+		wsRouter.Register(mux)
+
 		httpSrv := &http.Server{
-			Addr: fmt.Sprintf(":%d", params.Server.Port),
+			Addr:    fmt.Sprintf(":%d", params.Server.Port),
+			Handler: mux,
+			// Layer 1: コネクションレベルのタイムアウト（configから取得）
+			ReadHeaderTimeout: params.Server.ReadHeaderTimeout,
+			ReadTimeout:       params.Server.ReadTimeout,
+			// WriteTimeoutはレスポンス書き込み全体の絶対deadlineであり、SSE・WebSocket・
+			// 大きなファイルのような長時間接続を切断する。そのため既定では0(無効)。
+			// リクエスト単位のタイムアウトはpipeline側(Layer 2)で制御する。
+			WriteTimeout: params.Server.WriteTimeout,
+			IdleTimeout:  params.Server.IdleTimeout,
 		}
 
 		RegisterHTTPServerLifecycle(lc, shutdowner, httpSrv)
@@ -62,6 +75,12 @@ func CreateHTTPPipeline(modules []*rest.Module) *pipeline.HTTP {
 		AllowCredentials: configParams.CORS.AllowCredentials(),
 	}
 
+	// Layer 2: リクエスト単位（ハンドラ実行）のタイムアウト超過時に返すレスポンス
+	timeoutResponse := &rest.Response{
+		Code: http.StatusServiceUnavailable,
+		Body: &dto.Error{Message: "request timeout"},
+	}
+
 	return &pipeline.HTTP{
 		Modules: modules,
 		GlobalMiddlewares: []rest.Middleware{
@@ -70,6 +89,10 @@ func CreateHTTPPipeline(modules []*rest.Module) *pipeline.HTTP {
 			mw.VerifyBodyParsable,
 			mw.NewCORS(cors),
 		},
+		// Layer 2: コントローラ/ミドルウェアチェーンの実行（=レスポンスの計算）の上限時間。
+		// 0で無効。ストリーミング/ファイル/WebSocketは対象外。
+		Timeout:         configParams.Server.HandlerTimeout,
+		TimeoutResponse: timeoutResponse,
 	}
 }
 
