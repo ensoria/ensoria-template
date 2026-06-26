@@ -1,16 +1,17 @@
 package service
 
+//ensoria:mock
 type PostService interface {
 	Anything() string
 }
 
-func NewPostService() PostService {
-	return &PostServiceImpl{}
+func NewPostService() *postService {
+	return &postService{}
 }
 
-type PostServiceImpl struct {
+type postService struct {
 }
 
-func (s *PostServiceImpl) Anything() string {
+func (s *postService) Anything() string {
 	return "post service response"
 }

@@ -6,6 +6,7 @@ import (
 	"github.com/ensoria/ensoria-template/internal/module/user/model"
 )
 
+//ensoria:mock
 type UserRepository interface {
 	GetByID(id int64) (*model.User, error)
 }

@@ -5,6 +5,7 @@ import (
 	"github.com/ensoria/ensoria-template/internal/query/user_post/repository"
 )
 
+//ensoria:mock
 type UserPostService interface {
 	GetByID(id int64) *record.UserPostRecord
 }

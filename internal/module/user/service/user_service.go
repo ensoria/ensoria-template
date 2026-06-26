@@ -19,6 +19,8 @@ import (
 // serviceの返す値は必ずDTOにすること
 // modelを返さないように実装すること
 // modelはserviceの中で処理でのみ使う。
+//
+//ensoria:mock
 type UserService interface {
 	Something() string
 	GetPostContent(postId string) (string, error)
