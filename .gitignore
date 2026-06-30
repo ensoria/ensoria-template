@@ -8,6 +8,8 @@ tmp/*
 build/
 internal/module/_embed/
 internal/query/_embed/
+internal/module/_dev_embed/
+internal/query/_dev_embed/
 # Created by https://www.toptal.com/developers/gitignore/api/macos,windows,linux,go
 # Edit at https://www.toptal.com/developers/gitignore?templates=macos,windows,linux,go
 

@@ -3,7 +3,7 @@
 # Ensoria アプリケーションのコンテナイメージ（ECS/EKS 等向け）。
 # config の YAML は go:embed でバイナリに埋め込まれるため、ランタイムには YAML ファイルは不要。
 # encli build image が `--build-arg MAIN_PATH=<対象>` を渡してビルド対象を切り替える。
-ARG GO_VERSION=1.25
+ARG GO_VERSION=1.26
 
 FROM golang:${GO_VERSION}-alpine AS builder
 # alpine には git が無い。private な間の ensoria 系モジュールは VCS 直 fetch のため git が要る。
