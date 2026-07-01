@@ -44,6 +44,16 @@ func fieldByName(s *apidoc.Schema, name string) apidoc.Field {
 	return apidoc.Field{}
 }
 
+// constraintByCode は Field の Constraints から code で1件取り出す(テスト補助)。
+func constraintByCode(f apidoc.Field, code string) (apidoc.Constraint, bool) {
+	for _, c := range f.Constraints {
+		if c.Code == code {
+			return c, true
+		}
+	}
+	return apidoc.Constraint{}, false
+}
+
 var _ = Describe("SchemaFromType", func() {
 	var schema *apidoc.Schema
 

@@ -71,15 +71,19 @@ var _ = Describe("DescribeModule / DescribeEndpoint", func() {
 			Expect(spec.PathParams[0].Name).To(Equal("id"))
 		})
 
-		It("marks required fields and maps length constraints", func() {
+		It("marks required fields and captures length constraints structurally", func() {
 			name := fieldByName(spec.Request, "name")
 			Expect(name.Required).To(BeTrue())
-			Expect(name.Constraints).To(ContainElement("max length 10"))
+			c, ok := constraintByCode(name, "str_max_length")
+			Expect(ok).To(BeTrue())
+			Expect(c.Params).To(HaveKeyWithValue("max", 10))
 		})
 
-		It("maps enum rules to a one-of constraint", func() {
+		It("captures enum rules structurally (values preserved)", func() {
 			role := fieldByName(spec.Request, "role")
-			Expect(role.Constraints).To(ContainElement("one of: admin, member"))
+			c, ok := constraintByCode(role, "str_any_of")
+			Expect(ok).To(BeTrue())
+			Expect(c.Params).To(HaveKeyWithValue("values", []any{"admin", "member"}))
 		})
 
 		It("fills field meaning from FieldDocs", func() {

@@ -33,13 +33,24 @@ type Schema struct {
 
 // Field はスキーマ表の1行(ネスト/配列はドット・角括弧記法で平坦化)。
 type Field struct {
-	Name        string   `json:"name"` // "address.city" / "items[].id" 等
-	Type        string   `json:"type"` // string/int/float/bool/string[]/object/object[] 等
-	Required    bool     `json:"required"`
-	Nullable    bool     `json:"nullable"`
-	Optional    bool     `json:"optional,omitempty"` // json:",omitempty" タグ由来(省略可能)
-	Constraints []string `json:"constraints,omitempty"`
-	Meaning     string   `json:"meaning,omitempty"` // FieldDocs 由来。未宣言は空(レンダラで TODO)
+	Name        string       `json:"name"` // "address.city" / "items[].id" 等
+	Type        string       `json:"type"` // string/int/float/bool/string[]/object/object[] 等
+	Required    bool         `json:"required"`
+	Nullable    bool         `json:"nullable"`
+	Optional    bool         `json:"optional,omitempty"` // json:",omitempty" タグ由来(省略可能)
+	Constraints []Constraint `json:"constraints,omitempty"`
+	Meaning     string       `json:"meaning,omitempty"` // FieldDocs 由来。未宣言は空(レンダラで TODO)
+}
+
+// Constraint は1つの制約を**構造化して**保持する(出力フォーマット中立)。
+// 文言化はレンダラが出力言語に応じて行い(docai: "max length 10" / "最大10文字")、
+// OpenAPI レンダラは Code→キーワード(str_max_length→maxLength: params.max)へ変換できる。
+//
+//   - Code は検証ルールの種別(rule.Descriptor.Name。例 "str_max_length")。
+//   - Params は制約パラメータ(例 {"max": 10}、enum は {"values": [...]})。
+type Constraint struct {
+	Code   string         `json:"code"`
+	Params map[string]any `json:"params,omitempty"`
 }
 
 // PathParam はパスパラメータ(Module.Path の `{name}`)。
