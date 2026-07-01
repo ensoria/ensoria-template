@@ -41,9 +41,9 @@ func (c *Get) Handle(r *rest.Request) *rest.Response {
 	fmt.Println("gRPC response received!", res)
 
 	return &rest.Response{
-		Xml:        true,
-		Code:       http.StatusOK,
-		AddHeaders: map[string]string{"Server": "net/http"},
-		Body:       &dto.GetUser{ID: 1, Name: "hoge"},
+		ContentType: rest.MediaTypeXML,
+		Code:        http.StatusOK,
+		AddHeaders:  map[string]string{"Server": "net/http"},
+		Body:        &dto.GetUser{ID: 1, Name: "hoge"},
 	}
 }

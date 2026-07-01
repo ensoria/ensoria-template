@@ -19,9 +19,9 @@ func NewGet(service service.PostService) *Get {
 
 func (c *Get) Handle(r *rest.Request) *rest.Response {
 	return &rest.Response{
-		Xml:        true,
-		Code:       http.StatusOK,
-		AddHeaders: map[string]string{"Server": "net/http"},
-		Body:       c.Service.Anything(),
+		ContentType: rest.MediaTypeXML,
+		Code:        http.StatusOK,
+		AddHeaders:  map[string]string{"Server": "net/http"},
+		Body:        c.Service.Anything(),
 	}
 }
