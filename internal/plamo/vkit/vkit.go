@@ -7,18 +7,15 @@ import (
 	"github.com/ensoria/validator/pkg/verr"
 )
 
-// validate.HttpRequestBodyFieldFirst か、
-// validate.HttpRequestBodyLangFirst はプロジェクトの都合に合わせて
-// 選択してください。
-func RestRequestBody[T any](r *rest.Request, ruleSets ...*rule.RuleSet) (*T, verr.ValidationErrorMessages) {
-	return validate.RestRequestBodyFieldFirst[T](r, ruleSets...)
+// RestRequestBody は rest.Request のボディを T にパースして検証する。
+// 検証違反はプロトコル非依存の中立形 verr.ValidationErrors(全言語 + code 付き)で返す。
+func RestRequestBody[T any](r *rest.Request, ruleSets ...*rule.RuleSet) (*T, verr.ValidationErrors) {
+	return validate.RestRequestBody[T](r, ruleSets...)
 }
 
-// validate.MapFieldFirst か、
-// validate.MapLangFirst はプロジェクトの都合に合わせて
-// 選択してください。
-func Map[T any](m map[string]T, ruleSets ...*rule.RuleSet) verr.ValidationErrorMessages {
-	return validate.MapFieldFirst(m, ruleSets...)
+// Map は Query / Path / Header などの map 値を検証する。
+func Map[T any](m map[string]T, ruleSets ...*rule.RuleSet) verr.ValidationErrors {
+	return validate.Map(m, ruleSets...)
 }
 
 // 以下のバリデーションは、共通で使えるようなメッセージで定義しています。

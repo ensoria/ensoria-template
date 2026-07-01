@@ -3,6 +3,7 @@ package restkit
 import (
 	"net/http"
 	"reflect"
+	"strings"
 
 	"github.com/ensoria/ensoria-template/internal/plamo/vkit"
 	"github.com/ensoria/rest/pkg/rest"
@@ -13,10 +14,17 @@ import (
 const (
 	// validationErrorStatus は入力検証に失敗したときのステータス(docai 準拠: 422)。
 	validationErrorStatus = http.StatusUnprocessableEntity
+	// validationFailedCode / validationFailedMessage は検証エラーエンベロープの既定コード/文言。
+	validationFailedCode    = "validation_failed"
+	validationFailedMessage = "input is invalid"
+	// parseErrorCode は verr.ParseError が用いるリクエスト全体エラーのコード。
+	parseErrorCode = "not_parsable"
 	// internalErrorMessage はハンドラが型不明のエラーを返したときの公開メッセージ。
 	internalErrorMessage = "internal server error"
 	// internalErrorCode は上記に対応する機械判定用コード。
 	internalErrorCode = "internal_error"
+	// defaultLang は Accept-Language が無い/未対応のときの表示言語。
+	defaultLang = "en"
 )
 
 // HTTPError はハンドラが返すエラーのうち、ステータス/コードを自ら決められるもの。
@@ -33,8 +41,16 @@ type ErrorEnvelope struct {
 	Error ErrorDetail `json:"error"`
 }
 
-// ErrorDetail はエラーのコードと表示メッセージ。
+// ErrorDetail はエラーのコード・表示メッセージと、任意のフィールド単位エラー。
 type ErrorDetail struct {
+	Code        string             `json:"code"`
+	Message     string             `json:"message"`
+	FieldErrors []FieldErrorDetail `json:"field_errors,omitempty"`
+}
+
+// FieldErrorDetail は docai の field_errors の1要素(表示言語1つに絞ったもの)。
+type FieldErrorDetail struct {
+	Field   string `json:"field"`
 	Code    string `json:"code"`
 	Message string `json:"message"`
 }
@@ -52,18 +68,20 @@ type endpointController[Req any, Res any] struct {
 
 // Handle は検証 → ハンドラ呼び出し → Result 変換の順で処理する。
 func (c *endpointController[Req, Res]) Handle(r *rest.Request) *rest.Response {
+	lang := displayLang(r)
+
 	// 1. リクエストボディの解析 + 検証
 	req, vErrs := vkit.RestRequestBody[Req](r, c.ep.BodyRules...)
-	if vErrs != nil {
-		return validationErrorResponse(vErrs)
+	if vErrs.HasErrors() {
+		return validationErrorResponse(vErrs, lang)
 	}
 
 	// 2. パス/クエリパラメータの検証
-	if vErrs := validatePathParams(r, c.ep.PathRules); vErrs != nil {
-		return validationErrorResponse(vErrs)
+	if vErrs := validatePathParams(r, c.ep.PathRules); vErrs.HasErrors() {
+		return validationErrorResponse(vErrs, lang)
 	}
-	if vErrs := validateQueryParams(r, c.ep.QueryRules); vErrs != nil {
-		return validationErrorResponse(vErrs)
+	if vErrs := validateQueryParams(r, c.ep.QueryRules); vErrs.HasErrors() {
+		return validationErrorResponse(vErrs, lang)
 	}
 
 	// 3. ハンドラ実行
@@ -101,7 +119,7 @@ func (c *endpointController[Req, Res]) EndpointDoc() EndpointDoc {
 }
 
 // validatePathParams は PathRules の各フィールドを r.PathValue から取り出して検証する。
-func validatePathParams(r *rest.Request, rules []*rule.RuleSet) verr.ValidationErrorMessages {
+func validatePathParams(r *rest.Request, rules []*rule.RuleSet) verr.ValidationErrors {
 	if len(rules) == 0 {
 		return nil
 	}
@@ -114,7 +132,7 @@ func validatePathParams(r *rest.Request, rules []*rule.RuleSet) verr.ValidationE
 }
 
 // validateQueryParams は QueryRules の各フィールドを r.Query から取り出して検証する。
-func validateQueryParams(r *rest.Request, rules []*rule.RuleSet) verr.ValidationErrorMessages {
+func validateQueryParams(r *rest.Request, rules []*rule.RuleSet) verr.ValidationErrors {
 	if len(rules) == 0 {
 		return nil
 	}
@@ -126,12 +144,74 @@ func validateQueryParams(r *rest.Request, rules []*rule.RuleSet) verr.Validation
 	return vkit.Map(values, rules...)
 }
 
-// validationErrorResponse はフィールド単位の検証エラーをそのまま本文に載せて返す。
-func validationErrorResponse(vErrs verr.ValidationErrorMessages) *rest.Response {
-	return &rest.Response{
-		Code: validationErrorStatus,
-		Body: vErrs,
+// validationErrorResponse は中立形 verr.ValidationErrors を docai のエラーエンベロープに整形する。
+// 表示言語は lang で1つに絞る(多言語は verr 側が保持しているので情報は失われない)。
+// Field が空のリクエスト全体エラー(パース失敗)は field_errors ではなく top-level に載せる。
+func validationErrorResponse(vErrs verr.ValidationErrors, lang string) *rest.Response {
+	detail := ErrorDetail{Code: validationFailedCode, Message: validationFailedMessage}
+	status := validationErrorStatus
+
+	for _, fe := range vErrs {
+		msg := pickMessage(fe.Messages, lang)
+		if fe.Field == "" {
+			// リクエスト全体エラー(例: JSON パース失敗)は top-level メッセージにする
+			detail.Code = fe.Code
+			detail.Message = msg
+			if fe.Code == parseErrorCode {
+				status = http.StatusBadRequest
+			}
+			continue
+		}
+		detail.FieldErrors = append(detail.FieldErrors, FieldErrorDetail{
+			Field:   fe.Field,
+			Code:    fe.Code,
+			Message: msg,
+		})
 	}
+
+	return &rest.Response{
+		Code: status,
+		Body: &ErrorEnvelope{Error: detail},
+	}
+}
+
+// displayLang は Accept-Language の先頭の言語サブタグ(小文字)を返す。無ければ defaultLang。
+// 例: "ja-JP,ja;q=0.9,en" -> "ja"
+func displayLang(r *rest.Request) string {
+	header, ok := r.Header("Accept-Language")
+	if !ok || header == "" {
+		return defaultLang
+	}
+	first := header
+	if i := strings.IndexByte(first, ','); i >= 0 {
+		first = first[:i]
+	}
+	if i := strings.IndexByte(first, ';'); i >= 0 {
+		first = first[:i]
+	}
+	if i := strings.IndexByte(first, '-'); i >= 0 {
+		first = first[:i]
+	}
+	first = strings.ToLower(strings.TrimSpace(first))
+	if first == "" {
+		return defaultLang
+	}
+	return first
+}
+
+// pickMessage は messages から lang のメッセージを選ぶ。無ければ defaultLang、
+// それも無ければ任意の1つを返す。
+func pickMessage(messages map[string]string, lang string) string {
+	if msg, ok := messages[lang]; ok {
+		return msg
+	}
+	if msg, ok := messages[defaultLang]; ok {
+		return msg
+	}
+	for _, msg := range messages {
+		return msg
+	}
+	return ""
 }
 
 // errorResponse はハンドラが返したエラーをレスポンスに変換する。

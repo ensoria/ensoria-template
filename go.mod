@@ -10,7 +10,7 @@ require (
 	github.com/ensoria/loggear v0.0.1
 	github.com/ensoria/mb v0.0.6
 	github.com/ensoria/rest v0.0.17
-	github.com/ensoria/validator v0.0.6
+	github.com/ensoria/validator v0.0.7
 	github.com/ensoria/websocket v0.0.3
 	github.com/google/uuid v1.6.0
 	github.com/spf13/cobra v1.9.1

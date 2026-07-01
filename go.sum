@@ -74,6 +74,8 @@ github.com/ensoria/validator v0.0.5 h1:WqGITK8+OaUKFtJQXwMIDPqNjt/9sO98ht/fcIL6r
 github.com/ensoria/validator v0.0.5/go.mod h1:VCeVsdf2F7rC4q/ClqJwbZ7XrwQLM+kMzA4hLG39wSA=
 github.com/ensoria/validator v0.0.6 h1:1yGDVsJhv/CEP/vm5IWrMLGGiTMcSMbZK1j1di8J75Q=
 github.com/ensoria/validator v0.0.6/go.mod h1:VCeVsdf2F7rC4q/ClqJwbZ7XrwQLM+kMzA4hLG39wSA=
+github.com/ensoria/validator v0.0.7 h1:Q+t1W36tHg+0w3vdspK2cCbXmq569PiVxv6ij3VuA1U=
+github.com/ensoria/validator v0.0.7/go.mod h1:VCeVsdf2F7rC4q/ClqJwbZ7XrwQLM+kMzA4hLG39wSA=
 github.com/ensoria/websocket v0.0.2 h1:nK88cjLn1LXBv7WnLtoqt/ojz24w0nwKAFJrRNE7+o8=
 github.com/ensoria/websocket v0.0.2/go.mod h1:YvZHeHLmpLDgTXy+Pv9oRNrlMI8KHF93nAHoXQ3n2iY=
 github.com/ensoria/websocket v0.0.3 h1:3qWWEUzhIF/vDFxYc5o76CYaDGYQjArkiO1LKxrJQ04=

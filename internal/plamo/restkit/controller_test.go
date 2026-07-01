@@ -32,8 +32,15 @@ func (teapotError) Status() int   { return http.StatusTeapot }
 func (teapotError) Code() string  { return "teapot" }
 
 func jsonRequest(body string) *rest.Request {
+	return jsonRequestLang(body, "")
+}
+
+func jsonRequestLang(body, lang string) *rest.Request {
 	httpReq := httptest.NewRequest(http.MethodPost, "/users", strings.NewReader(body))
 	httpReq.Header.Set("Content-Type", "application/json")
+	if lang != "" {
+		httpReq.Header.Set("Accept-Language", lang)
+	}
 	return rest.NewRequest(httpReq)
 }
 
@@ -82,13 +89,36 @@ var _ = Describe("endpoint controller", func() {
 	})
 
 	Describe("validation", func() {
-		It("returns 422 with the field errors when a body rule fails", func() {
+		It("renders the docai error envelope with field_errors on a body rule failure", func() {
 			ctrl := restkit.NewController(newEndpoint(okHandle))
 
 			res := ctrl.Handle(jsonRequest(`{"name":"tooLongName"}`))
 
 			Expect(res.Code).To(Equal(http.StatusUnprocessableEntity))
-			Expect(res.Body).NotTo(BeNil())
+			env, ok := res.Body.(*restkit.ErrorEnvelope)
+			Expect(ok).To(BeTrue())
+			Expect(env.Error.Code).To(Equal("validation_failed"))
+			Expect(env.Error.FieldErrors).To(HaveLen(1))
+			Expect(env.Error.FieldErrors[0].Field).To(Equal("name"))
+			Expect(env.Error.FieldErrors[0].Code).To(Equal("str_max_length"))
+			Expect(env.Error.FieldErrors[0].Message).To(ContainSubstring("exceeds maximum length"))
+		})
+
+		It("selects the display language from Accept-Language", func() {
+			res := restkit.NewController(newEndpoint(okHandle)).
+				Handle(jsonRequestLang(`{"name":"tooLongName"}`, "ja-JP,ja;q=0.9"))
+
+			env := res.Body.(*restkit.ErrorEnvelope)
+			Expect(env.Error.FieldErrors[0].Message).To(ContainSubstring("最大文字数"))
+		})
+
+		It("returns 400 not_parsable for malformed JSON, without field_errors", func() {
+			res := restkit.NewController(newEndpoint(okHandle)).Handle(jsonRequest(`{not json`))
+
+			Expect(res.Code).To(Equal(http.StatusBadRequest))
+			env := res.Body.(*restkit.ErrorEnvelope)
+			Expect(env.Error.Code).To(Equal("not_parsable"))
+			Expect(env.Error.FieldErrors).To(BeEmpty())
 		})
 
 		It("does not invoke the handler when validation fails", func() {
