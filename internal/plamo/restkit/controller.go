@@ -3,6 +3,8 @@ package restkit
 import (
 	"net/http"
 	"reflect"
+	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/ensoria/ensoria-template/internal/plamo/vkit"
@@ -68,20 +70,20 @@ type endpointController[Req any, Res any] struct {
 
 // Handle は検証 → ハンドラ呼び出し → Result 変換の順で処理する。
 func (c *endpointController[Req, Res]) Handle(r *rest.Request) *rest.Response {
-	lang := displayLang(r)
+	langs := preferredLangs(r)
 
 	// 1. リクエストボディの解析 + 検証
 	req, vErrs := vkit.RestRequestBody[Req](r, c.ep.BodyRules...)
 	if vErrs.HasErrors() {
-		return validationErrorResponse(vErrs, lang)
+		return validationErrorResponse(vErrs, langs)
 	}
 
 	// 2. パス/クエリパラメータの検証
 	if vErrs := validatePathParams(r, c.ep.PathRules); vErrs.HasErrors() {
-		return validationErrorResponse(vErrs, lang)
+		return validationErrorResponse(vErrs, langs)
 	}
 	if vErrs := validateQueryParams(r, c.ep.QueryRules); vErrs.HasErrors() {
-		return validationErrorResponse(vErrs, lang)
+		return validationErrorResponse(vErrs, langs)
 	}
 
 	// 3. ハンドラ実行
@@ -145,14 +147,14 @@ func validateQueryParams(r *rest.Request, rules []*rule.RuleSet) verr.Validation
 }
 
 // validationErrorResponse は中立形 verr.ValidationErrors を docai のエラーエンベロープに整形する。
-// 表示言語は lang で1つに絞る(多言語は verr 側が保持しているので情報は失われない)。
+// 表示言語は langs(優先順)から利用可能なものを選ぶ(多言語は verr 側が保持しているので情報は失われない)。
 // Field が空のリクエスト全体エラー(パース失敗)は field_errors ではなく top-level に載せる。
-func validationErrorResponse(vErrs verr.ValidationErrors, lang string) *rest.Response {
+func validationErrorResponse(vErrs verr.ValidationErrors, langs []string) *rest.Response {
 	detail := ErrorDetail{Code: validationFailedCode, Message: validationFailedMessage}
 	status := validationErrorStatus
 
 	for _, fe := range vErrs {
-		msg := pickMessage(fe.Messages, lang)
+		msg := pickMessage(fe.Messages, langs)
 		if fe.Field == "" {
 			// リクエスト全体エラー(例: JSON パース失敗)は top-level メッセージにする
 			detail.Code = fe.Code
@@ -175,38 +177,79 @@ func validationErrorResponse(vErrs verr.ValidationErrors, lang string) *rest.Res
 	}
 }
 
-// displayLang は Accept-Language の先頭の言語サブタグ(小文字)を返す。無ければ defaultLang。
-// 例: "ja-JP,ja;q=0.9,en" -> "ja"
-func displayLang(r *rest.Request) string {
-	header, ok := r.Header("Accept-Language")
-	if !ok || header == "" {
-		return defaultLang
-	}
-	first := header
-	if i := strings.IndexByte(first, ','); i >= 0 {
-		first = first[:i]
-	}
-	if i := strings.IndexByte(first, ';'); i >= 0 {
-		first = first[:i]
-	}
-	if i := strings.IndexByte(first, '-'); i >= 0 {
-		first = first[:i]
-	}
-	first = strings.ToLower(strings.TrimSpace(first))
-	if first == "" {
-		return defaultLang
-	}
-	return first
+// preferredLangs は Accept-Language を q 値順に解析し、言語サブタグ(小文字)の
+// 優先順リストを返す。末尾には必ず defaultLang を付ける(最終フォールバック)。
+// 例: "fr;q=0.8, ja-JP, en;q=0.9" -> ["ja", "en", "fr", defaultLang]
+func preferredLangs(r *rest.Request) []string {
+	header, _ := r.Header("Accept-Language")
+	langs := parseAcceptLanguage(header)
+	return append(langs, defaultLang)
 }
 
-// pickMessage は messages から lang のメッセージを選ぶ。無ければ defaultLang、
-// それも無ければ任意の1つを返す。
-func pickMessage(messages map[string]string, lang string) string {
-	if msg, ok := messages[lang]; ok {
-		return msg
+// parseAcceptLanguage は Accept-Language ヘッダを解析し、q 値の降順(同値は出現順)で
+// 言語サブタグ(小文字, 重複排除)を返す。`*` と q=0 は除外する。
+func parseAcceptLanguage(header string) []string {
+	header = strings.TrimSpace(header)
+	if header == "" {
+		return nil
 	}
-	if msg, ok := messages[defaultLang]; ok {
-		return msg
+
+	type langQ struct {
+		lang string
+		q    float64
+	}
+	var entries []langQ
+	for _, part := range strings.Split(header, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		lang := part
+		q := 1.0
+		if semi := strings.IndexByte(part, ';'); semi >= 0 {
+			lang = strings.TrimSpace(part[:semi])
+			for _, p := range strings.Split(part[semi+1:], ";") {
+				if value, ok := strings.CutPrefix(strings.TrimSpace(p), "q="); ok {
+					if parsed, err := strconv.ParseFloat(strings.TrimSpace(value), 64); err == nil {
+						q = parsed
+					}
+				}
+			}
+		}
+		// 一次サブタグ(例: "ja-JP" -> "ja")に正規化
+		if dash := strings.IndexByte(lang, '-'); dash >= 0 {
+			lang = lang[:dash]
+		}
+		lang = strings.ToLower(strings.TrimSpace(lang))
+		if lang == "" || lang == "*" || q <= 0 {
+			continue
+		}
+		entries = append(entries, langQ{lang, q})
+	}
+
+	// q 値の降順で安定ソート(同値は出現順を保持)
+	sort.SliceStable(entries, func(i, j int) bool {
+		return entries[i].q > entries[j].q
+	})
+
+	seen := make(map[string]bool, len(entries))
+	langs := make([]string, 0, len(entries))
+	for _, e := range entries {
+		if !seen[e.lang] {
+			seen[e.lang] = true
+			langs = append(langs, e.lang)
+		}
+	}
+	return langs
+}
+
+// pickMessage は langs(優先順)で最初に見つかったメッセージを返す。
+// どれも無ければ messages 内の任意の1つを返す。
+func pickMessage(messages map[string]string, langs []string) string {
+	for _, lang := range langs {
+		if msg, ok := messages[lang]; ok {
+			return msg
+		}
 	}
 	for _, msg := range messages {
 		return msg

@@ -112,6 +112,24 @@ var _ = Describe("endpoint controller", func() {
 			Expect(env.Error.FieldErrors[0].Message).To(ContainSubstring("最大文字数"))
 		})
 
+		It("honors q-values: falls to the next preferred language when the top is unavailable", func() {
+			// fr is preferred but unavailable (messages only have ja/en); ja is next.
+			res := restkit.NewController(newEndpoint(okHandle)).
+				Handle(jsonRequestLang(`{"name":"tooLongName"}`, "fr;q=1.0, ja;q=0.9"))
+
+			env := res.Body.(*restkit.ErrorEnvelope)
+			Expect(env.Error.FieldErrors[0].Message).To(ContainSubstring("最大文字数"))
+		})
+
+		It("honors q-values: a lower-q language wins over a higher-q one listed later", func() {
+			// en has higher q than ja despite order; en is available -> English message.
+			res := restkit.NewController(newEndpoint(okHandle)).
+				Handle(jsonRequestLang(`{"name":"tooLongName"}`, "ja;q=0.5, en;q=0.9"))
+
+			env := res.Body.(*restkit.ErrorEnvelope)
+			Expect(env.Error.FieldErrors[0].Message).To(ContainSubstring("exceeds maximum length"))
+		})
+
 		It("returns 400 not_parsable for malformed JSON, without field_errors", func() {
 			res := restkit.NewController(newEndpoint(okHandle)).Handle(jsonRequest(`{not json`))
 
