@@ -26,9 +26,11 @@ type EndpointSpec struct {
 	Untyped bool `json:"untyped,omitempty"`
 }
 
-// Schema はボディの型を平坦化したフィールド一覧。
+// Schema はボディの型を平坦化したフィールド一覧と、具体例(example)。
 type Schema struct {
 	Fields []Field `json:"fields"`
+	// Example は JSON 形の具体例(map/slice/scalar)。決定的・制約充足。
+	Example any `json:"example,omitempty"`
 }
 
 // Field はスキーマ表の1行(ネスト/配列はドット・角括弧記法で平坦化)。

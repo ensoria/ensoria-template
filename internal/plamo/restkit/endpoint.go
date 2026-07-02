@@ -24,6 +24,10 @@ type Endpoint[Req any, Res any] struct {
 	Description string            // 追加の説明
 	FieldDocs   map[string]string // フィールド意味(ドット記法キー: "address.city" 等)
 
+	// IDPrefix は example 生成で、このリソースの id に使うプレフィックスを固定する
+	// (例 "usr")。空の場合はパス/フィールド名から自動導出する(単数形フルネーム)。
+	IDPrefix string
+
 	// --- 検証(適用箇所ごとに分離) ---
 	BodyRules  []*rule.RuleSet
 	PathRules  []*rule.RuleSet
@@ -87,6 +91,7 @@ type EndpointDoc struct {
 	Summary     string
 	Description string
 	FieldDocs   map[string]string
+	IDPrefix    string
 
 	ReqType reflect.Type
 	ResType reflect.Type

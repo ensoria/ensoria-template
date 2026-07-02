@@ -26,34 +26,35 @@ type rawController struct{}
 
 func (rawController) Handle(r *rest.Request) *rest.Response { return &rest.Response{Code: 200} }
 
-var _ = Describe("DescribeModule / DescribeEndpoint", func() {
-	buildModule := func() *rest.Module {
-		ep := &restkit.Endpoint[createReq, createRes]{
-			Summary: "Create user",
-			Success: 201,
-			BodyRules: []*rule.RuleSet{
-				{Field: "name", Rules: []rule.Rule{
-					rule.CreateStrNotEmpty(vmsgs)(),
-					rule.CreateStrMaxLength(vmsgs)(10),
-				}},
-				{Field: "role", Rules: []rule.Rule{
-					rule.CreateStrAnyOf(vmsgs)("admin", "member"),
-				}},
-			},
-			FieldDocs:       map[string]string{"name": "User display name"},
-			ResponseHeaders: []restkit.HeaderSpec{{Name: "Location", Meaning: "URL of created user"}},
-			Handle: func(r *rest.Request, req *createReq) (*rest.Result[createRes], error) {
-				return rest.NewResult(&createRes{ID: "usr_01"}), nil
-			},
-		}
-		return &rest.Module{Path: "/users/{id}", Post: restkit.NewController(ep)}
+// buildModule は型付きエンドポイントを1つ持つテスト用モジュールを作る(テスト間で共有)。
+func buildModule() *rest.Module {
+	ep := &restkit.Endpoint[createReq, createRes]{
+		Summary: "Create user",
+		Success: 201,
+		BodyRules: []*rule.RuleSet{
+			{Field: "name", Rules: []rule.Rule{
+				rule.CreateStrNotEmpty(vmsgs)(),
+				rule.CreateStrMaxLength(vmsgs)(10),
+			}},
+			{Field: "role", Rules: []rule.Rule{
+				rule.CreateStrAnyOf(vmsgs)("admin", "member"),
+			}},
+		},
+		FieldDocs:       map[string]string{"name": "User display name"},
+		ResponseHeaders: []restkit.HeaderSpec{{Name: "Location", Meaning: "URL of created user"}},
+		Handle: func(r *rest.Request, req *createReq) (*rest.Result[createRes], error) {
+			return rest.NewResult(&createRes{ID: "usr_01"}), nil
+		},
 	}
+	return &rest.Module{Path: "/users/{id}", Post: restkit.NewController(ep)}
+}
 
+var _ = Describe("DescribeModule / DescribeEndpoint", func() {
 	Describe("a typed endpoint", func() {
 		var spec *apidoc.EndpointSpec
 
 		BeforeEach(func() {
-			specs := apidoc.DescribeModule(buildModule())
+			specs := apidoc.DescribeModule(buildModule(), nil)
 			Expect(specs).To(HaveLen(1))
 			spec = specs[0]
 		})
@@ -101,7 +102,7 @@ var _ = Describe("DescribeModule / DescribeEndpoint", func() {
 		It("produces an untyped spec with only method and path", func() {
 			m := &rest.Module{Path: "/legacy", Get: rawController{}}
 
-			specs := apidoc.DescribeModule(m)
+			specs := apidoc.DescribeModule(m, nil)
 
 			Expect(specs).To(HaveLen(1))
 			Expect(specs[0].Method).To(Equal("GET"))

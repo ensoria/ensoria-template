@@ -106,6 +106,7 @@ func (c *endpointController[Req, Res]) EndpointDoc() EndpointDoc {
 		Summary:         c.ep.Summary,
 		Description:     c.ep.Description,
 		FieldDocs:       c.ep.FieldDocs,
+		IDPrefix:        c.ep.IDPrefix,
 		ReqType:         reflect.TypeFor[Req](),
 		ResType:         reflect.TypeFor[Res](),
 		BodyRules:       c.ep.BodyRules,

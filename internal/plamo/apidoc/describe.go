@@ -10,16 +10,41 @@ import (
 // Build は HTTP モジュール群を走査して APISpec を組み立てる。
 // 各モジュールの Get/Post/... のうち、Documented を実装するものは型付きスペックに、
 // そうでない生 Controller は型不明(Untyped)スペックにする。
+//
+// 先に全エンドポイントを走査して「リソース → 宣言 id プレフィックス」を集め、
+// example 生成でリソースをまたいで一貫した id を出せるようにする。
 func Build(modules []*rest.Module) *APISpec {
+	idPrefixes := collectIDPrefixes(modules)
 	spec := &APISpec{}
 	for _, m := range modules {
-		spec.Endpoints = append(spec.Endpoints, DescribeModule(m)...)
+		spec.Endpoints = append(spec.Endpoints, DescribeModule(m, idPrefixes)...)
 	}
 	return spec
 }
 
+// collectIDPrefixes は各エンドポイントの宣言(EndpointDoc.IDPrefix)を
+// リソース名(パス第1セグメントの単数形)→ プレフィックス に集約する。
+func collectIDPrefixes(modules []*rest.Module) map[string]string {
+	prefixes := map[string]string{}
+	for _, m := range modules {
+		resource := resourceOf(m.Path)
+		if resource == "" {
+			continue
+		}
+		for _, ctrl := range []rest.Controller{m.Get, m.Post, m.Put, m.Patch, m.Delete} {
+			if doc, ok := ctrl.(restkit.Documented); ok {
+				if p := doc.EndpointDoc().IDPrefix; p != "" {
+					prefixes[resource] = p
+				}
+			}
+		}
+	}
+	return prefixes
+}
+
 // DescribeModule は1モジュールの各メソッドを EndpointSpec に変換する。
-func DescribeModule(m *rest.Module) []*EndpointSpec {
+// idPrefixes は example の id プレフィックス解決に使う(nil 可)。
+func DescribeModule(m *rest.Module, idPrefixes map[string]string) []*EndpointSpec {
 	methods := []struct {
 		name string
 		ctrl rest.Controller
@@ -37,7 +62,7 @@ func DescribeModule(m *rest.Module) []*EndpointSpec {
 			continue
 		}
 		if doc, ok := mc.ctrl.(restkit.Documented); ok {
-			specs = append(specs, DescribeEndpoint(mc.name, m.Path, doc.EndpointDoc()))
+			specs = append(specs, DescribeEndpoint(mc.name, m.Path, doc.EndpointDoc(), idPrefixes))
 		} else {
 			// 生 Controller: 型・宣言メタが無いので method/path のみ(レンダラで TODO)
 			specs = append(specs, &EndpointSpec{
@@ -52,13 +77,21 @@ func DescribeModule(m *rest.Module) []*EndpointSpec {
 }
 
 // DescribeEndpoint は method/path と EndpointDoc から EndpointSpec を組み立てる。
-func DescribeEndpoint(method, path string, doc restkit.EndpointDoc) *EndpointSpec {
+func DescribeEndpoint(method, path string, doc restkit.EndpointDoc, idPrefixes map[string]string) *EndpointSpec {
+	opts := ExampleOptions{Resource: resourceOf(path), IDPrefixes: idPrefixes}
+
 	req := SchemaFromType(doc.ReqType)
 	applyRules(req, doc.BodyRules)
 	applyFieldDocs(req, doc.FieldDocs)
+	if req != nil {
+		req.Example = ExampleFromType(doc.ReqType, doc.BodyRules, opts)
+	}
 
 	res := SchemaFromType(doc.ResType)
 	applyFieldDocs(res, doc.FieldDocs)
+	if res != nil {
+		res.Example = ExampleFromType(doc.ResType, nil, opts)
+	}
 
 	return &EndpointSpec{
 		Method:          method,
@@ -71,6 +104,26 @@ func DescribeEndpoint(method, path string, doc restkit.EndpointDoc) *EndpointSpe
 		Response:        res,
 		ResponseHeaders: convertHeaders(doc.ResponseHeaders),
 	}
+}
+
+// resourceOf はパスの第1セグメントを単数形にしてリソース名を返す(例 "/users/{id}" → "user")。
+func resourceOf(path string) string {
+	for _, seg := range strings.Split(path, "/") {
+		if seg == "" || strings.HasPrefix(seg, "{") {
+			continue
+		}
+		return singular(seg)
+	}
+	return ""
+}
+
+// singular は素朴に末尾の "s" を落として単数形にする("users" → "user")。
+func singular(s string) string {
+	s = strings.ToLower(s)
+	if len(s) > 1 && strings.HasSuffix(s, "s") {
+		return strings.TrimSuffix(s, "s")
+	}
+	return s
 }
 
 // parsePathParams は Path の `{name}` セグメントを抽出する。
