@@ -4,7 +4,7 @@ import "github.com/ensoria/ensoria-template/internal/module/post/dto"
 
 //ensoria:mock
 type PostService interface {
-	GetPost() string
+	GetPost() *dto.Post
 }
 
 func NewPostService() *postService {

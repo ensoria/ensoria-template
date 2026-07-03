@@ -7,6 +7,7 @@
 package mock
 
 import (
+	"github.com/ensoria/ensoria-template/internal/module/post/dto"
 	"github.com/ensoria/testutil/pkg/mock"
 )
 
@@ -18,7 +19,7 @@ func NewPostServiceMock() *PostServiceMock {
 	return &PostServiceMock{Mock: mock.New()}
 }
 
-func (m *PostServiceMock) GetPost() string {
+func (m *PostServiceMock) GetPost() *dto.Post {
 	r := m.Called("GetPost")
-	return mock.Get[string](r, 0)
+	return mock.Get[*dto.Post](r, 0)
 }

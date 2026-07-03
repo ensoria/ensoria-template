@@ -5,8 +5,10 @@ import (
 	"github.com/ensoria/config/pkg/registry"
 	postgrpc "github.com/ensoria/ensoria-template/internal/module/post/controller/grpc"
 	"github.com/ensoria/ensoria-template/internal/module/post/controller/http"
+	"github.com/ensoria/ensoria-template/internal/module/post/dto"
 	"github.com/ensoria/ensoria-template/internal/module/post/service"
 	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
+	"github.com/ensoria/ensoria-template/internal/plamo/restkit"
 	pb "github.com/ensoria/ensoria-template/pb/post"
 	"github.com/ensoria/rest/pkg/rest"
 )
@@ -17,10 +19,10 @@ func Params() (*appconfig.Parameters, error) {
 	return registry.ModuleParams(ModuleName)
 }
 
-func NewModule(get *http.Get) *rest.Module {
+func NewModule(get *restkit.Endpoint[restkit.NoBody, dto.Post]) *rest.Module {
 	return &rest.Module{
 		Path: "/post",
-		Get:  get,
+		Get:  restkit.NewController(get),
 	}
 }
 

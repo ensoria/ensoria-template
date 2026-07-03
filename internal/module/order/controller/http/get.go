@@ -28,7 +28,10 @@ func NewGet(svc service.OrderService) *restkit.Endpoint[restkit.NoBody, dto.Orde
 		Handle: func(r *rest.Request, _ *restkit.NoBody) (*rest.Result[dto.Order], error) {
 			order, err := svc.GetOrder()
 			if err != nil {
-				return nil, err
+				// ただの error を返すと 500 internal_error に丸められる(内部詳細を漏らさない)。
+				// 特定のステータス/コードで返したい場合は HTTPError を返す。
+				// 例: 不正な注文リクエストとして 400 を返す。
+				return nil, restkit.NewError(http.StatusBadRequest, "invalid_order", "could not fetch the order")
 			}
 			return rest.NewResult(order), nil
 		},
