@@ -41,8 +41,8 @@ func NewGet(svc service.UserService, publish mb.Publish) *restkit.Endpoint[restk
 				fmt.Println("gRPC call failed:", err)
 			}
 
-			return rest.NewResult(&dto.GetUser{ID: 1, Name: "hoge"}).
-				WithHeader("Server", "net/http"), nil
+			return rest.NewResult(&dto.GetUser{ID: 1, Name: "hoge"},
+				rest.WithHeader("Server", "net/http")), nil
 		},
 	}
 }

@@ -72,7 +72,7 @@ var _ = Describe("endpoint controller", func() {
 
 		It("lets the handler override the status via Result", func() {
 			ep := newEndpoint(func(r *rest.Request, req *createReq) (*rest.Result[createRes], error) {
-				return rest.NewResult(&createRes{ID: "usr_01"}).WithStatus(http.StatusAccepted), nil
+				return rest.NewResult(&createRes{ID: "usr_01"}, rest.WithStatus(http.StatusAccepted)), nil
 			})
 			res := restkit.NewController(ep).Handle(jsonRequest(`{"name":"Taro"}`))
 
