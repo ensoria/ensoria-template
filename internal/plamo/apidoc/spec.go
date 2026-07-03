@@ -7,8 +7,8 @@ package apidoc
 
 // APISpec は1つの API 全体の中立モデル。
 type APISpec struct {
-	Endpoints []*EndpointSpec `json:"endpoints"`
-	// Conventions は Phase 5 で追加(CORS/認証/共通エラー等)。
+	Endpoints   []*EndpointSpec `json:"endpoints"`
+	Conventions *Conventions    `json:"conventions,omitempty"`
 }
 
 // EndpointSpec は1エンドポイントの中立モデル。
@@ -22,8 +22,17 @@ type EndpointSpec struct {
 	Request         *Schema          `json:"request,omitempty"`
 	Response        *Schema          `json:"response,omitempty"`
 	ResponseHeaders []ResponseHeader `json:"response_headers,omitempty"`
+	Behavior        Behavior         `json:"behavior"`
 	// Untyped は Documented を実装しない生 Controller(型不明)のとき true。
 	Untyped bool `json:"untyped,omitempty"`
+}
+
+// Behavior は docai「振る舞い」節(型から導けない情報)。すべて Endpoint の宣言由来。
+type Behavior struct {
+	SideEffects   []string `json:"side_effects,omitempty"`
+	Idempotent    *bool    `json:"idempotent,omitempty"` // nil = 未宣言(レンダラで TODO)
+	Preconditions []string `json:"preconditions,omitempty"`
+	Scopes        []string `json:"scopes,omitempty"` // Authorization(認可スコープ)
 }
 
 // Schema はボディの型を平坦化したフィールド一覧と、具体例(example)。

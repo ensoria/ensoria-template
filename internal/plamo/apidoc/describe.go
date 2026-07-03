@@ -103,6 +103,17 @@ func DescribeEndpoint(method, path string, doc restkit.EndpointDoc, idPrefixes m
 		Request:         req,
 		Response:        res,
 		ResponseHeaders: convertHeaders(doc.ResponseHeaders),
+		Behavior:        convertBehavior(doc.Behavior),
+	}
+}
+
+// convertBehavior は restkit.BehaviorSpec を apidoc.Behavior へ写す。
+func convertBehavior(b restkit.BehaviorSpec) Behavior {
+	return Behavior{
+		SideEffects:   b.SideEffects,
+		Idempotent:    b.Idempotent,
+		Preconditions: b.Preconditions,
+		Scopes:        b.Scopes,
 	}
 }
 
