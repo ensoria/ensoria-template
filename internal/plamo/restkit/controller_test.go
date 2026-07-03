@@ -79,6 +79,20 @@ var _ = Describe("endpoint controller", func() {
 			Expect(res.Code).To(Equal(http.StatusAccepted))
 		})
 
+		It("returns a truly empty body via NoContent", func() {
+			ep := &restkit.Endpoint[restkit.NoBody, restkit.NoBody]{
+				Success: http.StatusNoContent,
+				Handle: func(r *rest.Request, _ *restkit.NoBody) (*rest.Result[restkit.NoBody], error) {
+					return restkit.NoContent(), nil
+				},
+			}
+
+			res := restkit.NewController(ep).Handle(jsonRequest(``))
+
+			Expect(res.Code).To(Equal(http.StatusNoContent))
+			Expect(res.Body).To(BeNil())
+		})
+
 		It("pins ContentType from Produces when the result did not set one", func() {
 			ep := newEndpoint(okHandle)
 			ep.Produces = rest.MediaTypeXML

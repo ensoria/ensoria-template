@@ -9,7 +9,7 @@ require (
 	github.com/ensoria/grpcgear v0.0.4
 	github.com/ensoria/loggear v0.0.1
 	github.com/ensoria/mb v0.0.6
-	github.com/ensoria/rest v0.0.18
+	github.com/ensoria/rest v0.0.19
 	github.com/ensoria/validator v0.0.7
 	github.com/ensoria/websocket v0.0.3
 	github.com/google/uuid v1.6.0

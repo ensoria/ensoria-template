@@ -117,4 +117,16 @@ type Documented interface {
 // NoBody はリクエストボディを持たないエンドポイント(GET/DELETE 等)の Req 型。
 // 例: Endpoint[NoBody, dto.GetUser]。パス/クエリの値は Handle 内で r.PathValue /
 // r.Query から取り、検証は PathRules / QueryRules に宣言する。
+//
+// レスポンスボディが無いエンドポイント(204 No Content 等)は Res 型にも NoBody を使い、
+// Handle では NoContent() を返す(例: Endpoint[NoBody, NoBody])。
 type NoBody struct{}
+
+// NoContent は本文の無いレスポンス(204 No Content、DELETE の空レスポンス等)を返す。
+// rest.NoContent[NoBody] の薄いラッパーで、型引数を書かずに使える。
+//
+//	// Endpoint[Req, restkit.NoBody]{ Success: http.StatusNoContent, ... } の Handle で:
+//	return restkit.NoContent(), nil
+func NoContent(opts ...rest.ResultOption) *rest.Result[NoBody] {
+	return rest.NoContent[NoBody](opts...)
+}
