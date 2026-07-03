@@ -35,7 +35,7 @@ func ExampleFromType(t reflect.Type, ruleSets []*rule.RuleSet, opts ExampleOptio
 	}
 	g := &exampleGen{
 		faker:       faker.CreateWithSeed(exampleSeed),
-		constraints: constraintsByField(ruleSets),
+		constraints: descriptorsByField(ruleSets),
 		opts:        opts,
 	}
 	return g.typeValue(t, "")
@@ -45,20 +45,6 @@ type exampleGen struct {
 	faker       *faker.Faker
 	constraints map[string][]rule.Descriptor
 	opts        ExampleOptions
-}
-
-// constraintsByField は RuleSet 群をフィールド名 → 記述子一覧に索引化する。
-func constraintsByField(ruleSets []*rule.RuleSet) map[string][]rule.Descriptor {
-	m := map[string][]rule.Descriptor{}
-	for _, rs := range ruleSets {
-		for _, r := range rs.Rules {
-			m[rs.Field] = append(m[rs.Field], r.Descriptor)
-		}
-		for _, fcr := range rs.FieldCompareRules {
-			m[rs.Field] = append(m[rs.Field], fcr.Descriptor)
-		}
-	}
-	return m
 }
 
 // typeValue は型を JSON 形の値に変換する(ポインタは剥がす。スライスは要素1つ)。

@@ -23,6 +23,10 @@ func SchemaFromType(t reflect.Type) *Schema {
 	}
 	var fields []Field
 	collectFields(t, "", &fields)
+	if len(fields) == 0 {
+		// エクスポートフィールドが無い(例: restkit.NoBody)= ボディ無し。
+		return nil
+	}
 	return &Schema{Fields: fields}
 }
 

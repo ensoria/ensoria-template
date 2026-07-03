@@ -113,3 +113,8 @@ type EndpointDoc struct {
 type Documented interface {
 	EndpointDoc() EndpointDoc
 }
+
+// NoBody はリクエストボディを持たないエンドポイント(GET/DELETE 等)の Req 型。
+// 例: Endpoint[NoBody, dto.GetUser]。パス/クエリの値は Handle 内で r.PathValue /
+// r.Query から取り、検証は PathRules / QueryRules に宣言する。
+type NoBody struct{}

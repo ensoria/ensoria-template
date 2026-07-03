@@ -13,14 +13,14 @@ type Conventions struct {
 	GlobalMiddlewares []string          `json:"global_middlewares,omitempty"`
 }
 
-// CORS は CONVENTIONS の CORS 規約。
+// CORS は CONVENTIONS の CORS 規約(config の文字列表現をそのまま持つ)。
 type CORS struct {
-	AllowOrigin      []string `json:"allow_origin,omitempty"`
-	AllowMethods     []string `json:"allow_methods,omitempty"`
-	AllowHeaders     []string `json:"allow_headers,omitempty"`
-	ExposeHeaders    []string `json:"expose_headers,omitempty"`
-	AllowCredentials bool     `json:"allow_credentials,omitempty"`
-	MaxAge           int      `json:"max_age,omitempty"`
+	AllowOrigin      string `json:"allow_origin,omitempty"`
+	AllowMethods     string `json:"allow_methods,omitempty"`
+	AllowHeaders     string `json:"allow_headers,omitempty"`
+	ExposeHeaders    string `json:"expose_headers,omitempty"`
+	AllowCredentials bool   `json:"allow_credentials,omitempty"`
+	MaxAge           int    `json:"max_age,omitempty"`
 }
 
 // CommonErrorSchema は共通エラー本文の型からスキーマ + example を組む。

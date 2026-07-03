@@ -10,11 +10,13 @@ import (
 	"github.com/ensoria/ensoria-template/internal/module/user/controller/http"
 	usermb "github.com/ensoria/ensoria-template/internal/module/user/controller/mb"
 	"github.com/ensoria/ensoria-template/internal/module/user/controller/ws"
+	"github.com/ensoria/ensoria-template/internal/module/user/dto"
 	"github.com/ensoria/ensoria-template/internal/module/user/job"
 	"github.com/ensoria/ensoria-template/internal/module/user/repository"
 	"github.com/ensoria/ensoria-template/internal/module/user/service"
 	"github.com/ensoria/ensoria-template/internal/module/user/task"
 	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
+	"github.com/ensoria/ensoria-template/internal/plamo/restkit"
 	"github.com/ensoria/mb/pkg/mb"
 	"github.com/ensoria/rest/pkg/rest"
 	"github.com/ensoria/websocket/pkg/wsconfig"
@@ -31,17 +33,17 @@ func Params() (*appconfig.Parameters, error) {
 }
 
 // rest
-func NewUserByIDModule(get *http.Get) *rest.Module {
+func NewUserByIDModule(get *restkit.Endpoint[restkit.NoBody, dto.GetUser]) *rest.Module {
 	return &rest.Module{
 		Path: "/users/{id}",
-		Get:  get,
+		Get:  restkit.NewController(get),
 	}
 }
 
-func NewUserCollectionModule(post *http.Post) *rest.Module {
+func NewUserCollectionModule(post *restkit.Endpoint[dto.CreateUser, dto.CreateUser]) *rest.Module {
 	return &rest.Module{
 		Path: "/users",
-		Post: post,
+		Post: restkit.NewController(post),
 	}
 }
 

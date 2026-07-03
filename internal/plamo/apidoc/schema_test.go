@@ -46,7 +46,12 @@ func fieldByName(s *apidoc.Schema, name string) apidoc.Field {
 
 // constraintByCode は Field の Constraints から code で1件取り出す(テスト補助)。
 func constraintByCode(f apidoc.Field, code string) (apidoc.Constraint, bool) {
-	for _, c := range f.Constraints {
+	return constraintByCode2(f.Constraints, code)
+}
+
+// constraintByCode2 は Constraint スライスから code で1件取り出す(テスト補助)。
+func constraintByCode2(cs []apidoc.Constraint, code string) (apidoc.Constraint, bool) {
+	for _, c := range cs {
 		if c.Code == code {
 			return c, true
 		}

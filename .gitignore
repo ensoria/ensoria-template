@@ -2,6 +2,7 @@
 main
 encli
 enclix
+docai-describe
 .env
 .envrc
 tmp/*

@@ -5,6 +5,7 @@ import (
 
 	"github.com/ensoria/ensoria-template/internal/plamo/restkit"
 	"github.com/ensoria/rest/pkg/rest"
+	"github.com/ensoria/validator/pkg/rule"
 )
 
 // Build は HTTP モジュール群を走査して APISpec を組み立てる。
@@ -98,13 +99,44 @@ func DescribeEndpoint(method, path string, doc restkit.EndpointDoc, idPrefixes m
 		Path:            path,
 		Summary:         doc.Summary,
 		Description:     doc.Description,
-		PathParams:      parsePathParams(path),
+		PathParams:      buildPathParams(path, doc.PathRules),
+		QueryParams:     buildQueryParams(doc.QueryRules),
 		SuccessStatus:   doc.Success,
 		Request:         req,
 		Response:        res,
 		ResponseHeaders: convertHeaders(doc.ResponseHeaders),
 		Behavior:        convertBehavior(doc.Behavior),
 	}
+}
+
+// buildPathParams はパスの `{name}` を抽出し、PathRules の制約を各パラメータに反映する。
+func buildPathParams(path string, rules []*rule.RuleSet) []PathParam {
+	byField := descriptorsByField(rules)
+	var out []PathParam
+	for _, name := range parsePathParamNames(path) {
+		p := PathParam{Name: name}
+		for _, d := range byField[name] {
+			applyRuleDescriptor(&p.Required, &p.Constraints, d)
+		}
+		out = append(out, p)
+	}
+	return out
+}
+
+// buildQueryParams は QueryRules から(フィールド名=パラメータ名で)クエリパラメータを組む。
+func buildQueryParams(rules []*rule.RuleSet) []QueryParam {
+	var out []QueryParam
+	for _, rs := range rules {
+		q := QueryParam{Name: rs.Field}
+		for _, r := range rs.Rules {
+			applyRuleDescriptor(&q.Required, &q.Constraints, r.Descriptor)
+		}
+		for _, fcr := range rs.FieldCompareRules {
+			applyRuleDescriptor(&q.Required, &q.Constraints, fcr.Descriptor)
+		}
+		out = append(out, q)
+	}
+	return out
 }
 
 // convertBehavior は restkit.BehaviorSpec を apidoc.Behavior へ写す。
@@ -137,15 +169,24 @@ func singular(s string) string {
 	return s
 }
 
-// parsePathParams は Path の `{name}` セグメントを抽出する。
+// parsePathParams は Path の `{name}` を PathParam(名前のみ)に変換する(Untyped 用)。
 func parsePathParams(path string) []PathParam {
 	var params []PathParam
-	for _, seg := range strings.Split(path, "/") {
-		if len(seg) >= 2 && strings.HasPrefix(seg, "{") && strings.HasSuffix(seg, "}") {
-			params = append(params, PathParam{Name: seg[1 : len(seg)-1]})
-		}
+	for _, name := range parsePathParamNames(path) {
+		params = append(params, PathParam{Name: name})
 	}
 	return params
+}
+
+// parsePathParamNames は Path の `{name}` セグメントの名前を抽出する。
+func parsePathParamNames(path string) []string {
+	var names []string
+	for _, seg := range strings.Split(path, "/") {
+		if len(seg) >= 2 && strings.HasPrefix(seg, "{") && strings.HasSuffix(seg, "}") {
+			names = append(names, seg[1:len(seg)-1])
+		}
+	}
+	return names
 }
 
 // applyFieldDocs は宣言されたフィールド意味(ドット記法キー)をスキーマに反映する。

@@ -36,11 +36,30 @@ func applyRules(schema *Schema, ruleSets []*rule.RuleSet) {
 }
 
 // applyDescriptor は1つのルール記述子をフィールドに反映する。
-// 「必須」系はフラグ、それ以外は構造化した Constraint として蓄える(文言化はレンダラ側)。
 func applyDescriptor(f *Field, d rule.Descriptor) {
+	applyRuleDescriptor(&f.Required, &f.Constraints, d)
+}
+
+// applyRuleDescriptor は「必須」系はフラグに、それ以外は構造化 Constraint に反映する
+// 共通ロジック(フィールド/パス/クエリで共有。文言化はレンダラ側)。
+func applyRuleDescriptor(required *bool, constraints *[]Constraint, d rule.Descriptor) {
 	if requiredCodes[d.Name] {
-		f.Required = true
+		*required = true
 		return
 	}
-	f.Constraints = append(f.Constraints, Constraint{Code: d.Name, Params: d.Params})
+	*constraints = append(*constraints, Constraint{Code: d.Name, Params: d.Params})
+}
+
+// descriptorsByField は RuleSet 群をフィールド名 → 記述子一覧に索引化する。
+func descriptorsByField(ruleSets []*rule.RuleSet) map[string][]rule.Descriptor {
+	m := map[string][]rule.Descriptor{}
+	for _, rs := range ruleSets {
+		for _, r := range rs.Rules {
+			m[rs.Field] = append(m[rs.Field], r.Descriptor)
+		}
+		for _, fcr := range rs.FieldCompareRules {
+			m[rs.Field] = append(m[rs.Field], fcr.Descriptor)
+		}
+	}
+	return m
 }

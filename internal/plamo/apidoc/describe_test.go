@@ -72,6 +72,52 @@ var _ = Describe("DescribeModule / DescribeEndpoint", func() {
 			Expect(spec.PathParams[0].Name).To(Equal("id"))
 		})
 
+		It("reflects PathRules constraints onto path parameters", func() {
+			ep := &restkit.Endpoint[createReq, createRes]{
+				Success: 200,
+				PathRules: []*rule.RuleSet{
+					{Field: "id", Rules: []rule.Rule{
+						rule.CreateStrNotEmpty(vmsgs)(),
+						rule.CreateStrMaxLength(vmsgs)(10),
+					}},
+				},
+				Handle: func(r *rest.Request, req *createReq) (*rest.Result[createRes], error) {
+					return rest.NewResult(&createRes{}), nil
+				},
+			}
+			m := &rest.Module{Path: "/users/{id}", Get: restkit.NewController(ep)}
+
+			s := apidoc.DescribeModule(m, nil)[0]
+
+			Expect(s.PathParams).To(HaveLen(1))
+			Expect(s.PathParams[0].Name).To(Equal("id"))
+			Expect(s.PathParams[0].Required).To(BeTrue())
+			c, ok := constraintByCode2(s.PathParams[0].Constraints, "str_max_length")
+			Expect(ok).To(BeTrue())
+			Expect(c.Params).To(HaveKeyWithValue("max", 10))
+		})
+
+		It("builds query parameters from QueryRules", func() {
+			ep := &restkit.Endpoint[createReq, createRes]{
+				Success: 200,
+				QueryRules: []*rule.RuleSet{
+					{Field: "limit", Rules: []rule.Rule{rule.CreateIntMax(vmsgs)(100)}},
+				},
+				Handle: func(r *rest.Request, req *createReq) (*rest.Result[createRes], error) {
+					return rest.NewResult(&createRes{}), nil
+				},
+			}
+			m := &rest.Module{Path: "/users", Get: restkit.NewController(ep)}
+
+			s := apidoc.DescribeModule(m, nil)[0]
+
+			Expect(s.QueryParams).To(HaveLen(1))
+			Expect(s.QueryParams[0].Name).To(Equal("limit"))
+			c, ok := constraintByCode2(s.QueryParams[0].Constraints, "int_max")
+			Expect(ok).To(BeTrue())
+			Expect(c.Params).To(HaveKeyWithValue("limit", 100))
+		})
+
 		It("marks required fields and captures length constraints structurally", func() {
 			name := fieldByName(spec.Request, "name")
 			Expect(name.Required).To(BeTrue())

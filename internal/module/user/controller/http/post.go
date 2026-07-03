@@ -1,60 +1,37 @@
 package http
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/ensoria/ensoria-template/internal/module/user/dto"
 	"github.com/ensoria/ensoria-template/internal/module/user/service"
+	"github.com/ensoria/ensoria-template/internal/plamo/restkit"
 	"github.com/ensoria/ensoria-template/internal/plamo/vkit"
 	"github.com/ensoria/rest/pkg/rest"
 	"github.com/ensoria/validator/pkg/rule"
 )
 
-type Post struct {
-	Service service.UserService
-}
-
-func NewPost(service service.UserService) *Post {
-	return &Post{
-		Service: service,
-	}
-}
-
-func (c *Post) Handle(r *rest.Request) *rest.Response {
-	user, err := vkit.RestRequestBody[dto.CreateUser](r, &rule.RuleSet{
-		Field: "name",
-		Rules: []rule.Rule{
-			vkit.MaxLength(10),
+// NewPost はユーザー作成エンドポイントを返す(型付き Endpoint)。
+// リクエスト/レスポンスの型・検証ルール・ステータス・振る舞いを宣言面に持つため、
+// apidoc がこれらをリフレクションして docai を生成できる。
+func NewPost(svc service.UserService) *restkit.Endpoint[dto.CreateUser, dto.CreateUser] {
+	return &restkit.Endpoint[dto.CreateUser, dto.CreateUser]{
+		Summary:  "Create a user",
+		IDPrefix: "usr",
+		Success:  http.StatusCreated,
+		BodyRules: []*rule.RuleSet{
+			{Field: "name", Rules: []rule.Rule{vkit.Required(), vkit.MaxLength(10)}},
 		},
-	})
-	if err != nil {
-		return &rest.Response{
-			Code: http.StatusBadRequest,
-			Body: err,
-		}
-	}
-	id, isEmpty := r.PathValue("id")
-	if !isEmpty {
-		vE := vkit.Map(
-			map[string]any{"id": id},
-			&rule.RuleSet{Field: "id", Rules: []rule.Rule{vkit.MaxLength(10)}},
-		)
-		if vE != nil {
-			return &rest.Response{
-				Code: http.StatusBadRequest,
-				Body: vE,
-			}
-		}
-	}
-
-	fmt.Printf("user: %#v\n", user)
-	// ここで、serviceを呼ぶ
-	// user, err := c.Service.Create(user)
-
-	return &rest.Response{
-		Code:       http.StatusOK,
-		AddHeaders: map[string]string{"Server": "net/http"},
-		Body:       &dto.CreateUser{ID: 1, Name: "hoge"},
+		FieldDocs: map[string]string{
+			"name": "User display name",
+		},
+		Behavior: restkit.BehaviorSpec{
+			SideEffects: []string{"none"},
+		},
+		Handle: func(r *rest.Request, req *dto.CreateUser) (*rest.Result[dto.CreateUser], error) {
+			// ここで svc.Create(req) を呼ぶ
+			_ = svc
+			return rest.NewResult(&dto.CreateUser{ID: 1, Name: req.Name}), nil
+		},
 	}
 }

@@ -18,6 +18,7 @@ type EndpointSpec struct {
 	Summary         string           `json:"summary,omitempty"`
 	Description     string           `json:"description,omitempty"`
 	PathParams      []PathParam      `json:"path_params,omitempty"`
+	QueryParams     []QueryParam     `json:"query_params,omitempty"`
 	SuccessStatus   int              `json:"success_status,omitempty"`
 	Request         *Schema          `json:"request,omitempty"`
 	Response        *Schema          `json:"response,omitempty"`
@@ -64,9 +65,18 @@ type Constraint struct {
 	Params map[string]any `json:"params,omitempty"`
 }
 
-// PathParam はパスパラメータ(Module.Path の `{name}`)。
+// PathParam はパスパラメータ(Module.Path の `{name}`)。制約は PathRules 由来。
 type PathParam struct {
-	Name string `json:"name"`
+	Name        string       `json:"name"`
+	Required    bool         `json:"required,omitempty"`
+	Constraints []Constraint `json:"constraints,omitempty"`
+}
+
+// QueryParam はクエリパラメータ(QueryRules 由来。フィールド名がパラメータ名)。
+type QueryParam struct {
+	Name        string       `json:"name"`
+	Required    bool         `json:"required,omitempty"`
+	Constraints []Constraint `json:"constraints,omitempty"`
 }
 
 // ResponseHeader は呼び出し側が読むべきレスポンスヘッダ。
