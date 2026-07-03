@@ -95,17 +95,18 @@ func DescribeEndpoint(method, path string, doc restkit.EndpointDoc, idPrefixes m
 	}
 
 	return &EndpointSpec{
-		Method:          method,
-		Path:            path,
-		Summary:         doc.Summary,
-		Description:     doc.Description,
-		PathParams:      buildPathParams(path, doc.PathRules),
-		QueryParams:     buildQueryParams(doc.QueryRules),
-		SuccessStatus:   doc.Success,
-		Request:         req,
-		Response:        res,
-		ResponseHeaders: convertHeaders(doc.ResponseHeaders),
-		Behavior:        convertBehavior(doc.Behavior),
+		Method:            method,
+		Path:              path,
+		Summary:           doc.Summary,
+		Description:       doc.Description,
+		PathParams:        buildPathParams(path, doc.PathRules),
+		QueryParams:       buildQueryParams(doc.QueryRules),
+		SuccessStatus:     doc.Success,
+		Request:           req,
+		Response:          res,
+		ResponseMediaType: doc.Produces,
+		ResponseHeaders:   convertHeaders(doc.ResponseHeaders),
+		Behavior:          convertBehavior(doc.Behavior),
 	}
 }
 

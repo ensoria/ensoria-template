@@ -13,17 +13,20 @@ type APISpec struct {
 
 // EndpointSpec は1エンドポイントの中立モデル。
 type EndpointSpec struct {
-	Method          string           `json:"method"`
-	Path            string           `json:"path"`
-	Summary         string           `json:"summary,omitempty"`
-	Description     string           `json:"description,omitempty"`
-	PathParams      []PathParam      `json:"path_params,omitempty"`
-	QueryParams     []QueryParam     `json:"query_params,omitempty"`
-	SuccessStatus   int              `json:"success_status,omitempty"`
-	Request         *Schema          `json:"request,omitempty"`
-	Response        *Schema          `json:"response,omitempty"`
-	ResponseHeaders []ResponseHeader `json:"response_headers,omitempty"`
-	Behavior        Behavior         `json:"behavior"`
+	Method        string       `json:"method"`
+	Path          string       `json:"path"`
+	Summary       string       `json:"summary,omitempty"`
+	Description   string       `json:"description,omitempty"`
+	PathParams    []PathParam  `json:"path_params,omitempty"`
+	QueryParams   []QueryParam `json:"query_params,omitempty"`
+	SuccessStatus int          `json:"success_status,omitempty"`
+	Request       *Schema      `json:"request,omitempty"`
+	Response      *Schema      `json:"response,omitempty"`
+	// ResponseMediaType は成功レスポンスの Content-Type を固定する場合の値
+	// (Endpoint.Produces。空=既定 application/json)。
+	ResponseMediaType string           `json:"response_media_type,omitempty"`
+	ResponseHeaders   []ResponseHeader `json:"response_headers,omitempty"`
+	Behavior          Behavior         `json:"behavior"`
 	// Untyped は Documented を実装しない生 Controller(型不明)のとき true。
 	Untyped bool `json:"untyped,omitempty"`
 }

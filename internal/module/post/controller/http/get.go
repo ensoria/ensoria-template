@@ -24,7 +24,7 @@ func NewGet(svc service.PostService) *restkit.Endpoint[restkit.NoBody, dto.Post]
 		},
 		Behavior: restkit.BehaviorSpec{
 			SideEffects: []string{"none"},
-			Idempotent:  boolPtr(true),
+			Idempotent:  new(true),
 		},
 		Handle: func(r *rest.Request, _ *restkit.NoBody) (*rest.Result[dto.Post], error) {
 			return rest.NewResult(svc.GetPost(),
@@ -32,5 +32,3 @@ func NewGet(svc service.PostService) *restkit.Endpoint[restkit.NoBody, dto.Post]
 		},
 	}
 }
-
-func boolPtr(b bool) *bool { return &b }
