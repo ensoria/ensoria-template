@@ -4,8 +4,10 @@ import (
 	"github.com/ensoria/config/pkg/appconfig"
 	"github.com/ensoria/config/pkg/registry"
 	"github.com/ensoria/ensoria-template/internal/module/order/controller/http"
+	"github.com/ensoria/ensoria-template/internal/module/order/dto"
 	"github.com/ensoria/ensoria-template/internal/module/order/service"
 	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
+	"github.com/ensoria/ensoria-template/internal/plamo/restkit"
 	"github.com/ensoria/rest/pkg/rest"
 )
 
@@ -15,10 +17,10 @@ func Params() (*appconfig.Parameters, error) {
 	return registry.ModuleParams(ModuleName)
 }
 
-func NewModule(get *http.Get) *rest.Module {
+func NewModule(get *restkit.Endpoint[restkit.NoBody, dto.Order]) *rest.Module {
 	return &rest.Module{
 		Path: "/order",
-		Get:  get,
+		Get:  restkit.NewController(get),
 	}
 }
 

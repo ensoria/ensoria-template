@@ -18,10 +18,12 @@ func NewGet(service service.PostService) *Get {
 }
 
 func (c *Get) Handle(r *rest.Request) *rest.Response {
+
+	dto := c.Service.GetPost()
 	return &rest.Response{
 		ContentType: rest.MediaTypeXML,
 		Code:        http.StatusOK,
 		AddHeaders:  map[string]string{"Server": "net/http"},
-		Body:        c.Service.Anything(),
+		Body:        dto,
 	}
 }

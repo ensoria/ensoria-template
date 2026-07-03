@@ -1,8 +1,10 @@
 package service
 
+import "github.com/ensoria/ensoria-template/internal/module/post/dto"
+
 //ensoria:mock
 type PostService interface {
-	Anything() string
+	GetPost() string
 }
 
 func NewPostService() *postService {
@@ -12,6 +14,11 @@ func NewPostService() *postService {
 type postService struct {
 }
 
-func (s *postService) Anything() string {
-	return "post service response"
+func (s *postService) GetPost() *dto.Post {
+	return &dto.Post{
+		ID:      1,
+		UserID:  1,
+		Title:   "Hello World",
+		Content: "This is a sample post.",
+	}
 }
