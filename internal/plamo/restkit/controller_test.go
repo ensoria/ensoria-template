@@ -210,6 +210,22 @@ var _ = Describe("endpoint controller", func() {
 			Expect(doc.BodyRules).To(HaveLen(1))
 			Expect(doc.BodyRules[0].Field).To(Equal("name"))
 		})
+
+		It("carries the INDEX/Related declarations (Task, AlsoRead, Related, Errors)", func() {
+			ep := newEndpoint(okHandle)
+			ep.Task = "create user"
+			ep.AlsoRead = []string{"workflows/onboarding.md"}
+			ep.Related = []string{"Fetch after creation: GET /users/{id}"}
+			ep.Errors = []restkit.ErrorSpec{{Status: 409, Code: "email_taken"}}
+
+			doc := restkit.NewController(ep).(restkit.Documented).EndpointDoc()
+
+			Expect(doc.Task).To(Equal("create user"))
+			Expect(doc.AlsoRead).To(Equal([]string{"workflows/onboarding.md"}))
+			Expect(doc.Related).To(Equal([]string{"Fetch after creation: GET /users/{id}"}))
+			Expect(doc.Errors).To(HaveLen(1))
+			Expect(doc.Errors[0].Code).To(Equal("email_taken"))
+		})
 	})
 })
 

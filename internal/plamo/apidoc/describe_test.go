@@ -172,9 +172,10 @@ var _ = Describe("DescribeModule / DescribeEndpoint", func() {
 
 		BeforeEach(func() {
 			ep := &restkit.Endpoint[createReq, createRes]{
-				Success: 201,
-				Task:    "create user",
-				Related: []string{"Fetch after creation: GET /users/{id}"},
+				Success:  201,
+				Task:     "create user",
+				AlsoRead: []string{"workflows/onboarding.md"},
+				Related:  []string{"Fetch after creation: GET /users/{id}"},
 				Errors: []restkit.ErrorSpec{
 					// 共通形に従うエラーは表の1行のみ(Body なし)。
 					{Status: 409, Code: "email_taken", Condition: "email exists", CallerAction: "use another email"},
@@ -189,8 +190,9 @@ var _ = Describe("DescribeModule / DescribeEndpoint", func() {
 			spec = apidoc.DescribeModule(m, nil)[0]
 		})
 
-		It("carries the Task label and Related items through", func() {
+		It("carries the Task label, Also read, and Related items through", func() {
 			Expect(spec.Task).To(Equal("create user"))
+			Expect(spec.AlsoRead).To(Equal([]string{"workflows/onboarding.md"}))
 			Expect(spec.Related).To(Equal([]string{"Fetch after creation: GET /users/{id}"}))
 		})
 
