@@ -1,6 +1,7 @@
 package apidoc
 
 import (
+	"reflect"
 	"strings"
 
 	"github.com/ensoria/ensoria-template/internal/plamo/restkit"
@@ -99,6 +100,9 @@ func DescribeEndpoint(method, path string, doc restkit.EndpointDoc, idPrefixes m
 		Path:              path,
 		Summary:           doc.Summary,
 		Description:       doc.Description,
+		Task:              doc.Task,
+		AlsoRead:          doc.AlsoRead,
+		Related:           doc.Related,
 		PathParams:        buildPathParams(path, doc.PathRules),
 		QueryParams:       buildQueryParams(doc.QueryRules),
 		SuccessStatus:     doc.Success,
@@ -106,8 +110,52 @@ func DescribeEndpoint(method, path string, doc restkit.EndpointDoc, idPrefixes m
 		Response:          res,
 		ResponseMediaType: doc.Produces,
 		ResponseHeaders:   convertHeaders(doc.ResponseHeaders),
+		Errors:            convertErrors(doc.Errors, opts),
 		Behavior:          convertBehavior(doc.Behavior),
 	}
+}
+
+// convertErrors は restkit.ErrorSpec を apidoc.ErrorSpec へ写す。
+// BodyType が宣言されているエラーは、その型から個別 example + フィールド表を組む
+// (共通エラー形から逸脱する場合や field-level エラー用。§4.1)。
+func convertErrors(errs []restkit.ErrorSpec, opts ExampleOptions) []ErrorSpec {
+	if len(errs) == 0 {
+		return nil
+	}
+	out := make([]ErrorSpec, 0, len(errs))
+	for _, e := range errs {
+		spec := ErrorSpec{
+			Status:       e.Status,
+			Code:         e.Code,
+			Condition:    e.Condition,
+			CallerAction: e.CallerAction,
+		}
+		if e.BodyType != nil {
+			if body := SchemaFromType(e.BodyType); body != nil {
+				body.Example = errorExample(e.BodyType, e.Code, opts)
+				spec.Body = body
+			}
+		}
+		out = append(out, spec)
+	}
+	return out
+}
+
+// errorExample はエラー本文の example を型から生成し、エラーエンベロープの
+// `error.code` を宣言された Code に差し替える(faker 語ではなく実際のコードを見せる)。
+func errorExample(t reflect.Type, code string, opts ExampleOptions) any {
+	ex := ExampleFromType(t, nil, opts)
+	if code == "" {
+		return ex
+	}
+	if envelope, ok := ex.(map[string]any); ok {
+		if detail, ok := envelope["error"].(map[string]any); ok {
+			if _, has := detail["code"]; has {
+				detail["code"] = code
+			}
+		}
+	}
+	return ex
 }
 
 // buildPathParams はパスの `{name}` を抽出し、PathRules の制約を各パラメータに反映する。

@@ -15,6 +15,7 @@ import (
 func NewGet(svc service.OrderService) *restkit.Endpoint[restkit.NoBody, dto.Order] {
 	return &restkit.Endpoint[restkit.NoBody, dto.Order]{
 		Summary:  "Fetch the current order",
+		Task:     "read order",
 		IDPrefix: "ord",
 		Success:  http.StatusOK,
 		FieldDocs: map[string]string{

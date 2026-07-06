@@ -22,6 +22,7 @@ import (
 func NewGet(svc service.UserService, publish mb.Publish) *restkit.Endpoint[restkit.NoBody, dto.GetUser] {
 	return &restkit.Endpoint[restkit.NoBody, dto.GetUser]{
 		Summary:  "Fetch one user by id",
+		Task:     "read user",
 		IDPrefix: "usr",
 		Success:  http.StatusOK,
 		Produces: rest.MediaTypeXML, // このエンドポイントは XML を返す

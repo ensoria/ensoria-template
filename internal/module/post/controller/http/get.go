@@ -15,6 +15,7 @@ import (
 func NewGet(svc service.PostService) *restkit.Endpoint[restkit.NoBody, dto.Post] {
 	return &restkit.Endpoint[restkit.NoBody, dto.Post]{
 		Summary:  "Fetch a post",
+		Task:     "read post",
 		IDPrefix: "pst",
 		Success:  http.StatusOK,
 		Produces: rest.MediaTypeXML, // このエンドポイントは XML を返す

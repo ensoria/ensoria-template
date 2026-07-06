@@ -17,6 +17,9 @@ type EndpointSpec struct {
 	Path          string       `json:"path"`
 	Summary       string       `json:"summary,omitempty"`
 	Description   string       `json:"description,omitempty"`
+	Task          string       `json:"task,omitempty"`      // INDEX の Task 列(§3.2)
+	AlsoRead      []string     `json:"also_read,omitempty"` // INDEX の "Also read" 列(§3.2)
+	Related       []string     `json:"related,omitempty"`   // §4.1 `### Related`
 	PathParams    []PathParam  `json:"path_params,omitempty"`
 	QueryParams   []QueryParam `json:"query_params,omitempty"`
 	SuccessStatus int          `json:"success_status,omitempty"`
@@ -26,9 +29,21 @@ type EndpointSpec struct {
 	// (Endpoint.Produces。空=既定 application/json)。
 	ResponseMediaType string           `json:"response_media_type,omitempty"`
 	ResponseHeaders   []ResponseHeader `json:"response_headers,omitempty"`
+	Errors            []ErrorSpec      `json:"errors,omitempty"` // エンドポイント固有エラー(§4.1)
 	Behavior          Behavior         `json:"behavior"`
 	// Untyped は Documented を実装しない生 Controller(型不明)のとき true。
 	Untyped bool `json:"untyped,omitempty"`
+}
+
+// ErrorSpec はエンドポイント固有エラーの中立モデル(docai の Errors 表の1行)。
+// Body は共通エラー形から逸脱する場合や field-level エラーのとき、個別 example/表の
+// ソースになる(nil のときは表の1行のみ)。
+type ErrorSpec struct {
+	Status       int     `json:"status"`
+	Code         string  `json:"code"`
+	Condition    string  `json:"condition,omitempty"`
+	CallerAction string  `json:"caller_action,omitempty"`
+	Body         *Schema `json:"body,omitempty"`
 }
 
 // Behavior は docai「振る舞い」節(型から導けない情報)。すべて Endpoint の宣言由来。

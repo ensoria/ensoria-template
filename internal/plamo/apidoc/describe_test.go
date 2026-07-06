@@ -1,6 +1,8 @@
 package apidoc_test
 
 import (
+	"reflect"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -164,4 +166,63 @@ var _ = Describe("DescribeModule / DescribeEndpoint", func() {
 			Expect(spec.Endpoints).To(HaveLen(2))
 		})
 	})
+
+	Describe("Task / Related / Errors declarations", func() {
+		var spec *apidoc.EndpointSpec
+
+		BeforeEach(func() {
+			ep := &restkit.Endpoint[createReq, createRes]{
+				Success: 201,
+				Task:    "create user",
+				Related: []string{"Fetch after creation: GET /users/{id}"},
+				Errors: []restkit.ErrorSpec{
+					// 共通形に従うエラーは表の1行のみ(Body なし)。
+					{Status: 409, Code: "email_taken", Condition: "email exists", CallerAction: "use another email"},
+					// field-level エラーは BodyType から example + 表を組む。
+					{Status: 422, Code: "validation_failed", BodyType: reflect.TypeFor[envBody]()},
+				},
+				Handle: func(r *rest.Request, req *createReq) (*rest.Result[createRes], error) {
+					return rest.NewResult(&createRes{}), nil
+				},
+			}
+			m := &rest.Module{Path: "/users", Post: restkit.NewController(ep)}
+			spec = apidoc.DescribeModule(m, nil)[0]
+		})
+
+		It("carries the Task label and Related items through", func() {
+			Expect(spec.Task).To(Equal("create user"))
+			Expect(spec.Related).To(Equal([]string{"Fetch after creation: GET /users/{id}"}))
+		})
+
+		It("maps error rows and leaves the common-shape error without a body", func() {
+			Expect(spec.Errors).To(HaveLen(2))
+			Expect(spec.Errors[0].Status).To(Equal(409))
+			Expect(spec.Errors[0].Code).To(Equal("email_taken"))
+			Expect(spec.Errors[0].Body).To(BeNil())
+		})
+
+		It("builds an example/field table for an error with a declared body type", func() {
+			body := spec.Errors[1].Body
+			Expect(body).NotTo(BeNil())
+			Expect(body.Fields).NotTo(BeEmpty())
+		})
+
+		It("injects the declared code into the error envelope example", func() {
+			ex, ok := spec.Errors[1].Body.Example.(map[string]any)
+			Expect(ok).To(BeTrue())
+			detail, ok := ex["error"].(map[string]any)
+			Expect(ok).To(BeTrue())
+			Expect(detail["code"]).To(Equal("validation_failed"))
+		})
+	})
 })
+
+// envBody は docai エラーエンベロープ形のテスト用型(errorExample のコード差し替え確認用)。
+type envBody struct {
+	Error envDetail `json:"error"`
+}
+
+type envDetail struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}

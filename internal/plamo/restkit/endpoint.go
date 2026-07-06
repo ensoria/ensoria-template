@@ -24,6 +24,16 @@ type Endpoint[Req any, Res any] struct {
 	Description string            // 追加の説明
 	FieldDocs   map[string]string // フィールド意味(ドット記法キー: "address.city" 等)
 
+	// Task は INDEX の Task 列に出すクライアント意図ラベル(1-3語程度)。
+	// 同じクライアントタスクを担うエンドポイントは同一ラベルを再利用する(§3.2)。
+	Task string
+	// AlsoRead は INDEX の "Also read" 列。このエンドポイントで併読すべき
+	// docs ルート相対の追加ファイル(ワークフロー等)。空なら none(§3.2)。
+	AlsoRead []string
+	// Related は §4.1 の `### Related`。前後に呼ぶ関連エンドポイントやワークフローを
+	// 自由記述の1行ずつで宣言する(例 "Fetch after creation: GET /users/{id}")。空なら none。
+	Related []string
+
 	// IDPrefix は example 生成で、このリソースの id に使うプレフィックスを固定する
 	// (例 "usr")。空の場合はパス/フィールド名から自動導出する(単数形フルネーム)。
 	IDPrefix string
@@ -56,14 +66,14 @@ type HeaderSpec struct {
 }
 
 // ErrorSpec はこのエンドポイント固有のエラーを宣言する(docai の Errors 表)。
+// 共通エラー(CONVENTIONS.md)は宣言せず、このエンドポイント固有のものだけを宣言する(§4.1)。
 type ErrorSpec struct {
-	Status       int
-	Code         string
-	Condition    string
-	CallerAction string
-	Retryable    bool
-	FieldLevel   bool
-	// BodyType はエラーレスポンス本文の型(example 生成に使う)。nil の場合は既定形。
+	Status       int    // HTTP ステータス(Errors 表の Status 列)
+	Code         string // 機械判定用コード(code 列)
+	Condition    string // 発生条件(Condition 列)
+	CallerAction string // 呼び出し側が取るべき対応。リトライ可否も含める(What the caller should do 列)
+	// BodyType は個別のエラー本文 example/フィールド表を出す型。共通エラー形から逸脱する場合や
+	// field-level エラーを返す場合に指定する(§4.1)。nil のときは表の1行のみ(共通形に従う)。
 	BodyType reflect.Type
 }
 
@@ -92,6 +102,9 @@ type EndpointDoc struct {
 	Description string
 	FieldDocs   map[string]string
 	IDPrefix    string
+	Task        string
+	AlsoRead    []string
+	Related     []string
 
 	ReqType reflect.Type
 	ResType reflect.Type
