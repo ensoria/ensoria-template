@@ -26,6 +26,8 @@ func Start(envVal *string) error {
 		// infra
 		// workerとinjectするインスタンスを分けるため、タグ名を付ける
 		dikit.ProvideNamed(cache.NewDefaultSchedulerCacheClient(envVal), "schedulerCache"),
+		// アプリ用キャッシュ（enscache.Cache）。自前のL2クライアントを持つため named 不要
+		cache.NewDefaultCache(envVal),
 		db.NewDefaultSchedulerDBClient(envVal),
 
 		// TODO: 無くてもいいようにする?

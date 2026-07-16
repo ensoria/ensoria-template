@@ -26,6 +26,7 @@ func Run(envVal *string) error {
 	dikit.AppendConstructors([]any{
 		// infra
 		cache.NewDefaultWorkerCacheClient(envVal),
+		cache.NewDefaultCache(envVal),
 		db.NewDefaultWorkerDBClient(envVal),
 		mb.NewSubscriberConnection(envVal),
 		mb.NewPublisherConnection(envVal),
