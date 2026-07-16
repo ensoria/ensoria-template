@@ -15,6 +15,7 @@ import (
 	_ "github.com/ensoria/ensoria-template/internal/infra/grpcclt"
 	"github.com/ensoria/ensoria-template/internal/infra/mb"
 	_ "github.com/ensoria/ensoria-template/internal/infra/mb"
+	"github.com/ensoria/ensoria-template/internal/infra/storage"
 	_ "github.com/ensoria/ensoria-template/internal/module"
 	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
 	_ "github.com/ensoria/ensoria-template/internal/query"
@@ -30,6 +31,8 @@ func Run(envVal *string) error {
 		db.NewDefaultWorkerDBClient(envVal),
 		mb.NewSubscriberConnection(envVal),
 		mb.NewPublisherConnection(envVal),
+		storage.NewDefaultStorage(envVal),
+		storage.NewDefaultFileSystem,
 
 		// controllers
 		httpApp.InjectHTTPModules(httpApp.CreateHTTPPipeline),

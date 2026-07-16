@@ -8,6 +8,7 @@ import (
 	"github.com/ensoria/ensoria-template/internal/infra/cache"
 	"github.com/ensoria/ensoria-template/internal/infra/db"
 	"github.com/ensoria/ensoria-template/internal/infra/mb"
+	"github.com/ensoria/ensoria-template/internal/infra/storage"
 	"github.com/ensoria/websocket/pkg/wsrouter"
 
 	httpApp "github.com/ensoria/ensoria-template/internal/app/http"
@@ -35,6 +36,8 @@ func Start(envVal *string) error {
 		db.NewDefaultWorkerDBClient(envVal),
 		mb.NewSubscriberConnection(envVal),
 		mb.NewPublisherConnection(envVal),
+		storage.NewDefaultStorage(envVal),
+		storage.NewDefaultFileSystem,
 		mbApp.NewSubscribe,
 		mbApp.NewPublish,
 		dikit.InjectWithTags(workerApp.NewWorker, ``, `name:"workerCache"`, ``, `group:"worker_jobs"`),
