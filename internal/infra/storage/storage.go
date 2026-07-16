@@ -59,7 +59,9 @@ func NewDefaultStorage(envVal *string) func(lc dikit.LC) (file.Storage, error) {
 			return nil, fmt.Errorf("local disk init failed: %w", err)
 		}
 
-		s3fs := files3.New(newS3Client(), s3Bucket, s3KeyPrefix)
+		// Retain the client so OnStart can verify connectivity via HeadBucket.
+		s3Client := newS3Client()
+		s3fs := files3.New(s3Client, s3Bucket, s3KeyPrefix)
 
 		storage, err := file.NewStorage(
 			file.WithDisk(diskLocal, local),
@@ -72,7 +74,16 @@ func NewDefaultStorage(envVal *string) func(lc dikit.LC) (file.Storage, error) {
 
 		lc.Append(dikit.Hook{
 			OnStart: func(ctx context.Context) error {
-				loggear.Info("Storage initialized", "default", defaultDisk, "disks", storage.Names())
+				// Verify S3 connectivity and that the target bucket exists and is
+				// reachable (HeadBucket). Like the other infra connections, this
+				// fails startup when the backend is unavailable. Because defaultDisk
+				// is S3, MinIO and the bucket must be up before the app starts.
+				if _, err := s3Client.HeadBucket(ctx, &s3.HeadBucketInput{
+					Bucket: aws.String(s3Bucket),
+				}); err != nil {
+					return fmt.Errorf("S3 bucket check failed (bucket=%q): %w", s3Bucket, err)
+				}
+				loggear.Info("Storage connection verified", "default", defaultDisk, "disks", storage.Names())
 				return nil
 			},
 			OnStop: func(ctx context.Context) error {
