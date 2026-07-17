@@ -35,7 +35,8 @@ func NewGet(svc service.UserService, publish mb.Publish) *restkit.Endpoint[restk
 			_ = id // ここで id を使ってユーザーを取得する
 
 			svc.Something() // DEBUG:
-			publish("hello_world", []byte("Hello, World!"), map[string]string{"source": "Get.Handle"})
+			// リクエストのコンテキストをそのままPublishへ伝播する
+			publish(r.Context(), "hello_world", []byte("Hello, World!"), map[string]string{"source": "Get.Handle"})
 
 			// 別モジュールの gRPC サービス呼び出し
 			if _, err := svc.GetPostContent("1"); err != nil {

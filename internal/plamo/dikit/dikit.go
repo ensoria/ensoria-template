@@ -180,6 +180,33 @@ func RegisterOnStopLifecycle(lc LC, onStop func(ctx context.Context) error) {
 	})
 }
 
+// === Root Context ===
+
+// RootContext はアプリケーションの生存期間に一致するルートコンテキスト。
+// メッセージブローカーのSubscriberなど、アプリが動いている間ずっと動作し続ける
+// 常駐処理は、この Ctx を生存期間として使う。
+//
+// IMPORTANT: fx の OnStart / OnStop フックが受け取る ctx は、その起動・停止処理
+// のためのタイムアウト付き ctx であり、起動完了時（または停止完了時）にキャンセル
+// される。常駐処理の生存期間には使ってはならない。
+type RootContext struct {
+	Ctx context.Context
+}
+
+// ProvideRootContext はアプリのルートコンテキストを生成し、OnStop でキャンセル
+// されるように登録する。fx のコンストラクタとして登録して使う。
+func ProvideRootContext(lc LC) RootContext {
+	ctx, cancel := context.WithCancel(context.Background())
+	lc.Append(Hook{
+		OnStop: func(context.Context) error {
+			// シャットダウン時にルートコンテキストをキャンセルし、常駐処理に停止を通知する
+			cancel()
+			return nil
+		},
+	})
+	return RootContext{Ctx: ctx}
+}
+
 // === Fx App Run ===
 
 func ProvideAndRun(constructors []any, invocations []any, outputFxLog bool) {

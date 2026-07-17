@@ -76,8 +76,8 @@ github.com/ensoria/grpcgear v0.0.4 h1:WganV6ZiqaED06J4PgrMEbSGzXWUv0C6Tn9FxqRd75
 github.com/ensoria/grpcgear v0.0.4/go.mod h1:FlwDLQ/H1AXfY/0xN9ngONZK6Fh0MiTcyM7gXmMQpW0=
 github.com/ensoria/loggear v0.0.1 h1:ievXmBZvGF7Hukp4FUA/W27CcIbsGACoP4QPunJURDY=
 github.com/ensoria/loggear v0.0.1/go.mod h1:4YSuVmzAxjqGhNG6mII6Ga7pzvMF3gU9s2QV3MLvfMg=
-github.com/ensoria/mb v0.0.6 h1:jnm185Rbk5jnF2SMjGscMYnq6ZRGmZABjTFcjzK6W3w=
-github.com/ensoria/mb v0.0.6/go.mod h1:2e8Yk+0XlKt4GNh41kQR4FFBtNBkTJc3YtZH8uU3PkQ=
+github.com/ensoria/mb v0.0.7 h1:mlTZW7sZa+sMChbvDEwhxP3raohY7JIQBs/7Qw/2HJE=
+github.com/ensoria/mb v0.0.7/go.mod h1:2e8Yk+0XlKt4GNh41kQR4FFBtNBkTJc3YtZH8uU3PkQ=
 github.com/ensoria/rest v0.0.19 h1:KZ3WemsUEfmwdMpS5rzaU2nb1CL0RMFkShk+MCTn/WE=
 github.com/ensoria/rest v0.0.19/go.mod h1:MUhJz6G7wBCQu0fAQjsj7IJ0QUW9qNyfyulZ9OBXPwI=
 github.com/ensoria/scheduler v0.0.2 h1:RNTBvRq03yhP2o0AG74L3J8mzP6uPdlzParfPwnLQ7E=

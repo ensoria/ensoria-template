@@ -25,6 +25,9 @@ func Run(envVal *string) error {
 	registry.InitializeConfiguration(envVal, assets.ConfigFS(*envVal), "internal", "config")
 
 	dikit.AppendConstructors([]any{
+		// アプリのルートコンテキスト（常駐処理の生存期間 = アプリの生存期間）
+		dikit.ProvideRootContext,
+
 		// infra
 		cache.NewDefaultWorkerCacheClient(envVal),
 		cache.NewDefaultCache(envVal),

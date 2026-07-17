@@ -1,6 +1,8 @@
 package mb
 
 import (
+	"context"
+
 	"github.com/ensoria/ensoria-template/internal/module/user/service"
 	"github.com/ensoria/loggear/pkg/loggear"
 )
@@ -15,7 +17,7 @@ func NewUserSubscriber(us service.UserService) *UserSubscriber {
 	}
 }
 
-func (h *UserSubscriber) OnReceive(data []byte, metadata map[string]string) error {
+func (h *UserSubscriber) OnReceive(ctx context.Context, data []byte, metadata map[string]string) error {
 	loggear.Info("📨 Received message",
 		"topic", metadata["topic"],
 		"partition", metadata["partition"],

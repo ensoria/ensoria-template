@@ -89,7 +89,7 @@ func buildConventions() *apidoc.Conventions {
 
 // --- describe 用のスタブ(接続を張らない) ---
 
-var stubPublish mb.Publish = func(target string, data []byte, metadata map[string]string, opts ...mb.PublishOption) error {
+var stubPublish mb.Publish = func(ctx context.Context, target string, data []byte, metadata map[string]string, opts ...mb.PublishOption) error {
 	return nil
 }
 
