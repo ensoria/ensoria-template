@@ -24,6 +24,10 @@ func Start(envVal *string) error {
 	registry.InitializeConfiguration(envVal, assets.ConfigFS(*envVal), "internal", "config")
 
 	dikit.AppendConstructors([]any{
+		// アプリのルートコンテキスト（常駐処理の生存期間 = アプリの生存期間）
+		// mbApp.NewSubscribe が dikit.RootContext に依存するため、購読を行うこのappでも必須
+		dikit.ProvideRootContext,
+
 		// infra
 		// workerとinjectするインスタンスを分けるため、タグ名を付ける
 		dikit.ProvideNamed(cache.NewDefaultSchedulerCacheClient(envVal), "schedulerCache"),
