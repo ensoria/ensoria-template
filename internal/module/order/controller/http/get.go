@@ -24,7 +24,7 @@ func NewGet(svc service.OrderService) *restkit.Endpoint[restkit.NoBody, dto.Orde
 		},
 		Behavior: restkit.BehaviorSpec{
 			SideEffects: []string{"none"},
-			Idempotent:  boolPtr(true),
+			Idempotent:  new(true),
 		},
 		Handle: func(r *rest.Request, _ *restkit.NoBody) (*rest.Result[dto.Order], error) {
 			order, err := svc.GetOrder()
@@ -38,5 +38,3 @@ func NewGet(svc service.OrderService) *restkit.Endpoint[restkit.NoBody, dto.Orde
 		},
 	}
 }
-
-func boolPtr(b bool) *bool { return &b }
