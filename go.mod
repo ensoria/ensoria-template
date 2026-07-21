@@ -13,10 +13,10 @@ require (
 	github.com/ensoria/grpcgear v0.0.4
 	github.com/ensoria/loggear v0.0.1
 	github.com/ensoria/mb v0.0.7
-	github.com/ensoria/rest v0.0.19
+	github.com/ensoria/rest v0.0.20
 	github.com/ensoria/testutil v0.0.4
 	github.com/ensoria/validator v0.0.7
-	github.com/ensoria/websocket v0.0.3
+	github.com/ensoria/websocket v0.0.4
 	github.com/google/uuid v1.6.0
 	github.com/onsi/ginkgo/v2 v2.32.0
 	github.com/onsi/gomega v1.42.1

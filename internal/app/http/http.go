@@ -14,6 +14,7 @@ import (
 	"github.com/ensoria/rest/pkg/mw"
 	"github.com/ensoria/rest/pkg/pipeline"
 	"github.com/ensoria/rest/pkg/rest"
+	"github.com/ensoria/websocket/pkg/wsconn"
 	"github.com/ensoria/websocket/pkg/wsrouter"
 	"go.uber.org/fx"
 )
@@ -49,7 +50,7 @@ func NewHTTPApp(envVal *string) func(lc dikit.LC, shutdowner dikit.Shutdowner, h
 			IdleTimeout:  params.Server.IdleTimeout,
 		}
 
-		RegisterHTTPServerLifecycle(lc, shutdowner, httpSrv)
+		RegisterHTTPServerLifecycle(lc, shutdowner, httpSrv, wsRouter)
 		return httpSrv
 	}
 }
@@ -97,7 +98,7 @@ func CreateHTTPPipeline(modules []*rest.Module) *pipeline.HTTP {
 }
 
 // HTTP/WebSocket controllers lifecycle registration
-func RegisterHTTPServerLifecycle(lc dikit.LC, shutdowner dikit.Shutdowner, srv *http.Server) {
+func RegisterHTTPServerLifecycle(lc dikit.LC, shutdowner dikit.Shutdowner, srv *http.Server, wsRouter *wsrouter.Router) {
 	lc.Append(dikit.Hook{
 		OnStart: func(ctx context.Context) error {
 			go func() {
@@ -110,6 +111,15 @@ func RegisterHTTPServerLifecycle(lc dikit.LC, shutdowner dikit.Shutdowner, srv *
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
+			// WebSocketを先に閉じる。Upgradeでハイジャックされた接続は
+			// http.Serverの管理外なので、srv.Shutdownは待っても閉じてもくれない。
+			// wsRouter.Shutdownが各サーバのbaseCtxをキャンセルして全接続の
+			// connCtxに伝播させ（進行中の処理を中断可能にし）、close frameを
+			// 送って読み取りループを解く。各接続のOnCloseは接続ctxとは切り離された
+			// ctx（OnCloseTimeout）で後始末を完走できる。
+			closed := wsRouter.Shutdown(wsconn.CloseGoingAway, "server shutting down")
+			loggear.Info("Closed WebSocket connections", "count", closed)
+
 			loggear.Info("Shutting down HTTP server")
 			return srv.Shutdown(ctx)
 		},
