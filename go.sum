@@ -90,6 +90,8 @@ github.com/ensoria/websocket v0.0.4 h1:k4FHLLQNPlraVLoqH9tzSw8+QUO/SjP43gFRUXD65
 github.com/ensoria/websocket v0.0.4/go.mod h1:uTVybfQVObRO+Qlivgtw+owZrTP0KiCitOVxM4HdQzI=
 github.com/ensoria/websocket v0.0.5 h1:O/Q1gAj2voDv1Ze1ZrdXDyDDkBy+OZHk43YTD6BbkeU=
 github.com/ensoria/websocket v0.0.5/go.mod h1:pRFOIscmtFWxqPm3CVkZu8dsMk31bw+UmIPE2bCL+fw=
+github.com/ensoria/websocket v0.0.6 h1:YD3eSd0Z9rxvA2Swzs+/1n1BGxMBH+/RTL4M81zQQ6w=
+github.com/ensoria/websocket v0.0.6/go.mod h1:pRFOIscmtFWxqPm3CVkZu8dsMk31bw+UmIPE2bCL+fw=
 github.com/ensoria/worker v0.0.5 h1:2f9YJel5Clv0C4Ti3rmwOzYfo26Jby7QbtgdocDO5c8=
 github.com/ensoria/worker v0.0.5/go.mod h1:AGPRTRbL2Cp8Zr6uBcYDxCvbGdI1YXgXxPGq7hyj4Pg=
 github.com/gkampitakis/ciinfo v0.3.2 h1:JcuOPk8ZU7nZQjdUhctuhQofk7BGHuIy0c9Ez8BNhXs=
