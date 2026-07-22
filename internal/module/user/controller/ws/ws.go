@@ -22,17 +22,19 @@ func NewOnOpen(us service.UserService) *OnOpen {
 	}
 }
 
-// The ctx passed to OnOpen / OnMessage is connection-scoped: it is canceled when
-// the client disconnects or the server shuts down, and it carries the values put
-// there during the HTTP upgrade (see wssession package docs). Pass it down to the
-// service / infra layer, deriving a per-operation context for outbound calls:
+// The ctx passed to OnOpen / OnMessage is connection-scoped and carries the
+// values set during the HTTP upgrade (e.g. by an auth HTTP middleware, see the
+// wssession package docs). Thread it into the service / infra layer, deriving a
+// per-operation context for outbound calls:
 //
 //	opCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 //	defer cancel()
-//	user, err := c.UserService.GetById(opCtx, id)
+//	result, err := c.SomeService.DoSomething(opCtx, ...)
 //
-// NOTE: service.UserService does not take a context.Context yet, so nothing is
-// threaded through here for now.
+// The ctx is canceled on server shutdown, and — for OnMessage — the moment the
+// client disconnects. NOTE: OnOpen runs before the read loop starts, so a
+// disconnect during OnOpen is only observed after it returns; rely on the
+// per-operation timeout above to bound slow OnOpen work.
 func (c *OnOpen) OnOpen() wsconfig.OnOpenHandler {
 	return func(ctx context.Context, event *wsevent.Open) error {
 		fmt.Println("WebSocket connection opened")
