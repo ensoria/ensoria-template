@@ -16,7 +16,7 @@ require (
 	github.com/ensoria/rest v0.0.20
 	github.com/ensoria/testutil v0.0.4
 	github.com/ensoria/validator v0.0.7
-	github.com/ensoria/websocket v0.0.4
+	github.com/ensoria/websocket v0.0.5
 	github.com/google/uuid v1.6.0
 	github.com/onsi/ginkgo/v2 v2.32.0
 	github.com/onsi/gomega v1.42.1
