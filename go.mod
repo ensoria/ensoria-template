@@ -15,7 +15,7 @@ require (
 	github.com/ensoria/mb v0.0.7
 	github.com/ensoria/rest v0.0.20
 	github.com/ensoria/testutil v0.0.4
-	github.com/ensoria/validator v0.0.7
+	github.com/ensoria/validator v0.0.8
 	github.com/ensoria/websocket v0.0.6
 	github.com/google/uuid v1.6.0
 	github.com/onsi/ginkgo/v2 v2.32.0

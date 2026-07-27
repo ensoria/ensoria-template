@@ -2,6 +2,7 @@ package apidoc
 
 import (
 	"reflect"
+	"sort"
 	"strings"
 
 	"github.com/ensoria/ensoria-template/internal/plamo/restkit"
@@ -15,13 +16,27 @@ import (
 //
 // 先に全エンドポイントを走査して「リソース → 宣言 id プレフィックス」を集め、
 // example 生成でリソースをまたいで一貫した id を出せるようにする。
+//
+// DI はモジュール group を任意の順で解決するため、最後に path→method で安定ソートして
+// 出力を決定的にする(そうしないと中身が同じでも spec の JSON が実行ごとに入れ替わる)。
 func Build(modules []*rest.Module) *APISpec {
 	idPrefixes := collectIDPrefixes(modules)
 	spec := &APISpec{}
 	for _, m := range modules {
 		spec.Endpoints = append(spec.Endpoints, DescribeModule(m, idPrefixes)...)
 	}
+	sortEndpoints(spec.Endpoints)
 	return spec
+}
+
+// sortEndpoints は path→method の昇順に並べ替える(決定的な出力のため)。
+func sortEndpoints(endpoints []*EndpointSpec) {
+	sort.SliceStable(endpoints, func(i, j int) bool {
+		if endpoints[i].Path != endpoints[j].Path {
+			return endpoints[i].Path < endpoints[j].Path
+		}
+		return endpoints[i].Method < endpoints[j].Method
+	})
 }
 
 // collectIDPrefixes は各エンドポイントの宣言(EndpointDoc.IDPrefix)を

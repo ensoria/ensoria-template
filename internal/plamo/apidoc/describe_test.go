@@ -215,6 +215,26 @@ var _ = Describe("DescribeModule / DescribeEndpoint", func() {
 
 			Expect(spec.Endpoints).To(HaveLen(2))
 		})
+
+		// DI resolves the module group in an arbitrary order, so Build sorts.
+		// Without it the emitted spec churns between runs even though nothing changed.
+		It("orders endpoints by path then method, whatever order the modules arrive in", func() {
+			zebra := &rest.Module{Path: "/zebra", Get: rawController{}}
+			alpha := &rest.Module{Path: "/alpha", Post: rawController{}, Get: rawController{}}
+
+			forward := apidoc.Build([]*rest.Module{zebra, alpha})
+			reversed := apidoc.Build([]*rest.Module{alpha, zebra})
+
+			paths := func(spec *apidoc.APISpec) []string {
+				var out []string
+				for _, ep := range spec.Endpoints {
+					out = append(out, ep.Method+" "+ep.Path)
+				}
+				return out
+			}
+			Expect(paths(forward)).To(Equal([]string{"GET /alpha", "POST /alpha", "GET /zebra"}))
+			Expect(paths(reversed)).To(Equal(paths(forward)))
+		})
 	})
 
 	Describe("Task / Related / Errors declarations", func() {

@@ -7,12 +7,14 @@ import (
 	"github.com/ensoria/validator/pkg/verr"
 )
 
+// DELETE: ラップする必要がなくなったので削除
 // RestRequestBody は rest.Request のボディを T にパースして検証する。
 // 検証違反はプロトコル非依存の中立形 verr.ValidationErrors(全言語 + code 付き)で返す。
 func RestRequestBody[T any](r *rest.Request, ruleSets ...*rule.RuleSet) (*T, verr.ValidationErrors) {
 	return validate.RestRequestBody[T](r, ruleSets...)
 }
 
+// DELETE: ラップする必要がなくなったので削除
 // Map は Query / Path / Header などの map 値を検証する。
 func Map[T any](m map[string]T, ruleSets ...*rule.RuleSet) verr.ValidationErrors {
 	return validate.Map(m, ruleSets...)
