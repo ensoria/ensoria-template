@@ -238,14 +238,14 @@ func parsePathParamNames(path string) []string {
 	return names
 }
 
-// applyFieldDocs は宣言されたフィールド意味(ドット記法キー)をスキーマに反映する。
+// applyFieldDocs は宣言されたフィールド意味(ドット/角括弧記法キー)をスキーマ木に反映する。
 func applyFieldDocs(schema *Schema, fieldDocs map[string]string) {
 	if schema == nil || len(fieldDocs) == 0 {
 		return
 	}
-	for i := range schema.Fields {
-		if meaning, ok := fieldDocs[schema.Fields[i].Name]; ok {
-			schema.Fields[i].Meaning = meaning
+	for path, meaning := range fieldDocs {
+		if f := findField(schema, path); f != nil {
+			f.Meaning = meaning
 		}
 	}
 }

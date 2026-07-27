@@ -13,6 +13,7 @@ import (
 
 	"github.com/ensoria/config/pkg/registry"
 	assets "github.com/ensoria/ensoria-template"
+	"github.com/ensoria/ensoria-template/internal/app/apiinfo"
 	httpdto "github.com/ensoria/ensoria-template/internal/app/http/dto"
 	"github.com/ensoria/ensoria-template/internal/plamo/apidoc"
 	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
@@ -36,6 +37,7 @@ func Build(envVal *string) (*apidoc.APISpec, error) {
 	}
 
 	spec := apidoc.Build(modules)
+	spec.Info = apiinfo.Info()
 	spec.Conventions = buildConventions()
 	return spec, nil
 }

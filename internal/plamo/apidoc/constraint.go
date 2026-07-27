@@ -11,33 +11,27 @@ var requiredCodes = map[string]bool{
 	"slice_not_empty": true,
 }
 
-// applyRules は ruleSets の制約をスキーマの各フィールドに反映する。
-// ルールのフィールド名(RuleSet.Field)とスキーマのフィールド名で突き合わせる。
+// applyRules は ruleSets の制約をスキーマ木の該当フィールドに反映する。
+// RuleSet.Field はドット/角括弧記法のパス("address.city" / "items[].id")でネストを指す。
+//
+// 必須フラグはフィールド(スロット)に、その他の制約は型を表すスキーマノードに載せる
+// (JSON Schema と同じ置き場所)。
 func applyRules(schema *Schema, ruleSets []*rule.RuleSet) {
 	if schema == nil {
 		return
 	}
-	byField := make(map[string]*Field, len(schema.Fields))
-	for i := range schema.Fields {
-		byField[schema.Fields[i].Name] = &schema.Fields[i]
-	}
 	for _, rs := range ruleSets {
-		f, ok := byField[rs.Field]
-		if !ok {
+		f := findField(schema, rs.Field)
+		if f == nil {
 			continue // スキーマに無いフィールド(パス/クエリ等)はここでは対象外
 		}
 		for _, r := range rs.Rules {
-			applyDescriptor(f, r.Descriptor)
+			applyRuleDescriptor(&f.Required, &f.Schema.Constraints, r.Descriptor)
 		}
 		for _, fcr := range rs.FieldCompareRules {
-			applyDescriptor(f, fcr.Descriptor)
+			applyRuleDescriptor(&f.Required, &f.Schema.Constraints, fcr.Descriptor)
 		}
 	}
-}
-
-// applyDescriptor は1つのルール記述子をフィールドに反映する。
-func applyDescriptor(f *Field, d rule.Descriptor) {
-	applyRuleDescriptor(&f.Required, &f.Constraints, d)
 }
 
 // applyRuleDescriptor は「必須」系はフラグに、それ以外は構造化 Constraint に反映する

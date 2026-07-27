@@ -23,13 +23,13 @@ type errEnvelope struct {
 
 var _ = Describe("Conventions", func() {
 	Describe("CommonErrorSchema", func() {
-		It("flattens the error type and attaches an example", func() {
+		It("builds the error schema tree and attaches an example", func() {
 			s := apidoc.CommonErrorSchema(reflect.TypeFor[errEnvelope]())
 
 			Expect(s).NotTo(BeNil())
-			Expect(fieldByName(s, "error").Type).To(Equal("object"))
-			Expect(fieldByName(s, "error.code").Type).To(Equal("string"))
-			Expect(fieldByName(s, "error.message").Type).To(Equal("string"))
+			Expect(schemaAt(s, "error").Type).To(Equal(apidoc.TypeObject))
+			Expect(schemaAt(s, "error.code").Type).To(Equal(apidoc.TypeString))
+			Expect(schemaAt(s, "error.message").Type).To(Equal(apidoc.TypeString))
 			Expect(s.Example).NotTo(BeNil())
 		})
 	})

@@ -8,30 +8,66 @@ import (
 
 var timeType = reflect.TypeOf(time.Time{})
 
-// SchemaFromType は構造体型を docai スタイルの平坦なフィールド一覧に変換する。
-// ポインタは剥がして Nullable に、ネスト構造体はドット記法、構造体スライスは `[]` で平坦化する。
-// 構造体でない型(またはボディ無し)の場合は nil を返す。
+// SchemaFromType は型を再帰的なスキーマ木に変換する。
+// ポインタは剥がして Nullable に、構造体は object(Fields)、スライス/配列は array(Items)、
+// map は動的キーの object(Values)にする。time.Time は date-time 形式の文字列。
+//
+// ボディが無い場合(型が nil、または公開フィールドを持たない構造体 = restkit.NoBody)は nil を返す。
 func SchemaFromType(t reflect.Type) *Schema {
 	if t == nil {
 		return nil
 	}
-	for t.Kind() == reflect.Pointer {
-		t = t.Elem()
-	}
-	if t.Kind() != reflect.Struct || t == timeType {
+	s := buildSchema(t, nil)
+	if s.Type == TypeObject && len(s.Fields) == 0 && s.Values == nil {
 		return nil
 	}
-	var fields []Field
-	collectFields(t, "", &fields)
-	if len(fields) == 0 {
-		// エクスポートフィールドが無い(例: restkit.NoBody)= ボディ無し。
-		return nil
-	}
-	return &Schema{Fields: fields}
+	return s
 }
 
-// collectFields は t のエクスポートされたフィールドを prefix 付きで out に追加する。
-func collectFields(t reflect.Type, prefix string, out *[]Field) {
+// buildSchema は型を1つのスキーマノード(必要なら子ノードごと)に変換する。
+//
+// visiting は「今辿っている経路上の構造体型」の集合。自己参照型で無限再帰しないための
+// ガードで、経路から抜けるときに取り除くため、循環でない同一型の再出現は毎回展開される。
+func buildSchema(t reflect.Type, visiting map[reflect.Type]bool) *Schema {
+	s := &Schema{}
+	for t.Kind() == reflect.Pointer {
+		s.Nullable = true
+		t = t.Elem()
+	}
+
+	switch {
+	case t == timeType:
+		s.Type = TypeString
+		s.Format = FormatDateTime
+	case t.Kind() == reflect.Struct:
+		s.Type = TypeObject
+		s.GoType = goTypeName(t)
+		if visiting[t] {
+			// 循環参照: これ以上展開しない(型名は残すので参照先は分かる)。
+			return s
+		}
+		if visiting == nil {
+			visiting = map[reflect.Type]bool{}
+		}
+		visiting[t] = true
+		s.Fields = structFields(t, visiting)
+		delete(visiting, t)
+	case t.Kind() == reflect.Slice || t.Kind() == reflect.Array:
+		s.Type = TypeArray
+		s.Items = buildSchema(t.Elem(), visiting)
+	case t.Kind() == reflect.Map:
+		// 動的キーの object(OpenAPI の additionalProperties)。
+		s.Type = TypeObject
+		s.Values = buildSchema(t.Elem(), visiting)
+	default:
+		s.Type = scalarType(t)
+	}
+	return s
+}
+
+// structFields は t の公開フィールドを Field 群に変換する(宣言順)。
+func structFields(t reflect.Type, visiting map[reflect.Type]bool) []*Field {
+	var fields []*Field
 	for i := 0; i < t.NumField(); i++ {
 		sf := t.Field(i)
 		if !sf.IsExported() {
@@ -41,69 +77,90 @@ func collectFields(t reflect.Type, prefix string, out *[]Field) {
 		if name == "-" {
 			continue
 		}
-		full := name
-		if prefix != "" {
-			full = prefix + "." + name
-		}
+		fields = append(fields, &Field{
+			Name:     name,
+			Optional: hasOmitempty(sf),
+			Schema:   buildSchema(sf.Type, visiting),
+		})
+	}
+	return fields
+}
 
-		ft := sf.Type
-		nullable := false
-		for ft.Kind() == reflect.Pointer {
-			nullable = true
-			ft = ft.Elem()
-		}
-
-		field := Field{Name: full, Nullable: nullable, Optional: hasOmitempty(sf)}
-
-		switch {
-		case ft == timeType:
-			field.Type = "string (RFC 3339)"
-			*out = append(*out, field)
-		case ft.Kind() == reflect.Struct:
-			field.Type = "object"
-			*out = append(*out, field)
-			collectFields(ft, full, out)
-		case ft.Kind() == reflect.Slice || ft.Kind() == reflect.Array:
-			et := ft.Elem()
-			for et.Kind() == reflect.Pointer {
-				et = et.Elem()
-			}
-			if et.Kind() == reflect.Struct && et != timeType {
-				field.Type = "object[]"
-				*out = append(*out, field)
-				collectFields(et, full+"[]", out)
-			} else {
-				field.Type = primitiveName(et) + "[]"
-				*out = append(*out, field)
-			}
-		case ft.Kind() == reflect.Map:
-			// docai は map を非推奨(ネスト構造体を推奨)だが、来た場合は object 扱い
-			field.Type = "object"
-			*out = append(*out, field)
-		default:
-			field.Type = primitiveName(ft)
-			*out = append(*out, field)
-		}
+// scalarType は reflect.Kind を中立なスキーマ種別へ正規化する。
+// interface{} など JSON の値種別に固定できない型は空(= 任意の型)にする。
+func scalarType(t reflect.Type) SchemaType {
+	switch t.Kind() {
+	case reflect.String:
+		return TypeString
+	case reflect.Bool:
+		return TypeBoolean
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
+		return TypeInteger
+	case reflect.Float32, reflect.Float64:
+		return TypeNumber
+	default:
+		return ""
 	}
 }
 
-// primitiveName は reflect.Kind を docai の平易な型名へ正規化する。
-func primitiveName(t reflect.Type) string {
-	switch t.Kind() {
-	case reflect.String:
-		return "string"
-	case reflect.Bool:
-		return "bool"
-	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
-		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
-		return "int"
-	case reflect.Float32, reflect.Float64:
-		return "float"
-	case reflect.Struct:
-		return "object"
-	default:
-		return t.Kind().String()
+// goTypeName は object ノードに載せる Go 型名(例 "dto.User")を返す。無名構造体では空。
+func goTypeName(t reflect.Type) string {
+	if t.Name() == "" {
+		return ""
 	}
+	return t.String()
+}
+
+// findField はドット/角括弧記法のパス("address.city" / "items[].id")でスキーマ木を辿り、
+// 該当するフィールドを返す。見つからなければ nil。
+// 宣言(BodyRules の RuleSet.Field / FieldDocs のキー)はこの記法でネストを指す。
+func findField(schema *Schema, path string) *Field {
+	if schema == nil || path == "" {
+		return nil
+	}
+	cur, segs := schema, strings.Split(path, ".")
+	for i, seg := range segs {
+		name, arrays := splitArraySuffix(seg)
+		f := fieldNamed(cur, name)
+		if f == nil {
+			return nil
+		}
+		if i == len(segs)-1 {
+			return f
+		}
+		cur = f.Schema
+		for ; arrays > 0; arrays-- {
+			if cur == nil || cur.Items == nil {
+				return nil
+			}
+			cur = cur.Items
+		}
+	}
+	return nil
+}
+
+// splitArraySuffix は末尾の `[]` を数えて分解する("items[][]" → "items", 2)。
+func splitArraySuffix(seg string) (string, int) {
+	n := 0
+	for strings.HasSuffix(seg, "[]") {
+		seg = strings.TrimSuffix(seg, "[]")
+		n++
+	}
+	return seg, n
+}
+
+// fieldNamed は object ノードから名前でフィールドを引く。
+func fieldNamed(s *Schema, name string) *Field {
+	if s == nil {
+		return nil
+	}
+	for _, f := range s.Fields {
+		if f.Name == name {
+			return f
+		}
+	}
+	return nil
 }
 
 // jsonName は json タグからフィールド名を取り出す。タグが無ければフィールド名。

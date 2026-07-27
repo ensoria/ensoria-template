@@ -7,8 +7,17 @@ package apidoc
 
 // APISpec は1つの API 全体の中立モデル。
 type APISpec struct {
+	Info        *Info           `json:"info,omitempty"`
 	Endpoints   []*EndpointSpec `json:"endpoints"`
 	Conventions *Conventions    `json:"conventions,omitempty"`
+}
+
+// Info は API 全体のメタ情報(OpenAPI の `info` に対応)。
+// 型からは導けないので、アプリ側の宣言(internal/app/apiinfo)を describe が注入する。
+type Info struct {
+	Title       string `json:"title,omitempty"`
+	Version     string `json:"version,omitempty"`
+	Description string `json:"description,omitempty"`
 }
 
 // EndpointSpec は1エンドポイントの中立モデル。
@@ -54,22 +63,54 @@ type Behavior struct {
 	Scopes        []string `json:"scopes,omitempty"` // Authorization(認可スコープ)
 }
 
-// Schema はボディの型を平坦化したフィールド一覧と、具体例(example)。
+// SchemaType は JSON の値種別に対応する中立なスキーマ種別。
+// docai レンダラは自前の型名(int/float/bool/object[] 等)へ、OpenAPI レンダラは
+// JSON Schema の `type` へ、それぞれ写す。
+type SchemaType string
+
+const (
+	TypeString  SchemaType = "string"
+	TypeInteger SchemaType = "integer"
+	TypeNumber  SchemaType = "number"
+	TypeBoolean SchemaType = "boolean"
+	TypeObject  SchemaType = "object"
+	TypeArray   SchemaType = "array"
+)
+
+// FormatDateTime は time.Time に対応する Format 値(JSON Schema / OpenAPI の date-time)。
+const FormatDateTime = "date-time"
+
+// Schema はボディの型を表す再帰的なスキーマ木。
+//
+// 木のまま持つことで OpenAPI(ネストした JSON Schema)へ無損失で変換でき、
+// docai の平坦なフィールド表へは木を辿って平坦化すればよい(復元不要な方向)。
 type Schema struct {
-	Fields []Field `json:"fields"`
+	Type   SchemaType `json:"type,omitempty"`   // 空 = 任意の型(interface{} 等)
+	Format string     `json:"format,omitempty"` // date-time 等。空=なし
+	// GoType は object ノードの Go 型名(例 "dto.User")。無名構造体では空。
+	// 将来 OpenAPI の components/$ref に名前を付けるための素材。
+	GoType      string       `json:"go_type,omitempty"`
+	Nullable    bool         `json:"nullable,omitempty"` // ポインタ由来(null を取り得る)
+	Constraints []Constraint `json:"constraints,omitempty"`
+	// Fields は Type==object のプロパティ(宣言順)。動的キーの object では空。
+	Fields []*Field `json:"fields,omitempty"`
+	// Items は Type==array の要素スキーマ。
+	Items *Schema `json:"items,omitempty"`
+	// Values は動的キー object(Go の map)の値スキーマ。
+	Values *Schema `json:"values,omitempty"`
 	// Example は JSON 形の具体例(map/slice/scalar)。決定的・制約充足。
+	// ボディのルートノードにのみ設定する。
 	Example any `json:"example,omitempty"`
 }
 
-// Field はスキーマ表の1行(ネスト/配列はドット・角括弧記法で平坦化)。
+// Field は object ノードの1プロパティ。名前と「スロット」の性質(必須/省略可/意味)を持ち、
+// 型そのものは Schema が持つ。
 type Field struct {
-	Name        string       `json:"name"` // "address.city" / "items[].id" 等
-	Type        string       `json:"type"` // string/int/float/bool/string[]/object/object[] 等
-	Required    bool         `json:"required"`
-	Nullable    bool         `json:"nullable"`
-	Optional    bool         `json:"optional,omitempty"` // json:",omitempty" タグ由来(省略可能)
-	Constraints []Constraint `json:"constraints,omitempty"`
-	Meaning     string       `json:"meaning,omitempty"` // FieldDocs 由来。未宣言は空(レンダラで TODO)
+	Name     string  `json:"name"`
+	Required bool    `json:"required,omitempty"`
+	Optional bool    `json:"optional,omitempty"` // json:",omitempty" タグ由来(省略可能)
+	Meaning  string  `json:"meaning,omitempty"`  // FieldDocs 由来。未宣言は空(レンダラで TODO)
+	Schema   *Schema `json:"schema"`
 }
 
 // Constraint は1つの制約を**構造化して**保持する(出力フォーマット中立)。

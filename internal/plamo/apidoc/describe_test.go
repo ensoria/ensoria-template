@@ -21,6 +21,12 @@ type createRes struct {
 	ID string `json:"id"`
 }
 
+// nestedReq exercises declarations that address nested fields by path.
+type nestedReq struct {
+	Address address `json:"address"`
+	Items   []item  `json:"items"`
+}
+
 var vmsgs = map[string]string{"en": "invalid"}
 
 // rawController は Documented を実装しない生 Controller(エスケープハッチ)。
@@ -121,7 +127,7 @@ var _ = Describe("DescribeModule / DescribeEndpoint", func() {
 		})
 
 		It("marks required fields and captures length constraints structurally", func() {
-			name := fieldByName(spec.Request, "name")
+			name := fieldAt(spec.Request, "name")
 			Expect(name.Required).To(BeTrue())
 			c, ok := constraintByCode(name, "str_max_length")
 			Expect(ok).To(BeTrue())
@@ -129,20 +135,64 @@ var _ = Describe("DescribeModule / DescribeEndpoint", func() {
 		})
 
 		It("captures enum rules structurally (values preserved)", func() {
-			role := fieldByName(spec.Request, "role")
+			role := fieldAt(spec.Request, "role")
 			c, ok := constraintByCode(role, "str_any_of")
 			Expect(ok).To(BeTrue())
 			Expect(c.Params).To(HaveKeyWithValue("values", []any{"admin", "member"}))
 		})
 
 		It("fills field meaning from FieldDocs", func() {
-			Expect(fieldByName(spec.Request, "name").Meaning).To(Equal("User display name"))
+			Expect(fieldAt(spec.Request, "name").Meaning).To(Equal("User display name"))
 		})
 
 		It("builds the response schema and headers", func() {
-			Expect(fieldByName(spec.Response, "id").Type).To(Equal("string"))
+			Expect(schemaAt(spec.Response, "id").Type).To(Equal(apidoc.TypeString))
 			Expect(spec.ResponseHeaders).To(HaveLen(1))
 			Expect(spec.ResponseHeaders[0].Name).To(Equal("Location"))
+		})
+	})
+
+	Describe("declarations that address nested fields", func() {
+		var spec *apidoc.EndpointSpec
+
+		BeforeEach(func() {
+			ep := &restkit.Endpoint[nestedReq, createRes]{
+				Success: 200,
+				BodyRules: []*rule.RuleSet{
+					{Field: "address.city", Rules: []rule.Rule{
+						rule.CreateStrNotEmpty(vmsgs)(),
+						rule.CreateStrMaxLength(vmsgs)(20),
+					}},
+					{Field: "items[].id", Rules: []rule.Rule{rule.CreateStrNotEmpty(vmsgs)()}},
+				},
+				FieldDocs: map[string]string{
+					"address.city": "City name",
+					"items[].id":   "Item identifier",
+				},
+				Handle: func(r *rest.Request, req *nestedReq) (*rest.Result[createRes], error) {
+					return rest.NewResult(&createRes{}), nil
+				},
+			}
+			m := &rest.Module{Path: "/orders", Post: restkit.NewController(ep)}
+			spec = apidoc.DescribeModule(m, nil)[0]
+		})
+
+		It("applies dotted rule paths to the nested field", func() {
+			city := fieldAt(spec.Request, "address.city")
+
+			Expect(city.Required).To(BeTrue())
+			c, ok := constraintByCode(city, "str_max_length")
+			Expect(ok).To(BeTrue())
+			Expect(c.Params).To(HaveKeyWithValue("max", 20))
+		})
+
+		It("applies bracketed rule paths to the array element field", func() {
+			Expect(fieldAt(spec.Request, "items[].id").Required).To(BeTrue())
+		})
+
+		It("applies dotted and bracketed FieldDocs keys to nested fields", func() {
+			Expect(fieldAt(spec.Request, "address.city").Meaning).To(Equal("City name"))
+			Expect(fieldAt(spec.Request, "items[].id").Meaning).To(Equal("Item identifier"))
 		})
 	})
 

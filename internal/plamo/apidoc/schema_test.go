@@ -2,6 +2,7 @@ package apidoc_test
 
 import (
 	"reflect"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -22,34 +23,77 @@ type item struct {
 }
 
 type order struct {
-	ID        string    `json:"id"`
-	Note      *string   `json:"note"`
-	Paid      bool      `json:"paid"`
-	Tags      []string  `json:"tags"`
-	Address   address   `json:"address"`
-	Items     []item    `json:"items"`
-	CreatedAt time.Time `json:"created_at"`
-	ignored   string    //nolint:unused // unexported: must be skipped
+	ID        string         `json:"id"`
+	Note      *string        `json:"note"`
+	Paid      bool           `json:"paid"`
+	Tags      []string       `json:"tags"`
+	Address   address        `json:"address"`
+	Items     []item         `json:"items"`
+	Labels    map[string]int `json:"labels"`
+	CreatedAt time.Time      `json:"created_at"`
+	ignored   string         //nolint:unused // unexported: must be skipped
 }
 
-// fieldByName は Fields から名前で1件取り出す(テスト補助)。
-func fieldByName(s *apidoc.Schema, name string) apidoc.Field {
+// selfRef is a self-referencing type used to check that recursion terminates.
+type selfRef struct {
+	Name string   `json:"name"`
+	Next *selfRef `json:"next"`
+}
+
+// noFields has no exported fields (restkit.NoBody equivalent) = no body.
+type noFields struct{}
+
+// directField looks up a field by name on one schema node (test helper).
+func directField(s *apidoc.Schema, name string) *apidoc.Field {
 	GinkgoHelper()
+	Expect(s).NotTo(BeNil())
 	for _, f := range s.Fields {
 		if f.Name == name {
 			return f
 		}
 	}
 	Fail("field not found: " + name)
-	return apidoc.Field{}
+	return nil
 }
 
-// constraintByCode は Field の Constraints から code で1件取り出す(テスト補助)。
-func constraintByCode(f apidoc.Field, code string) (apidoc.Constraint, bool) {
-	return constraintByCode2(f.Constraints, code)
+// fieldAt walks the schema tree with a dotted path ("items[].id") and returns
+// the field it names. Kept independent of the production path resolver so the
+// two cross-check each other.
+func fieldAt(s *apidoc.Schema, path string) *apidoc.Field {
+	GinkgoHelper()
+	cur, segs := s, strings.Split(path, ".")
+	for i, seg := range segs {
+		name, arrays := seg, 0
+		for strings.HasSuffix(name, "[]") {
+			name = strings.TrimSuffix(name, "[]")
+			arrays++
+		}
+		f := directField(cur, name)
+		if i == len(segs)-1 {
+			return f
+		}
+		cur = f.Schema
+		for ; arrays > 0; arrays-- {
+			Expect(cur.Items).NotTo(BeNil(), "expected an array at %q of %q", name, path)
+			cur = cur.Items
+		}
+	}
+	Fail("empty path")
+	return nil
 }
 
-// constraintByCode2 は Constraint スライスから code で1件取り出す(テスト補助)。
+// schemaAt returns the schema node of the field named by path (test helper).
+func schemaAt(s *apidoc.Schema, path string) *apidoc.Schema {
+	GinkgoHelper()
+	return fieldAt(s, path).Schema
+}
+
+// constraintByCode picks one constraint by code off a field's schema node (test helper).
+func constraintByCode(f *apidoc.Field, code string) (apidoc.Constraint, bool) {
+	return constraintByCode2(f.Schema.Constraints, code)
+}
+
+// constraintByCode2 picks one constraint by code out of a slice (test helper).
 func constraintByCode2(cs []apidoc.Constraint, code string) (apidoc.Constraint, bool) {
 	for _, c := range cs {
 		if c.Code == code {
@@ -66,39 +110,66 @@ var _ = Describe("SchemaFromType", func() {
 		schema = apidoc.SchemaFromType(reflect.TypeFor[order]())
 	})
 
-	It("uses json tag names and normalized primitive types", func() {
-		Expect(fieldByName(schema, "id").Type).To(Equal("string"))
-		Expect(fieldByName(schema, "paid").Type).To(Equal("bool"))
+	It("uses json tag names and neutral scalar types", func() {
+		Expect(schemaAt(schema, "id").Type).To(Equal(apidoc.TypeString))
+		Expect(schemaAt(schema, "paid").Type).To(Equal(apidoc.TypeBoolean))
+		Expect(schemaAt(schema, "items[].quantity").Type).To(Equal(apidoc.TypeInteger))
+		Expect(schemaAt(schema, "items[].price").Type).To(Equal(apidoc.TypeNumber))
 	})
 
-	It("marks pointer fields as nullable", func() {
-		Expect(fieldByName(schema, "note").Nullable).To(BeTrue())
-		Expect(fieldByName(schema, "id").Nullable).To(BeFalse())
+	It("marks pointer fields nullable on the schema node", func() {
+		Expect(schemaAt(schema, "note").Type).To(Equal(apidoc.TypeString))
+		Expect(schemaAt(schema, "note").Nullable).To(BeTrue())
+		Expect(schemaAt(schema, "id").Nullable).To(BeFalse())
 	})
 
 	It("marks omitempty fields as optional", func() {
-		Expect(fieldByName(schema, "address.zip").Optional).To(BeTrue())
-		Expect(fieldByName(schema, "address.city").Optional).To(BeFalse())
+		Expect(fieldAt(schema, "address.zip").Optional).To(BeTrue())
+		Expect(fieldAt(schema, "address.city").Optional).To(BeFalse())
 	})
 
-	It("renders primitive slices as T[]", func() {
-		Expect(fieldByName(schema, "tags").Type).To(Equal("string[]"))
+	It("puts primitive slice elements under items", func() {
+		tags := schemaAt(schema, "tags")
+
+		Expect(tags.Type).To(Equal(apidoc.TypeArray))
+		Expect(tags.Items.Type).To(Equal(apidoc.TypeString))
 	})
 
-	It("flattens nested structs with dot notation", func() {
-		Expect(fieldByName(schema, "address").Type).To(Equal("object"))
-		Expect(fieldByName(schema, "address.city").Type).To(Equal("string"))
+	It("nests struct fields instead of flattening them", func() {
+		addr := schemaAt(schema, "address")
+
+		Expect(addr.Type).To(Equal(apidoc.TypeObject))
+		Expect(addr.Fields).To(HaveLen(2))
+		Expect(schemaAt(schema, "address.city").Type).To(Equal(apidoc.TypeString))
 	})
 
-	It("flattens struct slices with [] notation", func() {
-		Expect(fieldByName(schema, "items").Type).To(Equal("object[]"))
-		Expect(fieldByName(schema, "items[].id").Type).To(Equal("string"))
-		Expect(fieldByName(schema, "items[].quantity").Type).To(Equal("int"))
-		Expect(fieldByName(schema, "items[].price").Type).To(Equal("float"))
+	It("puts struct slice elements under items", func() {
+		items := schemaAt(schema, "items")
+
+		Expect(items.Type).To(Equal(apidoc.TypeArray))
+		Expect(items.Items.Type).To(Equal(apidoc.TypeObject))
+		Expect(schemaAt(schema, "items[].id").Type).To(Equal(apidoc.TypeString))
 	})
 
-	It("renders time.Time as an RFC 3339 string without recursing", func() {
-		Expect(fieldByName(schema, "created_at").Type).To(Equal("string (RFC 3339)"))
+	It("keeps the Go type name on object nodes so a renderer can name schemas", func() {
+		Expect(schema.GoType).To(HaveSuffix("order"))
+		Expect(schemaAt(schema, "items").Items.GoType).To(HaveSuffix("item"))
+	})
+
+	It("records the value type of a dynamic-key object (map)", func() {
+		labels := schemaAt(schema, "labels")
+
+		Expect(labels.Type).To(Equal(apidoc.TypeObject))
+		Expect(labels.Values).NotTo(BeNil())
+		Expect(labels.Values.Type).To(Equal(apidoc.TypeInteger))
+	})
+
+	It("renders time.Time as a date-time string without recursing into it", func() {
+		created := schemaAt(schema, "created_at")
+
+		Expect(created.Type).To(Equal(apidoc.TypeString))
+		Expect(created.Format).To(Equal(apidoc.FormatDateTime))
+		Expect(created.Fields).To(BeEmpty())
 	})
 
 	It("skips unexported fields", func() {
@@ -107,8 +178,37 @@ var _ = Describe("SchemaFromType", func() {
 		}
 	})
 
-	It("returns nil for non-struct types", func() {
-		Expect(apidoc.SchemaFromType(reflect.TypeFor[string]())).To(BeNil())
+	It("stops at a recursive type instead of descending forever", func() {
+		s := apidoc.SchemaFromType(reflect.TypeFor[selfRef]())
+
+		next := schemaAt(s, "next")
+		Expect(next.Type).To(Equal(apidoc.TypeObject))
+		Expect(next.GoType).To(HaveSuffix("selfRef"))
+		Expect(next.Fields).To(BeEmpty())
+	})
+
+	It("expands a repeated type at every occurrence (only cycles are cut)", func() {
+		type twoAddresses struct {
+			Home address `json:"home"`
+			Work address `json:"work"`
+		}
+
+		s := apidoc.SchemaFromType(reflect.TypeFor[twoAddresses]())
+
+		Expect(schemaAt(s, "home").Fields).To(HaveLen(2))
+		Expect(schemaAt(s, "work").Fields).To(HaveLen(2))
+	})
+
+	It("builds a schema for a non-struct body type", func() {
+		s := apidoc.SchemaFromType(reflect.TypeFor[[]item]())
+
+		Expect(s.Type).To(Equal(apidoc.TypeArray))
+		Expect(s.Items.Type).To(Equal(apidoc.TypeObject))
+		Expect(schemaAt(s.Items, "id").Type).To(Equal(apidoc.TypeString))
+	})
+
+	It("returns nil when there is no body", func() {
 		Expect(apidoc.SchemaFromType(nil)).To(BeNil())
+		Expect(apidoc.SchemaFromType(reflect.TypeFor[noFields]())).To(BeNil())
 	})
 })
