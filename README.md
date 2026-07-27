@@ -9,6 +9,47 @@
 フレームワークが出来上がるのを楽しみにしてくださいね！
 
 
+## API ドキュメントの生成
+
+HTTP API のドキュメントは、**実装から自動生成**します。アノテーションやコメントを書く必要はありません。
+
+```sh
+encli generate docai      # LLM 向けドキュメント一式（docs/INDEX.md ほか）
+encli generate openapi    # OpenAPI 3.1（docs/openapi.yaml）
+```
+
+### 仕組み
+
+どちらのコマンドも、`cmd/apidoc-describe` を `go run -tags apidoc_describe` で実行し、
+**リフレクションで API 仕様（型・検証ルール・ルーティング宣言）を書き出した中立モデル**を回収してから、
+それぞれの形式にレンダリングします。
+
+describe は build tag `apidoc_describe` で本番ビルドから隔離されており、
+**DB やメッセージブローカーには接続しません**（接続系はスタブが注入され、fx のライフサイクルも起動しません）。
+そのためインフラを立ち上げずにドキュメントを生成できます。
+
+### 生成物の元になる宣言
+
+型から導けない情報は、コードの宣言が唯一の出所です。ドキュメントに `TODO` が出たら、
+対応する宣言が未記入だという意味です。
+
+| 出力される内容 | 宣言する場所 |
+|---|---|
+| API のタイトル・バージョン・概要・ライセンス | [internal/app/apiinfo](internal/app/apiinfo/apiinfo.go) |
+| 概要・説明・フィールドの意味・関連エンドポイント | `restkit.Endpoint` の `Summary` / `Description` / `FieldDocs` / `Related` |
+| 副作用・冪等性・前提条件・認可スコープ | `restkit.Endpoint` の `Behavior` |
+| エンドポイント固有のエラー | `restkit.Endpoint` の `Errors` |
+| リクエスト/レスポンスの型・必須・制約 | 型パラメータ `Endpoint[Req, Res]` と `BodyRules` / `PathRules` / `QueryRules` |
+
+`internal/app/apiinfo/apiinfo.go` はプロジェクトごとに書き換える前提のファイルです。
+既定値はプレースホルダなので、**API の名前・バージョン・ライセンスは最初に設定してください**。
+
+### 上書きされないファイル
+
+生成物には目印（docai はメタスタンプ行、OpenAPI は `x-generated`）が入ります。
+目印の無い既存ファイルは**手書きとみなして上書きしません**ので、`docs/` 配下に手書きの補足を置けます。
+
+
 ## サーバタイムアウト
 
 HTTPサーバのタイムアウトは **2層** で構成されています。値はすべて config（環境変数）から設定でき、duration 文字列（例: `"30s"`, `"2m"`）で指定します。
