@@ -17,4 +17,13 @@ var _ = Describe("Info", func() {
 		Expect(info.Title).NotTo(BeEmpty())
 		Expect(info.Version).NotTo(BeEmpty())
 	})
+
+	// A license without a name cannot be rendered, so the declaration must carry one
+	// whenever a license is declared at all.
+	It("names the license it declares", func() {
+		license := apiinfo.Info().License
+
+		Expect(license).NotTo(BeNil())
+		Expect(license.Name).NotTo(BeEmpty())
+	})
 })

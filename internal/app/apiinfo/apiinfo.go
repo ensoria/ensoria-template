@@ -15,6 +15,15 @@ const (
 	Version = "0.1.0"
 	// Description は API の概要(OpenAPI info.description)。空でもよい。
 	Description = "HTTP API of the Ensoria application."
+	// LicenseName は API のライセンス名(OpenAPI info.license.name)。
+	// ライセンスを出す場合、OpenAPI では name が必須。既定は非公開 API 向けの
+	// プレースホルダなので、公開 API では実際のライセンスに書き換えること。
+	LicenseName = "Proprietary"
+	// LicenseIdentifier は SPDX ライセンス式(例 "Apache-2.0")。独自ライセンスなら空。
+	// OpenAPI 3.1 では LicenseURL と排他で、両方あれば識別子が優先される。
+	LicenseIdentifier = ""
+	// LicenseURL はライセンス文書の URL。SPDX 識別子が無い場合に使う。
+	LicenseURL = ""
 )
 
 // Info は宣言されたメタ情報を中立モデルにして返す。
@@ -23,5 +32,10 @@ func Info() *apidoc.Info {
 		Title:       Title,
 		Version:     Version,
 		Description: Description,
+		License: &apidoc.License{
+			Name:       LicenseName,
+			Identifier: LicenseIdentifier,
+			URL:        LicenseURL,
+		},
 	}
 }

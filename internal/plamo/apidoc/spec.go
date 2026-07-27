@@ -15,9 +15,21 @@ type APISpec struct {
 // Info は API 全体のメタ情報(OpenAPI の `info` に対応)。
 // 型からは導けないので、アプリ側の宣言(internal/app/apiinfo)を describe が注入する。
 type Info struct {
-	Title       string `json:"title,omitempty"`
-	Version     string `json:"version,omitempty"`
-	Description string `json:"description,omitempty"`
+	Title       string   `json:"title,omitempty"`
+	Version     string   `json:"version,omitempty"`
+	Description string   `json:"description,omitempty"`
+	License     *License `json:"license,omitempty"`
+}
+
+// License は API のライセンス(OpenAPI の `info.license`)。
+type License struct {
+	// Name はライセンス名。OpenAPI では license を出す場合の必須項目。
+	Name string `json:"name,omitempty"`
+	// Identifier は SPDX ライセンス式(例 "Apache-2.0")。
+	// OpenAPI 3.1 では URL と排他なので、レンダラは両方あれば Identifier を優先する。
+	Identifier string `json:"identifier,omitempty"`
+	// URL はライセンス文書の URL。SPDX 識別子が無い独自ライセンス向け。
+	URL string `json:"url,omitempty"`
 }
 
 // EndpointSpec は1エンドポイントの中立モデル。
