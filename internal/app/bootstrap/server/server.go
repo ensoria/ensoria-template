@@ -18,11 +18,16 @@ import (
 	"github.com/ensoria/ensoria-template/internal/infra/storage"
 	_ "github.com/ensoria/ensoria-template/internal/module"
 	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
+	"github.com/ensoria/ensoria-template/internal/plamo/restkit"
 	_ "github.com/ensoria/ensoria-template/internal/query"
 )
 
 func Run(envVal *string) error {
 	registry.InitializeConfiguration(envVal, assets.ConfigFS(*envVal), "internal", "config")
+
+	// 宣言(Endpoint.Success / Responses)と実挙動の不一致を、開発環境では即座に失敗させる。
+	// 生成ドキュメントが黙って実装から乖離しないようにするための検査。
+	restkit.SetStrictDeclarations(restkit.StrictForEnv(*envVal))
 
 	dikit.AppendConstructors([]any{
 		// アプリのルートコンテキスト（常駐処理の生存期間 = アプリの生存期間）

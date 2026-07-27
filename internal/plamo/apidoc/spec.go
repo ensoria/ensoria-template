@@ -50,10 +50,23 @@ type EndpointSpec struct {
 	// (Endpoint.Produces。空=既定 application/json)。
 	ResponseMediaType string           `json:"response_media_type,omitempty"`
 	ResponseHeaders   []ResponseHeader `json:"response_headers,omitempty"`
-	Errors            []ErrorSpec      `json:"errors,omitempty"` // エンドポイント固有エラー(§4.1)
-	Behavior          Behavior         `json:"behavior"`
+	// Responses は主レスポンス(SuccessStatus + Response)以外の成功レスポンス。
+	// 状況で異なる成功ステータスを返す場合(200/201 併存、202 + 別ボディ型など)に宣言する。
+	Responses []ResponseSpec `json:"responses,omitempty"`
+	Errors    []ErrorSpec    `json:"errors,omitempty"` // エンドポイント固有エラー(§4.1)
+	Behavior  Behavior       `json:"behavior"`
 	// Untyped は Documented を実装しない生 Controller(型不明)のとき true。
 	Untyped bool `json:"untyped,omitempty"`
+}
+
+// ResponseSpec は主レスポンス以外の成功レスポンス。
+// Body が nil のときは本文なし(204 等)。When は「どういうときにこれが返るか」の散文で、
+// 型からは導けないため宣言が唯一の出所。
+type ResponseSpec struct {
+	Status  int              `json:"status"`
+	When    string           `json:"when,omitempty"`
+	Body    *Schema          `json:"body,omitempty"`
+	Headers []ResponseHeader `json:"headers,omitempty"`
 }
 
 // ErrorSpec はエンドポイント固有エラーの中立モデル(docai の Errors 表の1行)。

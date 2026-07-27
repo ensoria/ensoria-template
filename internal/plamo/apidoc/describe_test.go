@@ -152,6 +152,62 @@ var _ = Describe("DescribeModule / DescribeEndpoint", func() {
 		})
 	})
 
+	Describe("additional success responses", func() {
+		var spec *apidoc.EndpointSpec
+
+		BeforeEach(func() {
+			ep := &restkit.Endpoint[createReq, createRes]{
+				Success: 201,
+				Responses: []restkit.ResponseSpec{
+					// 同じボディ型で status だけ違うケース。
+					{Status: 200, When: "the user already existed", BodyType: reflect.TypeFor[createRes]()},
+					// ボディ型もヘッダも違うケース。
+					{
+						Status:   202,
+						When:     "the creation was queued",
+						BodyType: reflect.TypeFor[envBody](),
+						Headers:  []restkit.HeaderSpec{{Name: "Retry-After", Meaning: "seconds to wait"}},
+					},
+					// ボディ型を宣言しないケース(本文なし)。
+					{Status: 204, When: "nothing changed"},
+				},
+				Handle: func(r *rest.Request, req *createReq) (*rest.Result[createRes], error) {
+					return rest.NewResult(&createRes{}), nil
+				},
+			}
+			m := &rest.Module{Path: "/users", Post: restkit.NewController(ep)}
+			spec = apidoc.DescribeModule(m, nil)[0]
+		})
+
+		It("keeps the primary success status separate from the additional ones", func() {
+			Expect(spec.SuccessStatus).To(Equal(201))
+			Expect(spec.Responses).To(HaveLen(3))
+		})
+
+		It("carries the status and the condition that produces it", func() {
+			Expect(spec.Responses[0].Status).To(Equal(200))
+			Expect(spec.Responses[0].When).To(Equal("the user already existed"))
+		})
+
+		It("builds a schema and example from the declared body type", func() {
+			body := spec.Responses[0].Body
+
+			Expect(body).NotTo(BeNil())
+			Expect(fieldAt(body, "id")).NotTo(BeNil())
+			Expect(body.Example).NotTo(BeNil())
+		})
+
+		It("carries declared response headers", func() {
+			Expect(spec.Responses[1].Headers).To(HaveLen(1))
+			Expect(spec.Responses[1].Headers[0].Name).To(Equal("Retry-After"))
+		})
+
+		It("leaves the body nil when no body type is declared", func() {
+			Expect(spec.Responses[2].Status).To(Equal(204))
+			Expect(spec.Responses[2].Body).To(BeNil())
+		})
+	})
+
 	Describe("declarations that address nested fields", func() {
 		var spec *apidoc.EndpointSpec
 

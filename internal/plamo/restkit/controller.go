@@ -94,6 +94,8 @@ func (c *endpointController[Req, Res]) Handle(r *rest.Request) *rest.Response {
 
 	// 4. 成功レスポンス(Produces が指定されていれば形式を固定)
 	res := result.ToResponse(c.ep.Success)
+	// 宣言していないステータスを返していないか確かめる(生成ドキュメントとの乖離を防ぐ)。
+	checkDeclaredStatus(res.Code, c.ep.Success, c.ep.Responses)
 	if res.ContentType == "" && c.ep.Produces != "" {
 		res.ContentType = c.ep.Produces
 	}

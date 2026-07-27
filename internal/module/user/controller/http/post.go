@@ -34,6 +34,19 @@ func NewPost(svc service.UserService) *restkit.Endpoint[dto.CreateUser, dto.Crea
 		Related: []string{
 			"Fetch after creation: GET /users/{id}",
 		},
+		// 主レスポンス(201)以外の成功レスポンス。
+		// Handle が返し得るステータスはすべてここに宣言する必要がある —— 宣言していない
+		// ステータスを返すと、開発環境ではアダプタが即座に失敗させる(宣言漏れの検出)。
+		Responses: []restkit.ResponseSpec{
+			{
+				Status:   http.StatusAccepted,
+				When:     "The user was queued for asynchronous creation",
+				BodyType: reflect.TypeFor[dto.CreateUser](),
+				Headers: []restkit.HeaderSpec{
+					{Name: "Retry-After", Meaning: "Seconds to wait before fetching the created user"},
+				},
+			},
+		},
 		// このエンドポイント固有のエラー。共通形に従うものは表の1行のみ、
 		// field-level を返す 422 は個別 example + 表を出す(BodyType 宣言)。
 		Errors: []restkit.ErrorSpec{
@@ -54,6 +67,14 @@ func NewPost(svc service.UserService) *restkit.Endpoint[dto.CreateUser, dto.Crea
 		Handle: func(r *rest.Request, req *dto.CreateUser) (*rest.Result[dto.CreateUser], error) {
 			// ここで svc.Create(req) を呼ぶ
 			_ = svc
+
+			// 非同期で作成する経路では 202 を返す(Responses に宣言済み)。
+			// 宣言していないステータスを WithStatus に渡すと、開発環境では即座に失敗する。
+			if async, ok := r.Query("async"); ok && async == "true" {
+				return rest.NewResult(&dto.CreateUser{ID: 1, Name: req.Name},
+					rest.WithStatus(http.StatusAccepted),
+					rest.WithHeader("Retry-After", "5")), nil
+			}
 			return rest.NewResult(&dto.CreateUser{ID: 1, Name: req.Name}), nil
 		},
 	}

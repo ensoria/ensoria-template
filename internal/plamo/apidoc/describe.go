@@ -125,9 +125,34 @@ func DescribeEndpoint(method, path string, doc restkit.EndpointDoc, idPrefixes m
 		Response:          res,
 		ResponseMediaType: doc.Produces,
 		ResponseHeaders:   convertHeaders(doc.ResponseHeaders),
+		Responses:         convertResponses(doc.Responses, opts),
 		Errors:            convertErrors(doc.Errors, opts),
 		Behavior:          convertBehavior(doc.Behavior),
 	}
+}
+
+// convertResponses は主レスポンス以外の成功レスポンスを写す。
+// BodyType が宣言されていれば、その型からスキーマ + example を組む(nil なら本文なし)。
+func convertResponses(responses []restkit.ResponseSpec, opts ExampleOptions) []ResponseSpec {
+	if len(responses) == 0 {
+		return nil
+	}
+	out := make([]ResponseSpec, 0, len(responses))
+	for _, r := range responses {
+		spec := ResponseSpec{
+			Status:  r.Status,
+			When:    r.When,
+			Headers: convertHeaders(r.Headers),
+		}
+		if r.BodyType != nil {
+			if body := SchemaFromType(r.BodyType); body != nil {
+				body.Example = ExampleFromType(r.BodyType, nil, opts)
+				spec.Body = body
+			}
+		}
+		out = append(out, spec)
+	}
+	return out
 }
 
 // convertErrors は restkit.ErrorSpec を apidoc.ErrorSpec へ写す。
