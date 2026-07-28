@@ -1,4 +1,4 @@
-package restkit_test
+package middleware_test
 
 import (
 	"errors"
@@ -8,6 +8,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/ensoria/ensoria-template/internal/middleware"
 	"github.com/ensoria/ensoria-template/internal/plamo/authkit"
 	"github.com/ensoria/ensoria-template/internal/plamo/restkit"
 	"github.com/ensoria/rest/pkg/rest"
@@ -43,7 +44,7 @@ var _ = Describe("authentication middleware", func() {
 	Describe("in the HTTP pipeline", func() {
 		It("records the verified caller on the request context", func() {
 			var seen authkit.Principal
-			mw := restkit.AuthMiddleware(verifierStub{
+			mw := middleware.Auth(verifierStub{
 				principal: &authkit.Principal{Subject: "usr_1", Scheme: authkit.SchemeJWT},
 			})
 
@@ -57,7 +58,7 @@ var _ = Describe("authentication middleware", func() {
 		// served without one, so the endpoint decides (see Endpoint.Security).
 		It("lets a request with no credential through, carrying no caller", func() {
 			var seen authkit.Principal
-			mw := restkit.AuthMiddleware(verifierStub{err: authkit.ErrNoCredential})
+			mw := middleware.Auth(verifierStub{err: authkit.ErrNoCredential})
 
 			res := mw(okHandler(&seen))(authRequest())
 
@@ -69,7 +70,7 @@ var _ = Describe("authentication middleware", func() {
 		// public endpoint: quietly ignoring it would hide the caller's bug.
 		It("refuses a request whose credential cannot be trusted", func() {
 			reached := false
-			mw := restkit.AuthMiddleware(verifierStub{
+			mw := middleware.Auth(verifierStub{
 				err: errors.New("bad token: " + authkit.ErrInvalidCredential.Error()),
 			})
 
@@ -83,7 +84,7 @@ var _ = Describe("authentication middleware", func() {
 		})
 
 		It("answers a refusal in the shared error shape", func() {
-			mw := restkit.AuthMiddleware(verifierStub{err: errors.New("bad token")})
+			mw := middleware.Auth(verifierStub{err: errors.New("bad token")})
 
 			res := mw(okHandler(&authkit.Principal{}))(authRequest())
 
@@ -95,7 +96,7 @@ var _ = Describe("authentication middleware", func() {
 
 		// RFC 6750 asks a rejected bearer request to say which scheme it expects.
 		It("tells the caller which authentication scheme to use", func() {
-			mw := restkit.AuthMiddleware(verifierStub{err: errors.New("bad token")})
+			mw := middleware.Auth(verifierStub{err: errors.New("bad token")})
 
 			res := mw(okHandler(&authkit.Principal{}))(authRequest())
 
@@ -105,7 +106,7 @@ var _ = Describe("authentication middleware", func() {
 
 	Describe("in front of a WebSocket upgrade", func() {
 		It("lets the upgrade proceed and carries the caller into the connection", func() {
-			guard := restkit.AuthUpgradeGuard(verifierStub{
+			guard := middleware.AuthUpgrade(verifierStub{
 				principal: &authkit.Principal{Subject: "usr_1", Scheme: authkit.SchemeJWT},
 			})
 			r := authRequest()
@@ -119,14 +120,14 @@ var _ = Describe("authentication middleware", func() {
 		})
 
 		It("lets an upgrade with no credential proceed", func() {
-			guard := restkit.AuthUpgradeGuard(verifierStub{err: authkit.ErrNoCredential})
+			guard := middleware.AuthUpgrade(verifierStub{err: authkit.ErrNoCredential})
 
 			Expect(guard(authRequest())).To(BeNil())
 		})
 
 		// Rejecting before the upgrade means no connection is ever established.
 		It("stops the upgrade when the credential cannot be trusted", func() {
-			guard := restkit.AuthUpgradeGuard(verifierStub{err: errors.New("bad token")})
+			guard := middleware.AuthUpgrade(verifierStub{err: errors.New("bad token")})
 
 			res := guard(authRequest())
 

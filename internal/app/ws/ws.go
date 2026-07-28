@@ -1,9 +1,9 @@
 package ws
 
 import (
+	"github.com/ensoria/ensoria-template/internal/middleware"
 	"github.com/ensoria/ensoria-template/internal/plamo/authkit"
 	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
-	"github.com/ensoria/ensoria-template/internal/plamo/restkit"
 	"github.com/ensoria/websocket/pkg/wsconfig"
 	"github.com/ensoria/websocket/pkg/wsrouter"
 	"go.uber.org/fx"
@@ -16,7 +16,7 @@ import (
 // cannot forget the guard, which would otherwise leave that endpoint reachable
 // without authentication.
 func CreateWSRouter(modules []*wsconfig.Module, verifier authkit.Verifier) *wsrouter.Router {
-	guard := restkit.AuthUpgradeGuard(verifier)
+	guard := middleware.AuthUpgrade(verifier)
 	for _, m := range modules {
 		m.AddHTTPMiddleware(guard)
 	}

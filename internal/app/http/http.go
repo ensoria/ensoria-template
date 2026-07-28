@@ -9,6 +9,7 @@ import (
 
 	"github.com/ensoria/config/pkg/registry"
 	"github.com/ensoria/ensoria-template/internal/app/http/dto"
+	"github.com/ensoria/ensoria-template/internal/middleware"
 	"github.com/ensoria/ensoria-template/internal/plamo/authkit"
 	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
 	"github.com/ensoria/loggear/pkg/loggear"
@@ -84,13 +85,8 @@ func CreateHTTPPipeline(modules []*rest.Module, verifier authkit.Verifier) *pipe
 	}
 
 	return &pipeline.HTTP{
-		Modules: modules,
-		GlobalMiddlewares: []rest.Middleware{
-			mw.Logging(logIncomingRequest),
-			mw.RecoveryWithLogger(panicResponse, logPanicDetails),
-			mw.VerifyBodyParsable,
-			mw.NewCORS(cors),
-		},
+		Modules:           modules,
+		GlobalMiddlewares: globalMiddlewares(cors, verifier, panicResponse),
 		// Layer 2: コントローラ/ミドルウェアチェーンの実行（=レスポンスの計算）の上限時間。
 		// 0で無効。ストリーミング/ファイル/WebSocketは対象外。
 		Timeout:         configParams.Server.HandlerTimeout,
@@ -129,6 +125,21 @@ func RegisterHTTPServerLifecycle(lc dikit.LC, shutdowner dikit.Shutdowner, srv *
 
 // InjectHTTPModules tags the first parameter as the HTTP module group. The
 // remaining parameters (the credential verifier) are resolved by type.
+// globalMiddlewares builds the chain every request passes through.
+//
+// The list runs outside-in, so authentication sits last: logging, panic recovery
+// and CORS still apply to a request that is refused, and a CORS preflight (which
+// carries no credential) is answered before authentication is considered.
+func globalMiddlewares(cors *mw.CORSSettings, verifier authkit.Verifier, panicResponse *rest.Response) []rest.Middleware {
+	return []rest.Middleware{
+		mw.Logging(logIncomingRequest),
+		mw.RecoveryWithLogger(panicResponse, logPanicDetails),
+		mw.VerifyBodyParsable,
+		mw.NewCORS(cors),
+		middleware.Auth(verifier),
+	}
+}
+
 func InjectHTTPModules(f any) any {
 	return fx.Annotate(f, fx.ParamTags(dikit.GroupTagHttpModules, ``))
 }
