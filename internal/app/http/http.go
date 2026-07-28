@@ -9,6 +9,7 @@ import (
 
 	"github.com/ensoria/config/pkg/registry"
 	"github.com/ensoria/ensoria-template/internal/app/http/dto"
+	"github.com/ensoria/ensoria-template/internal/plamo/authkit"
 	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
 	"github.com/ensoria/loggear/pkg/loggear"
 	"github.com/ensoria/rest/pkg/mw"
@@ -55,7 +56,7 @@ func NewHTTPApp(envVal *string) func(lc dikit.LC, shutdowner dikit.Shutdowner, h
 	}
 }
 
-func CreateHTTPPipeline(modules []*rest.Module) *pipeline.HTTP {
+func CreateHTTPPipeline(modules []*rest.Module, verifier authkit.Verifier) *pipeline.HTTP {
 	// TODO: 別のファイルに分ける
 	panicResponse := &rest.Response{
 		Code: http.StatusInternalServerError,
@@ -126,8 +127,10 @@ func RegisterHTTPServerLifecycle(lc dikit.LC, shutdowner dikit.Shutdowner, srv *
 	})
 }
 
+// InjectHTTPModules tags the first parameter as the HTTP module group. The
+// remaining parameters (the credential verifier) are resolved by type.
 func InjectHTTPModules(f any) any {
-	return fx.Annotate(f, fx.ParamTags(dikit.GroupTagHttpModules))
+	return fx.Annotate(f, fx.ParamTags(dikit.GroupTagHttpModules, ``))
 }
 
 func logIncomingRequest(req *rest.Request, res *rest.Response) {

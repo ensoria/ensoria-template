@@ -11,6 +11,7 @@ import (
 	"github.com/ensoria/ensoria-template/internal/infra/storage"
 	"github.com/ensoria/websocket/pkg/wsrouter"
 
+	authApp "github.com/ensoria/ensoria-template/internal/app/auth"
 	httpApp "github.com/ensoria/ensoria-template/internal/app/http"
 	mbApp "github.com/ensoria/ensoria-template/internal/app/mb"
 	schedulerApp "github.com/ensoria/ensoria-template/internal/app/scheduler"
@@ -53,6 +54,7 @@ func Start(envVal *string) error {
 
 		// FIXME: schedulerだけでなく、moduleのものも全部うごいてしまっているので修正
 		// scheduler管理用のエンドポイントのみ
+		authApp.NewVerifier,
 		httpApp.InjectHTTPModules(httpApp.CreateHTTPPipeline),
 		NewEmptyWSRouter,
 	})

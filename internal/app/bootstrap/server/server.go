@@ -5,6 +5,7 @@ import (
 
 	"github.com/ensoria/config/pkg/registry"
 	assets "github.com/ensoria/ensoria-template"
+	authApp "github.com/ensoria/ensoria-template/internal/app/auth"
 	grpcApp "github.com/ensoria/ensoria-template/internal/app/grpc"
 	httpApp "github.com/ensoria/ensoria-template/internal/app/http"
 	mbApp "github.com/ensoria/ensoria-template/internal/app/mb"
@@ -43,6 +44,7 @@ func Run(envVal *string) error {
 		storage.NewDefaultFileSystem,
 
 		// controllers
+		authApp.NewVerifier,
 		httpApp.InjectHTTPModules(httpApp.CreateHTTPPipeline),
 		wsApp.InjectWSModules(wsApp.CreateWSRouter),
 		mbApp.NewSubscribe,
