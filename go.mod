@@ -3,10 +3,12 @@ module github.com/ensoria/ensoria-template
 go 1.26.4
 
 require (
+	github.com/MicahParks/jwkset v0.11.2
+	github.com/MicahParks/keyfunc/v3 v3.8.1
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.27
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.105.0
 	github.com/ensoria/cache v0.0.1
-	github.com/ensoria/config v0.0.25
+	github.com/ensoria/config v0.0.26
 	github.com/ensoria/encli v0.0.3
 	github.com/ensoria/file v0.0.1
 	github.com/ensoria/gofake v0.0.8
@@ -17,6 +19,7 @@ require (
 	github.com/ensoria/testutil v0.0.4
 	github.com/ensoria/validator v0.0.8
 	github.com/ensoria/websocket v0.0.6
+	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
 	github.com/onsi/ginkgo/v2 v2.32.0
 	github.com/onsi/gomega v1.42.1
@@ -62,6 +65,7 @@ require (
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/mod v0.37.0 // indirect
 	golang.org/x/sync v0.21.0 // indirect
+	golang.org/x/time v0.15.0 // indirect
 	golang.org/x/tools v0.47.0 // indirect
 	modernc.org/libc v1.72.3 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
