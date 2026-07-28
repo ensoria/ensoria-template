@@ -1,10 +1,11 @@
-// Package restkit は、型付き HTTP エンドポイント(Endpoint[Req,Res])と、それを
-// rest.Controller に適合させるアダプタを提供するフレームワーク・グルー。
+// Package restkit provides the typed HTTP endpoint (Endpoint[Req, Res]) and the
+// adapter that makes it satisfy rest.Controller.
 //
-// 目的は「実装から docai を生成する」ための宣言面を作ること:
-// リクエスト/レスポンスの型・検証ルール・ステータス・振る舞いなどを、命令的な
-// Handle の内側ではなく Endpoint の宣言フィールドに引き上げる。これにより後段の
-// apidoc がリフレクションでドキュメントを組み立てられる。
+// Its purpose is to create a declarative surface the documentation generators can
+// read: request and response types, validation rules, statuses and behaviour are
+// lifted out of the imperative Handle body and onto declared fields of Endpoint.
+// apidoc then reflects over those declarations to build the API spec, which
+// `encli generate docai` and `encli generate openapi` render.
 package restkit
 
 import (
@@ -14,89 +15,206 @@ import (
 	"github.com/ensoria/validator/pkg/rule"
 )
 
-// Endpoint は1つの HTTP エンドポイントの型付き定義。
+// Endpoint is the typed definition of one HTTP endpoint.
 //
-// Req はリクエストボディの型、Res は成功時レスポンスボディの型。ボディの型を
-// 型パラメータに固定することで、宣言したスキーマと実際のボディの乖離をコンパイル時に防ぐ。
+// Req is the request body type and Res the success response body type. Pinning
+// the body types as type parameters makes the compiler reject any drift between
+// the declared schema and the body the handler actually returns. Endpoints
+// without a body use NoBody for either parameter.
+//
+// # Which fields you actually have to fill in
+//
+// Only Handle is required to serve traffic. Every other field is marked below as
+// one of:
+//
+//   - Required — leaving it out is a bug.
+//   - Optional (runtime) — it changes how the endpoint behaves. Skipping it is a
+//     real choice, not just a documentation gap.
+//   - Optional (documentation only) — read solely by the generators. A project
+//     that does not generate documentation can skip all of these with no effect
+//     on behaviour; the generated documents simply show TODO in their place.
+//   - Required when ... — normally optional, but mandatory in the stated case.
+//
+// So an endpoint that never generates documentation only needs Handle, plus
+// whichever runtime fields it wants (validation rules, status, media type).
 type Endpoint[Req any, Res any] struct {
-	// --- 意味的散文(型から導けないので宣言で持つ。再生成で消えない) ---
-	Summary     string            // INDEX 概要 / 見出し直後の1文
-	Description string            // 追加の説明
-	FieldDocs   map[string]string // フィールド意味(ドット記法キー: "address.city" 等)
+	// --- Prose that cannot be derived from the types ---
+	// Declaring it here (rather than writing it into the generated Markdown)
+	// is what keeps it from being wiped out on the next generation.
 
-	// Task は INDEX の Task 列に出すクライアント意図ラベル(1-3語程度)。
-	// 同じクライアントタスクを担うエンドポイントは同一ラベルを再利用する(§3.2)。
+	// Summary is the one-line description used as the INDEX summary and as the
+	// sentence right below the endpoint heading.
+	//
+	// Optional (documentation only).
+	Summary string
+	// Description is a longer explanation of why the endpoint is called.
+	//
+	// Optional (documentation only).
+	Description string
+	// FieldDocs gives the meaning of individual body fields, keyed by the field
+	// path in dot / bracket notation ("address.city", "items[].id"). Keys that
+	// match no field are ignored.
+	//
+	// Optional (documentation only).
+	FieldDocs map[string]string
+
+	// Task is the client-intent label shown in the INDEX Task column (1-3 words).
+	// Endpoints serving the same client task reuse the same label.
+	//
+	// Optional (documentation only).
 	Task string
-	// AlsoRead は INDEX の "Also read" 列。このエンドポイントで併読すべき
-	// docs ルート相対の追加ファイル(ワークフロー等)。空なら none(§3.2)。
+	// AlsoRead lists extra files (workflows and the like) a caller should read
+	// together with this endpoint, as paths relative to the docs root.
+	//
+	// Optional (documentation only).
 	AlsoRead []string
-	// Related は §4.1 の `### Related`。前後に呼ぶ関連エンドポイントやワークフローを
-	// 自由記述の1行ずつで宣言する(例 "Fetch after creation: GET /users/{id}")。空なら none。
+	// Related declares endpoints or workflows called before or after this one,
+	// one free-form line each ("Fetch after creation: GET /users/{id}").
+	//
+	// Optional (documentation only).
 	Related []string
 
-	// IDPrefix は example 生成で、このリソースの id に使うプレフィックスを固定する
-	// (例 "usr")。空の場合はパス/フィールド名から自動導出する(単数形フルネーム)。
+	// IDPrefix pins the prefix used for this resource's ids in generated examples
+	// ("usr"). When empty the prefix is derived from the path or field name.
+	// It only affects example values, never real responses.
+	//
+	// Optional (documentation only).
 	IDPrefix string
 
-	// --- 検証(適用箇所ごとに分離) ---
-	BodyRules  []*rule.RuleSet
-	PathRules  []*rule.RuleSet
+	// --- Validation, separated by where it applies ---
+	// These do run: a violation makes the adapter answer 422 with field-level
+	// errors before Handle is ever called.
+
+	// BodyRules validates the parsed request body.
+	//
+	// Optional (runtime).
+	BodyRules []*rule.RuleSet
+	// PathRules validates path parameters, keyed by the `{name}` in the route.
+	//
+	// Optional (runtime).
+	PathRules []*rule.RuleSet
+	// QueryRules validates query parameters, keyed by the parameter name.
+	//
+	// Optional (runtime).
 	QueryRules []*rule.RuleSet
 
-	// --- レスポンス ---
-	Success         int          // 主たる成功ステータス(0 の場合は 200)
-	ResponseHeaders []HeaderSpec // docai の Response Headers 表の宣言ソース
-	Produces        string       // 出力形式を固定する場合のメディアタイプ(空=ネゴシエーション)
-	Responses       []ResponseSpec
+	// --- Response ---
 
-	// --- エラー ---
+	// Success is the primary success status. Zero means 200.
+	//
+	// Optional (runtime): it decides the status a caller actually receives.
+	Success int
+	// ResponseHeaders documents the headers a caller should read.
+	//
+	// Optional (documentation only): declaring a header here does NOT send it.
+	// Send the real header from Handle with rest.WithHeader.
+	ResponseHeaders []HeaderSpec
+	// Produces pins the response media type. Empty means content negotiation
+	// (JSON by default, chosen from the Accept header).
+	//
+	// Optional (runtime).
+	Produces string
+	// Responses declares success responses other than the primary one — the
+	// 200-or-201 upsert, the 202 that returns a different body, and so on.
+	//
+	// Required when Handle can answer with a status other than Success.
+	// The adapter checks every response against these declarations, so an
+	// undeclared status fails immediately in local, test and development
+	// environments (and is logged in staging and production). That check is what
+	// keeps the generated documentation from drifting away from the code.
+	Responses []ResponseSpec
+
+	// --- Errors ---
+
+	// Errors declares the errors specific to this endpoint. Errors shared by the
+	// whole API belong in the common conventions, not here.
+	//
+	// Optional (documentation only): the status actually returned comes from the
+	// error Handle returns (see HTTPError), not from this declaration.
 	Errors []ErrorSpec
 
-	// --- 振る舞い(型から導けない) ---
+	// --- Behaviour that cannot be derived from the types ---
+
+	// Behavior declares side effects, idempotency, preconditions and the
+	// authorization scopes the endpoint requires.
+	//
+	// Optional (documentation only) for now. Scopes will be enforced once
+	// authentication lands, at which point they stop being documentation-only.
 	Behavior BehaviorSpec
 
-	// Handle は検証済みのリクエストボディを受け取り、型付きの Result かエラーを返す。
+	// Handle receives the validated request body and returns a typed Result or an
+	// error. Use rest.NewResult for a body, restkit.NoContent for an empty one.
+	//
+	// Required.
 	Handle func(r *rest.Request, req *Req) (*rest.Result[Res], error)
 }
 
-// HeaderSpec は docai の `#### Response Headers` 表の1行を宣言する。
+// HeaderSpec declares one row of the response header table.
 type HeaderSpec struct {
-	Name    string
+	// Name is the header name as sent on the wire. Required.
+	Name string
+	// Meaning explains what the caller should do with it. Optional.
 	Meaning string
 }
 
-// ErrorSpec はこのエンドポイント固有のエラーを宣言する(docai の Errors 表)。
-// 共通エラー(CONVENTIONS.md)は宣言せず、このエンドポイント固有のものだけを宣言する(§4.1)。
+// ErrorSpec declares one error specific to an endpoint.
 type ErrorSpec struct {
-	Status       int    // HTTP ステータス(Errors 表の Status 列)
-	Code         string // 機械判定用コード(code 列)
-	Condition    string // 発生条件(Condition 列)
-	CallerAction string // 呼び出し側が取るべき対応。リトライ可否も含める(What the caller should do 列)
-	// BodyType は個別のエラー本文 example/フィールド表を出す型。共通エラー形から逸脱する場合や
-	// field-level エラーを返す場合に指定する(§4.1)。nil のときは表の1行のみ(共通形に従う)。
+	// Status is the HTTP status of this error. Required.
+	Status int
+	// Code is the machine-readable code clients branch on. Required.
+	Code string
+	// Condition states when the error occurs. Optional, but generated documents
+	// show TODO without it.
+	Condition string
+	// CallerAction states what the caller should do, including whether retrying
+	// is safe. Optional, but generated documents show TODO without it.
+	CallerAction string
+	// BodyType is the type of this error's body, used to render its own example
+	// and field table. Declare it when the error deviates from the common error
+	// shape or carries field-level details.
+	//
+	// Optional: when nil the error is documented as a single table row that
+	// follows the common error shape.
 	BodyType reflect.Type
 }
 
-// BehaviorSpec は docai の「振る舞い」節(型から導けない情報)を宣言する。
+// BehaviorSpec declares facts about an endpoint that no type can express.
 type BehaviorSpec struct {
-	SideEffects   []string
-	Idempotent    *bool // nil=未宣言(docai に TODO)
+	// SideEffects lists what the call changes besides its own response.
+	// Declare "none" explicitly rather than leaving it empty, so that readers can
+	// tell "nothing happens" from "nobody wrote it down".
+	SideEffects []string
+	// Idempotent states whether repeating the call is safe.
+	// nil means undeclared, which generated documents surface as TODO.
+	Idempotent *bool
+	// Preconditions lists what must already be true for the call to succeed.
 	Preconditions []string
-	Scopes        []string
+	// Scopes lists the authorization scopes the caller needs.
+	Scopes []string
 }
 
-// ResponseSpec は主レスポンス(Success + Res)以外の成功レスポンスを宣言する
-// (200/201 併存や 202 + 別ボディ型など、型からは導けないもの)。
+// ResponseSpec declares a success response other than the primary one
+// (Success + Res): the 200-or-201 upsert, a 202 with a different body, and so on.
+// None of this can be derived from the types, because the status is chosen inside
+// Handle and the condition exists only in the developer's head.
 type ResponseSpec struct {
-	Status   int
+	// Status is the HTTP status this response uses. Required.
+	Status int
+	// When states the condition that produces this status
+	// ("the user already existed"). Optional, but generated documents fall back
+	// to a generic description without it.
+	When string
+	// BodyType is the body type for this status. Optional: nil means no body,
+	// which is what 204 responses want.
 	BodyType reflect.Type
-	Headers  []HeaderSpec
-	When     string // 発生条件(docai に出す)
+	// Headers documents the headers sent with this status. Optional, and like
+	// Endpoint.ResponseHeaders it documents rather than sends them.
+	Headers []HeaderSpec
 }
 
-// EndpointDoc は apidoc が読むための、型情報 + 宣言メタの正規化ビュー。
-// Endpoint はジェネリックで直接リフレクションしづらいため、アダプタがこの
-// 非ジェネリックな構造体に変換して公開する。
+// EndpointDoc is the normalized, non-generic view of an endpoint's types and
+// declarations that apidoc reads. Endpoint itself is generic and awkward to
+// reflect over, so the adapter converts it into this shape.
 type EndpointDoc struct {
 	Summary     string
 	Description string
@@ -121,24 +239,27 @@ type EndpointDoc struct {
 	Behavior        BehaviorSpec
 }
 
-// Documented はドキュメント用メタを公開するアダプタが満たすインターフェース。
-// apidoc は rest.Controller をこのインターフェースに型アサートしてメタを取り出す。
+// Documented is satisfied by adapters that expose their documentation metadata.
+// apidoc type-asserts each rest.Controller to this interface to collect it;
+// controllers that do not implement it are documented as untyped.
 type Documented interface {
 	EndpointDoc() EndpointDoc
 }
 
-// NoBody はリクエストボディを持たないエンドポイント(GET/DELETE 等)の Req 型。
-// 例: Endpoint[NoBody, dto.GetUser]。パス/クエリの値は Handle 内で r.PathValue /
-// r.Query から取り、検証は PathRules / QueryRules に宣言する。
+// NoBody is the Req type for endpoints that take no request body (GET, DELETE
+// and friends), as in Endpoint[NoBody, dto.GetUser]. Read path and query values
+// inside Handle with r.PathValue / r.Query, and declare their validation in
+// PathRules / QueryRules.
 //
-// レスポンスボディが無いエンドポイント(204 No Content 等)は Res 型にも NoBody を使い、
-// Handle では NoContent() を返す(例: Endpoint[NoBody, NoBody])。
+// Endpoints with no response body (204 No Content and the like) use NoBody for
+// Res as well and return NoContent() from Handle, as in Endpoint[NoBody, NoBody].
 type NoBody struct{}
 
-// NoContent は本文の無いレスポンス(204 No Content、DELETE の空レスポンス等)を返す。
-// rest.NoContent[NoBody] の薄いラッパーで、型引数を書かずに使える。
+// NoContent returns a response with no body (204 No Content, an empty DELETE
+// response, and so on). It is a thin wrapper over rest.NoContent[NoBody] that
+// saves writing the type argument.
 //
-//	// Endpoint[Req, restkit.NoBody]{ Success: http.StatusNoContent, ... } の Handle で:
+//	// inside Handle of Endpoint[Req, restkit.NoBody]{ Success: http.StatusNoContent, ... }:
 //	return restkit.NoContent(), nil
 func NoContent(opts ...rest.ResultOption) *rest.Result[NoBody] {
 	return rest.NoContent[NoBody](opts...)
