@@ -156,6 +156,22 @@ var _ = Describe("SchemaFromType", func() {
 		Expect(schemaAt(schema, "items").Items.GoType).To(HaveSuffix("item"))
 	})
 
+	// Two packages can share a base name (several `dto` packages), so the type
+	// name alone is not unique. The package path is what disambiguates them.
+	It("keeps the package path alongside the type name", func() {
+		Expect(schema.PkgPath).To(HaveSuffix("plamo/apidoc_test"))
+		Expect(schemaAt(schema, "address").PkgPath).To(Equal(schema.PkgPath))
+	})
+
+	It("leaves the type name and package path empty for an anonymous struct", func() {
+		s := apidoc.SchemaFromType(reflect.TypeFor[struct {
+			Inline string `json:"inline"`
+		}]())
+
+		Expect(s.GoType).To(BeEmpty())
+		Expect(s.PkgPath).To(BeEmpty())
+	})
+
 	It("records the value type of a dynamic-key object (map)", func() {
 		labels := schemaAt(schema, "labels")
 

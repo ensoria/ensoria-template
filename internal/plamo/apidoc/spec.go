@@ -113,8 +113,11 @@ type Schema struct {
 	Type   SchemaType `json:"type,omitempty"`   // 空 = 任意の型(interface{} 等)
 	Format string     `json:"format,omitempty"` // date-time 等。空=なし
 	// GoType は object ノードの Go 型名(例 "dto.User")。無名構造体では空。
-	// 将来 OpenAPI の components/$ref に名前を付けるための素材。
-	GoType      string       `json:"go_type,omitempty"`
+	// OpenAPI の components/$ref に名前を付けるための素材。
+	GoType string `json:"go_type,omitempty"`
+	// PkgPath は GoType のパッケージ import パス。基底名が同じパッケージ(複数の dto)が
+	// あると GoType だけでは一意にならないため、衝突の判別に使う。
+	PkgPath     string       `json:"pkg_path,omitempty"`
 	Nullable    bool         `json:"nullable,omitempty"` // ポインタ由来(null を取り得る)
 	Constraints []Constraint `json:"constraints,omitempty"`
 	// Fields は Type==object のプロパティ(宣言順)。動的キーの object では空。

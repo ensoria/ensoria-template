@@ -42,6 +42,7 @@ func buildSchema(t reflect.Type, visiting map[reflect.Type]bool) *Schema {
 	case t.Kind() == reflect.Struct:
 		s.Type = TypeObject
 		s.GoType = goTypeName(t)
+		s.PkgPath = t.PkgPath()
 		if visiting[t] {
 			// 循環参照: これ以上展開しない(型名は残すので参照先は分かる)。
 			return s
