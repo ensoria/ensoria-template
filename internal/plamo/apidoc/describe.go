@@ -253,9 +253,11 @@ func convertSecurity(s *restkit.SecuritySpec) *Security {
 }
 
 // resourceOf はパスの第1セグメントを単数形にしてリソース名を返す(例 "/users/{id}" → "user")。
+// パラメータと、リソース名を持たない印である `_` は読み飛ばす
+// (`_` は管理用エンドポイントの接頭辞で、それ自体は何のリソースでもない)。
 func resourceOf(path string) string {
 	for _, seg := range strings.Split(path, "/") {
-		if seg == "" || strings.HasPrefix(seg, "{") {
+		if seg == "" || seg == "_" || strings.HasPrefix(seg, "{") {
 			continue
 		}
 		return singular(seg)

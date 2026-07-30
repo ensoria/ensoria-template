@@ -12,7 +12,6 @@ import (
 	"github.com/ensoria/ensoria-template/internal/middleware"
 	"github.com/ensoria/ensoria-template/internal/plamo/authkit"
 	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
-	"github.com/ensoria/ensoria-template/internal/plamo/restkit"
 	"github.com/ensoria/loggear/pkg/loggear"
 	"github.com/ensoria/rest/pkg/mw"
 	"github.com/ensoria/rest/pkg/pipeline"
@@ -70,12 +69,10 @@ func CreateHTTPPipeline(modules []*rest.Module, verifier authkit.Verifier) *pipe
 		log.Fatalf("default config parameters not found: %s", err)
 	}
 
-	// 宣言と設定の食い違いを起動時に潰す。要認証のエンドポイントがあるのに
-	// 呼び出し元を検証する手段が無いと、全リクエストが 401 になるだけで原因が見えない。
-	if restkit.RequiresAuthentication(modules) && !configParams.Auth.Configured() {
-		log.Fatalf("endpoints require an authenticated caller but no authentication is configured: " +
-			"set AUTH_MODE and AUTH_SECRET (or AUTH_JWKS_URL), or AUTH_API_KEYS, " +
-			"or declare the endpoints public with Endpoint.Security")
+	// 宣言と設定の食い違いを起動時に潰す。放っておくと全リクエストが拒否されるだけで、
+	// 原因が見えない。
+	if err := checkAuthConfiguration(modules, configParams.Auth); err != nil {
+		log.Fatalf("%s", err)
 	}
 
 	cors := &mw.CORSSettings{

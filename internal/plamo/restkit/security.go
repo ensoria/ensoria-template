@@ -59,3 +59,37 @@ func RequiresAuthentication(modules []*rest.Module) bool {
 	}
 	return false
 }
+
+// DeclaredSchemes returns every credential kind the given modules require, in
+// the order they are first declared.
+//
+// The application compares it against what the configuration can verify: an
+// endpoint that insists on a kind of credential nothing checks would refuse
+// every caller, which is a misconfiguration worth catching at startup rather
+// than on the first request.
+func DeclaredSchemes(modules []*rest.Module) []string {
+	var schemes []string
+	seen := map[string]bool{}
+	for _, m := range modules {
+		if m == nil {
+			continue
+		}
+		for _, ctrl := range []rest.Controller{m.Get, m.Post, m.Put, m.Patch, m.Delete} {
+			doc, ok := ctrl.(Documented)
+			if !ok {
+				continue
+			}
+			security := doc.EndpointDoc().Security
+			if security == nil || security.Public {
+				continue
+			}
+			for _, scheme := range security.Schemes {
+				if !seen[scheme] {
+					seen[scheme] = true
+					schemes = append(schemes, scheme)
+				}
+			}
+		}
+	}
+	return schemes
+}

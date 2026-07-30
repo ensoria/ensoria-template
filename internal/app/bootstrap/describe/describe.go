@@ -21,13 +21,16 @@ import (
 	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
 	"github.com/ensoria/mb/pkg/mb"
 	"github.com/ensoria/rest/pkg/rest"
+	"github.com/ensoria/scheduler/pkg/scheduler"
 	"github.com/ensoria/worker/pkg/job"
 	"github.com/ensoria/worker/pkg/worker"
 	"go.uber.org/fx"
 
 	// モジュールの init() でコンストラクタ(repository/service/controller/module)を登録する。
-	// server が配信するものと同じ集合(module + query)を取り込む —— 取りこぼすと、
-	// 実際には存在するエンドポイントが生成ドキュメントから静かに消える。
+	// アプリが配信するものと同じ集合を取り込む —— 取りこぼすと、実際には存在する
+	// エンドポイントが生成ドキュメントから静かに消える。
+	_ "github.com/ensoria/ensoria-template/internal/app/scheduler/api"
+	_ "github.com/ensoria/ensoria-template/internal/app/worker/api"
 	_ "github.com/ensoria/ensoria-template/internal/module"
 	_ "github.com/ensoria/ensoria-template/internal/query"
 )
@@ -59,6 +62,11 @@ func resolveHTTPModules() ([]*rest.Module, error) {
 		fx.Provide(
 			func() mb.Publish { return stubPublish },
 			func() worker.Enqueuer { return stubEnqueuer{} },
+			// 管理系エンドポイントは *scheduler.Scheduler / *worker.Worker を受け取って
+			// エンドポイントを組むだけで、describe は Handle を実行しない。実物を作ると
+			// Redis と DB が要るので、値としてだけ存在するゼロ値を渡す。
+			func() *scheduler.Scheduler { return &scheduler.Scheduler{} },
+			func() *worker.Worker { return &worker.Worker{} },
 		),
 		fx.Populate(fx.Annotate(&modules, fx.ParamTags(dikit.GroupTagHttpModules))),
 		fx.NopLogger,
