@@ -7,14 +7,6 @@ type JobStatus struct {
 	Status string `json:"status"`
 }
 
-type JobCancelled struct {
-	Id string `json:"jobId"`
-}
-
-type JobControlError struct {
-	Message string `json:"message"`
-}
-
 type DeadLetterJobList struct {
 	Jobs  []*job.JobData `json:"jobs"`
 	Count int            `json:"count"`

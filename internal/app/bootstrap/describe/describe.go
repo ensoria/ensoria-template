@@ -24,7 +24,10 @@ import (
 	"go.uber.org/fx"
 
 	// モジュールの init() でコンストラクタ(repository/service/controller/module)を登録する。
+	// server が配信するものと同じ集合(module + query)を取り込む —— 取りこぼすと、
+	// 実際には存在するエンドポイントが生成ドキュメントから静かに消える。
 	_ "github.com/ensoria/ensoria-template/internal/module"
+	_ "github.com/ensoria/ensoria-template/internal/query"
 )
 
 // Build は HTTP モジュールを実インフラなしで解決し、APISpec を返す。

@@ -1,170 +1,140 @@
 package http
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 
 	"github.com/ensoria/ensoria-template/internal/app/scheduler/api/controller/dto"
+	"github.com/ensoria/ensoria-template/internal/plamo/restkit"
 	"github.com/ensoria/ensoria-template/internal/plamo/vkit"
 	"github.com/ensoria/rest/pkg/rest"
 	"github.com/ensoria/scheduler/pkg/scheduler"
 	"github.com/ensoria/validator/pkg/rule"
 )
 
-// REFACTOR: 全体的に重複コードが多いので整理する
+// The four task-control endpoints differ only in the scheduler call they make
+// and in whether they take a reason, so they are built from one shared shape.
 
-type PauseTask struct {
-	scheduler *scheduler.Scheduler
-}
-
-func NewPauseTask(scheduler *scheduler.Scheduler) *PauseTask {
-	return &PauseTask{
-		scheduler: scheduler,
+// nameRules validates the `name` path value. Declaring it here means the
+// adapter answers 422 with field errors before Handle runs; no endpoint has to
+// check for a missing task name itself.
+func nameRules() []*rule.RuleSet {
+	return []*rule.RuleSet{
+		{Field: "name", Rules: []rule.Rule{vkit.Required()}},
 	}
 }
 
-func (c *PauseTask) Handle(r *rest.Request) *rest.Response {
-	taskName, exists := r.PathValue("name")
-	if !exists {
-		return &rest.Response{
-			Code: http.StatusBadRequest,
-			Body: &dto.TaskControlError{Message: "task name is required"},
-		}
+// reasonRules requires the reason recorded alongside a pause or a disable —
+// the next operator to look at the task needs to know why it was stopped.
+func reasonRules() []*rule.RuleSet {
+	return []*rule.RuleSet{
+		{Field: "reason", Rules: []rule.Rule{vkit.Required()}},
 	}
+}
 
-	pt, msgs := vkit.RestRequestBody[dto.PauseTask](
-		r,
-		&rule.RuleSet{Field: "reason", Rules: []rule.Rule{vkit.Required()}},
+// controlErrors is the error set every task-control endpoint can answer with.
+func controlErrors() []restkit.ErrorSpec {
+	return []restkit.ErrorSpec{
+		{
+			Status:       http.StatusConflict,
+			Code:         CodeTaskControlFailed,
+			Condition:    "The scheduler refused the change (no such task, or the task is already in that state)",
+			CallerAction: "Read the current state with GET /_/tasks/{name} before retrying.",
+		},
+	}
+}
+
+// newControl builds one task-control endpoint.
+//
+// action performs the change and receives the task name taken from the path.
+// bodyRules is nil for the endpoints that take no request body.
+func newControl[Req any](
+	summary, task, effect, done string,
+	bodyRules []*rule.RuleSet,
+	action func(ctx context.Context, name string, req *Req) error,
+) *restkit.Endpoint[Req, dto.TaskControl] {
+	return &restkit.Endpoint[Req, dto.TaskControl]{
+		Summary:   summary,
+		Task:      task,
+		Success:   http.StatusOK,
+		Security:  &restkit.SecuritySpec{Scopes: []string{ScopeTasksWrite}},
+		PathRules: nameRules(),
+		BodyRules: bodyRules,
+		// All four are idempotent: applying the same state twice leaves the
+		// task as it already is.
+		Behavior: restkit.BehaviorSpec{
+			SideEffects: []string{effect},
+			Idempotent:  new(true),
+		},
+		Errors: controlErrors(),
+		Handle: func(r *rest.Request, req *Req) (*rest.Result[dto.TaskControl], error) {
+			name, _ := r.PathValue("name")
+			if err := action(r.Context(), name, req); err != nil {
+				// The scheduler does not distinguish "no such task" from
+				// "cannot do that now", so both are reported as a conflict and
+				// the message carries the detail.
+				return nil, restkit.NewError(http.StatusConflict, CodeTaskControlFailed, err.Error())
+			}
+			return rest.NewResult(&dto.TaskControl{
+				Message: fmt.Sprintf("task [%s] %s", name, done),
+			}), nil
+		},
+	}
+}
+
+// NewPauseTask pauses a task until it is resumed (typed Endpoint).
+func NewPauseTask(sch *scheduler.Scheduler) *restkit.Endpoint[dto.PauseTask, dto.TaskControl] {
+	return newControl(
+		"Pause a scheduled task",
+		"pause a scheduled task",
+		"stops the task from running until it is resumed",
+		"paused",
+		reasonRules(),
+		func(ctx context.Context, name string, req *dto.PauseTask) error {
+			return sch.PauseTask(ctx, name, req.Reason)
+		},
 	)
-	if msgs != nil {
-		return &rest.Response{
-			Code: http.StatusBadRequest,
-			Body: msgs,
-		}
-	}
-
-	ctx := r.Context()
-	if err := c.scheduler.PauseTask(ctx, taskName, pt.Reason); err != nil {
-		return &rest.Response{
-			Code: http.StatusInternalServerError,
-			Body: &dto.TaskControlError{Message: err.Error()},
-		}
-	}
-
-	return &rest.Response{
-		Code: http.StatusOK,
-		Body: &dto.TaskControl{Message: fmt.Sprintf("task [%s] paused", taskName)},
-	}
-
 }
 
-type ResumeTask struct {
-	scheduler *scheduler.Scheduler
-}
-
-func NewResumeTask(scheduler *scheduler.Scheduler) *ResumeTask {
-	return &ResumeTask{
-		scheduler: scheduler,
-	}
-}
-
-func (c *ResumeTask) Handle(r *rest.Request) *rest.Response {
-	taskName, exists := r.PathValue("name")
-	if !exists {
-		return &rest.Response{
-			Code: http.StatusBadRequest,
-			Body: &dto.TaskControlError{Message: "task name is required"},
-		}
-	}
-
-	ctx := r.Context()
-	if err := c.scheduler.ResumeTask(ctx, taskName); err != nil {
-		return &rest.Response{
-			Code: http.StatusInternalServerError,
-			Body: &dto.TaskControlError{Message: err.Error()},
-		}
-	}
-
-	return &rest.Response{
-		Code: http.StatusOK,
-		Body: &dto.TaskControl{Message: fmt.Sprintf("task [%s] resumed", taskName)},
-	}
-}
-
-type DisableTask struct {
-	scheduler *scheduler.Scheduler
-}
-
-func NewDisableTask(scheduler *scheduler.Scheduler) *DisableTask {
-	return &DisableTask{
-		scheduler: scheduler,
-	}
-}
-
-func (c *DisableTask) Handle(r *rest.Request) *rest.Response {
-	taskName, exists := r.PathValue("name")
-	if !exists {
-		return &rest.Response{
-			Code: http.StatusBadRequest,
-			Body: &dto.TaskControlError{Message: "task name is required"},
-		}
-	}
-
-	dt, msgs := vkit.RestRequestBody[dto.DisableTask](
-		r,
-		&rule.RuleSet{Field: "reason", Rules: []rule.Rule{vkit.Required()}},
+// NewResumeTask resumes a paused task (typed Endpoint).
+func NewResumeTask(sch *scheduler.Scheduler) *restkit.Endpoint[restkit.NoBody, dto.TaskControl] {
+	return newControl(
+		"Resume a paused task",
+		"resume a scheduled task",
+		"lets the task run on its schedule again",
+		"resumed",
+		nil,
+		func(ctx context.Context, name string, _ *restkit.NoBody) error {
+			return sch.ResumeTask(ctx, name)
+		},
 	)
-	if msgs != nil {
-		return &rest.Response{
-			Code: http.StatusBadRequest,
-			Body: msgs,
-		}
-	}
-
-	ctx := r.Context()
-	if err := c.scheduler.DisableTask(ctx, taskName, dt.Reason); err != nil {
-		return &rest.Response{
-			Code: http.StatusInternalServerError,
-			Body: &dto.TaskControlError{Message: err.Error()},
-		}
-	}
-
-	return &rest.Response{
-		Code: http.StatusOK,
-		Body: &dto.TaskControl{Message: fmt.Sprintf("task [%s] disabled", taskName)},
-	}
-
 }
 
-type EnableTask struct {
-	scheduler *scheduler.Scheduler
+// NewDisableTask disables a task until it is enabled again (typed Endpoint).
+func NewDisableTask(sch *scheduler.Scheduler) *restkit.Endpoint[dto.DisableTask, dto.TaskControl] {
+	return newControl(
+		"Disable a scheduled task",
+		"disable a scheduled task",
+		"stops the task from running until it is enabled again",
+		"disabled",
+		reasonRules(),
+		func(ctx context.Context, name string, req *dto.DisableTask) error {
+			return sch.DisableTask(ctx, name, req.Reason)
+		},
+	)
 }
 
-func NewEnableTask(scheduler *scheduler.Scheduler) *EnableTask {
-	return &EnableTask{
-		scheduler: scheduler,
-	}
-}
-
-func (c *EnableTask) Handle(r *rest.Request) *rest.Response {
-	taskName, exists := r.PathValue("name")
-	if !exists {
-		return &rest.Response{
-			Code: http.StatusBadRequest,
-			Body: &dto.TaskControlError{Message: "task name is required"},
-		}
-	}
-
-	ctx := r.Context()
-	if err := c.scheduler.EnableTask(ctx, taskName); err != nil {
-		return &rest.Response{
-			Code: http.StatusInternalServerError,
-			Body: &dto.TaskControlError{Message: err.Error()},
-		}
-	}
-
-	return &rest.Response{
-		Code: http.StatusOK,
-		Body: &dto.TaskControl{Message: fmt.Sprintf("task [%s] enabled", taskName)},
-	}
+// NewEnableTask enables a disabled task (typed Endpoint).
+func NewEnableTask(sch *scheduler.Scheduler) *restkit.Endpoint[restkit.NoBody, dto.TaskControl] {
+	return newControl(
+		"Enable a disabled task",
+		"enable a scheduled task",
+		"lets the task run on its schedule again",
+		"enabled",
+		nil,
+		func(ctx context.Context, name string, _ *restkit.NoBody) error {
+			return sch.EnableTask(ctx, name)
+		},
+	)
 }

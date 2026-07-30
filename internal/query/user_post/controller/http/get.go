@@ -3,29 +3,37 @@ package http
 import (
 	"net/http"
 
+	"github.com/ensoria/ensoria-template/internal/plamo/restkit"
+	"github.com/ensoria/ensoria-template/internal/plamo/vkit"
 	"github.com/ensoria/ensoria-template/internal/query/user_post/dto"
 	"github.com/ensoria/ensoria-template/internal/query/user_post/service"
 	"github.com/ensoria/rest/pkg/rest"
+	"github.com/ensoria/validator/pkg/rule"
 )
 
-type Get struct {
-	Service service.UserPostService
-}
+// NewGet reads the posts of one user (typed Endpoint).
+//
+// This endpoint declares no Security, which means a verified caller is
+// required: an endpoint whose author never decided who may call it ends up
+// closed rather than open.
+func NewGet(svc service.UserPostService) *restkit.Endpoint[restkit.NoBody, dto.GetUserPost] {
+	return &restkit.Endpoint[restkit.NoBody, dto.GetUserPost]{
+		Summary:  "Fetch the posts of one user",
+		Task:     "read the posts of a user",
+		IDPrefix: "usr",
+		Success:  http.StatusOK,
+		PathRules: []*rule.RuleSet{
+			{Field: "id", Rules: []rule.Rule{vkit.Required()}},
+		},
+		Behavior: restkit.BehaviorSpec{
+			SideEffects: []string{"none"},
+			Idempotent:  new(true),
+		},
+		Handle: func(r *rest.Request, _ *restkit.NoBody) (*rest.Result[dto.GetUserPost], error) {
+			// TODO: read the id from the path instead of the fixed value below.
+			user := svc.GetByID(1)
 
-func NewGet(service service.UserPostService) *Get {
-	return &Get{
-		Service: service,
-	}
-}
-
-func (c *Get) Handle(r *rest.Request) *rest.Response {
-
-	user := c.Service.GetByID(1)
-
-	return &rest.Response{
-		Code: http.StatusOK,
-		Body: &dto.GetUserPost{
-			ID: user.ID,
+			return rest.NewResult(&dto.GetUserPost{ID: user.ID}), nil
 		},
 	}
 }

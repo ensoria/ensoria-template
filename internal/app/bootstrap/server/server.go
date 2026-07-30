@@ -44,7 +44,7 @@ func Run(envVal *string) error {
 		storage.NewDefaultFileSystem,
 
 		// controllers
-		authApp.NewVerifier,
+		authApp.NewVerifier(envVal),
 		httpApp.InjectHTTPModules(httpApp.CreateHTTPPipeline),
 		wsApp.InjectWSModules(wsApp.CreateWSRouter),
 		mbApp.NewSubscribe,

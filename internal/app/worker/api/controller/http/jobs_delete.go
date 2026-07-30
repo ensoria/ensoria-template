@@ -3,40 +3,42 @@ package http
 import (
 	"net/http"
 
-	"github.com/ensoria/ensoria-template/internal/app/worker/api/dto"
+	"github.com/ensoria/ensoria-template/internal/plamo/restkit"
 	"github.com/ensoria/rest/pkg/rest"
 	"github.com/ensoria/worker/pkg/worker"
 )
 
-type CancelJob struct {
-	worker *worker.Worker
-}
-
-func NewCancelJob(worker *worker.Worker) *CancelJob {
-	return &CancelJob{
-		worker: worker,
-	}
-}
-
-func (c *CancelJob) Handle(r *rest.Request) *rest.Response {
-	jobId, exists := r.PathValue("id")
-	if !exists {
-		return &rest.Response{
-			Code: http.StatusBadRequest,
-			Body: &dto.JobControlError{Message: "job id is required"},
-		}
-	}
-
-	ctx := r.Context()
-	if err := c.worker.Cancel(ctx, jobId); err != nil {
-		return &rest.Response{
-			Code: http.StatusNotFound,
-			Body: &dto.JobControlError{Message: err.Error()},
-		}
-	}
-
-	return &rest.Response{
-		Code: http.StatusNoContent,
-		Body: dto.JobCancelled{Id: jobId},
+// NewCancelJob cancels a queued or running job (typed Endpoint).
+//
+// The response is 204 No Content, so both the request and the response type are
+// restkit.NoBody. The previous implementation declared 204 and still wrote a
+// body, which a conforming client discards.
+func NewCancelJob(wrk *worker.Worker) *restkit.Endpoint[restkit.NoBody, restkit.NoBody] {
+	return &restkit.Endpoint[restkit.NoBody, restkit.NoBody]{
+		Summary:   "Cancel a job",
+		Task:      "cancel a job",
+		Success:   http.StatusNoContent,
+		Security:  &restkit.SecuritySpec{Scopes: []string{ScopeJobsWrite}},
+		PathRules: idRules(),
+		Behavior: restkit.BehaviorSpec{
+			SideEffects: []string{"stops the job from running"},
+			// Cancelling an already cancelled job leaves it cancelled.
+			Idempotent: new(true),
+		},
+		Errors: []restkit.ErrorSpec{
+			{
+				Status:       http.StatusNotFound,
+				Code:         CodeJobNotFound,
+				Condition:    "No job is stored under that id",
+				CallerAction: "Check the id. Do not retry.",
+			},
+		},
+		Handle: func(r *rest.Request, _ *restkit.NoBody) (*rest.Result[restkit.NoBody], error) {
+			id, _ := r.PathValue("id")
+			if err := wrk.Cancel(r.Context(), id); err != nil {
+				return nil, restkit.NewError(http.StatusNotFound, CodeJobNotFound, err.Error())
+			}
+			return restkit.NoContent(), nil
+		},
 	}
 }

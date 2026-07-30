@@ -6,7 +6,9 @@ import (
 	"github.com/ensoria/ensoria-template/internal/app/scheduler/api/controller/http"
 	"github.com/ensoria/ensoria-template/internal/app/scheduler/api/middleware"
 	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
+	"github.com/ensoria/ensoria-template/internal/plamo/restkit"
 	"github.com/ensoria/rest/pkg/rest"
+	"github.com/ensoria/scheduler/pkg/scheduler"
 )
 
 const ModuleName = "default"
@@ -17,72 +19,67 @@ func Params() (*appconfig.Parameters, error) {
 
 // TODO: add healthcheck endpoint
 
-func NewListTasksModule(listTasks *http.ListTasks) *rest.Module {
+// The module constructors build their endpoints here rather than receiving them
+// through dependency injection. A typed endpoint is identified by its request
+// and response types, and several of these endpoints share the same pair
+// (Resume and Enable are both Endpoint[NoBody, TaskControl]), which the
+// container cannot tell apart. Building them here keeps the wiring unambiguous.
+
+func NewListTasksModule(sch *scheduler.Scheduler) *rest.Module {
 	return &rest.Module{
 		Path:        "/_/tasks",
-		Get:         listTasks,
+		Get:         restkit.NewController(http.NewListTasks(sch)),
 		Middlewares: []rest.Middleware{middleware.SysAdminOnly},
 	}
 }
 
-func NewTaskStateModule(getStatus *http.GetStatus) *rest.Module {
+func NewTaskStateModule(sch *scheduler.Scheduler) *rest.Module {
 	return &rest.Module{
 		Path:        "/_/tasks/{name}",
-		Get:         getStatus,
+		Get:         restkit.NewController(http.NewGetStatus(sch)),
 		Middlewares: []rest.Middleware{middleware.SysAdminOnly},
 	}
 }
 
-func NewPauseTaskModule(pauseTask *http.ResumeTask) *rest.Module {
+func NewPauseTaskModule(sch *scheduler.Scheduler) *rest.Module {
 	return &rest.Module{
 		Path:        "/_/tasks/{name}/pause",
-		Post:        pauseTask,
+		Post:        restkit.NewController(http.NewPauseTask(sch)),
 		Middlewares: []rest.Middleware{middleware.SysAdminOnly},
 	}
 }
 
-func NewResumeTaskModule(resumeTask *http.ResumeTask) *rest.Module {
+func NewResumeTaskModule(sch *scheduler.Scheduler) *rest.Module {
 	return &rest.Module{
 		Path:        "/_/tasks/{name}/resume",
-		Post:        resumeTask,
+		Post:        restkit.NewController(http.NewResumeTask(sch)),
 		Middlewares: []rest.Middleware{middleware.SysAdminOnly},
 	}
 }
 
-func NewDisableTaskModule(disableTask *http.DisableTask) *rest.Module {
+func NewDisableTaskModule(sch *scheduler.Scheduler) *rest.Module {
 	return &rest.Module{
 		Path:        "/_/tasks/{name}/disable",
-		Post:        disableTask,
+		Post:        restkit.NewController(http.NewDisableTask(sch)),
 		Middlewares: []rest.Middleware{middleware.SysAdminOnly},
 	}
 }
 
-func NewEnableTaskModule(enableTask *http.EnableTask) *rest.Module {
+func NewEnableTaskModule(sch *scheduler.Scheduler) *rest.Module {
 	return &rest.Module{
 		Path:        "/_/tasks/{name}/enable",
-		Post:        enableTask,
+		Post:        restkit.NewController(http.NewEnableTask(sch)),
 		Middlewares: []rest.Middleware{middleware.SysAdminOnly},
 	}
 }
 
 func init() {
 	dikit.AppendConstructors([]any{
-		http.NewListTasks,
 		dikit.AsHTTPModule(NewListTasksModule),
-
-		http.NewGetStatus,
 		dikit.AsHTTPModule(NewTaskStateModule),
-
-		http.NewPauseTask,
 		dikit.AsHTTPModule(NewPauseTaskModule),
-
-		http.NewResumeTask,
 		dikit.AsHTTPModule(NewResumeTaskModule),
-
-		http.NewDisableTask,
 		dikit.AsHTTPModule(NewDisableTaskModule),
-
-		http.NewEnableTask,
 		dikit.AsHTTPModule(NewEnableTaskModule),
 	})
 }

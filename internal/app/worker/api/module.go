@@ -6,7 +6,9 @@ import (
 	"github.com/ensoria/ensoria-template/internal/app/worker/api/controller/http"
 	"github.com/ensoria/ensoria-template/internal/app/worker/api/middleware"
 	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
+	"github.com/ensoria/ensoria-template/internal/plamo/restkit"
 	"github.com/ensoria/rest/pkg/rest"
+	"github.com/ensoria/worker/pkg/worker"
 )
 
 const ModuleName = "default"
@@ -15,99 +17,86 @@ func Params() (*appconfig.Parameters, error) {
 	return registry.ModuleParams(ModuleName)
 }
 
-func NewListJobsModule(get *http.ListJobs) *rest.Module {
+// The module constructors build their endpoints here rather than receiving them
+// through dependency injection. A typed endpoint is identified by its request
+// and response types, and several of these endpoints share the same pair (both
+// retry endpoints are Endpoint[NoBody, DeadLetterJobRetry]), which the
+// container cannot tell apart. Building them here keeps the wiring unambiguous.
+
+func NewListJobsModule(wrk *worker.Worker) *rest.Module {
 	return &rest.Module{
 		Path:        "/_/jobs",
-		Get:         get,
+		Get:         restkit.NewController(http.NewListJobs(wrk)),
 		Middlewares: []rest.Middleware{middleware.SysAdminOnly},
 	}
 }
 
-func NewJobStatusModule(get *http.JobStatus) *rest.Module {
+func NewJobStatusModule(wrk *worker.Worker) *rest.Module {
 	return &rest.Module{
 		Path:        "/_/jobs/{id}/status",
-		Get:         get,
+		Get:         restkit.NewController(http.NewJobStatus(wrk)),
 		Middlewares: []rest.Middleware{middleware.SysAdminOnly},
 	}
 }
 
-func NewCancelJobModule(cancel *http.CancelJob) *rest.Module {
+func NewCancelJobModule(wrk *worker.Worker) *rest.Module {
 	return &rest.Module{
 		Path:        "/_/jobs/{id}",
-		Delete:      cancel,
+		Delete:      restkit.NewController(http.NewCancelJob(wrk)),
 		Middlewares: []rest.Middleware{middleware.SysAdminOnly},
 	}
 }
 
-func NewListDeadLetterJobsModule(list *http.ListDeadLetterJobs) *rest.Module {
+func NewListDeadLetterJobsModule(wrk *worker.Worker) *rest.Module {
 	return &rest.Module{
 		Path:        "/_/dead-letter-jobs",
-		Get:         list,
+		Get:         restkit.NewController(http.NewListDeadLetterJobs(wrk)),
 		Middlewares: []rest.Middleware{middleware.SysAdminOnly},
 	}
 }
 
-func NewGetDeadLetterJobModule(
-	get *http.GetDeadLetterJobs,
-	delete *http.DeleteDeadLetterJob,
-) *rest.Module {
+func NewGetDeadLetterJobModule(wrk *worker.Worker) *rest.Module {
 	return &rest.Module{
 		Path:        "/_/dead-letter-jobs/{id}",
-		Get:         get,
-		Delete:      delete,
+		Get:         restkit.NewController(http.NewGetDeadLetterJobs(wrk)),
+		Delete:      restkit.NewController(http.NewDeleteDeadLetterJob(wrk)),
 		Middlewares: []rest.Middleware{middleware.SysAdminOnly},
 	}
 }
 
-func NewRetryDeadLetterJobModule(retry *http.RetryDeadLetterJob) *rest.Module {
+func NewRetryDeadLetterJobModule(wrk *worker.Worker) *rest.Module {
 	return &rest.Module{
 		Path:        "/_/dead-letter-jobs/{id}/retry",
-		Post:        retry,
+		Post:        restkit.NewController(http.NewRetryDeadLetterJob(wrk)),
 		Middlewares: []rest.Middleware{middleware.SysAdminOnly},
 	}
 }
 
-func NewRetryDeadLetterJobsByNameModule(retryByName *http.RetryDeadLetterJobsByName) *rest.Module {
+func NewRetryDeadLetterJobsByNameModule(wrk *worker.Worker) *rest.Module {
 	return &rest.Module{
 		Path:        "/_/dead-letter-jobs/retry-by-name",
-		Post:        retryByName,
+		Post:        restkit.NewController(http.NewRetryDeadLetterJobsByName(wrk)),
 		Middlewares: []rest.Middleware{middleware.SysAdminOnly},
 	}
 }
 
-func NewRetryAllDeadLetterJobsModule(retryAll *http.RetryAllDeadLetterJobs) *rest.Module {
+func NewRetryAllDeadLetterJobsModule(wrk *worker.Worker) *rest.Module {
 	return &rest.Module{
 		Path:        "/_/dead-letter-jobs/retry-all",
-		Post:        retryAll,
+		Post:        restkit.NewController(http.NewRetryAllDeadLetterJobs(wrk)),
 		Middlewares: []rest.Middleware{middleware.SysAdminOnly},
 	}
 }
 
 func init() {
 	dikit.AppendConstructors([]any{
-		http.NewListJobs,
 		dikit.AsHTTPModule(NewListJobsModule),
-
-		http.NewJobStatus,
 		dikit.AsHTTPModule(NewJobStatusModule),
-
-		http.NewCancelJob,
 		dikit.AsHTTPModule(NewCancelJobModule),
-
-		http.NewListDeadLetterJobs,
 		dikit.AsHTTPModule(NewListDeadLetterJobsModule),
-
-		http.NewGetDeadLetterJobs,
-		http.NewDeleteDeadLetterJob,
 		dikit.AsHTTPModule(NewGetDeadLetterJobModule),
-
-		http.NewRetryDeadLetterJob,
 		dikit.AsHTTPModule(NewRetryDeadLetterJobModule),
-
-		http.NewRetryDeadLetterJobsByName,
 		dikit.AsHTTPModule(NewRetryDeadLetterJobsByNameModule),
-
-		http.NewRetryAllDeadLetterJobs,
 		dikit.AsHTTPModule(NewRetryAllDeadLetterJobsModule),
 	})
 }
