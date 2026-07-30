@@ -35,13 +35,39 @@ var MaxLength = rule.CreateStrMaxLength(
 		"en": "exceeds maximum length of %d characters",
 	})
 
-// 数値フィールドの下限・上限。
+// NotNil はフィールドが指定されたことを検証する。型を問わない。
 //
-// JSON では数値フィールドの「未指定」と 0 を区別できない(ポインタでない限り、
-// 欠けたキーはゼロ値になる)ため、数値に Required は使えない。実質的な必須は
-// MinValue(1) のように「取り得ない値を弾く」形で表す。
-// TODO: 数値の必須をドキュメントの Required 列にも反映するには、validator 側に
-// 存在確認のルールが要る(現状は制約 minimum として出る)。
+// **ポインタ型のフィールドにのみ意味がある。** JSON では欠けたキーがゼロ値になるため、
+// 非ポインタのフィールドには常に値があり、このルールは必ず成功する —— 宣言だけが
+// 残り、何も強制されない状態になる。ポインタにすれば「0 を指定した」と
+// 「指定しなかった」を区別できる。
+//
+//	// dto: OrderId *int `json:"orderId"`
+//	{Field: "orderId", Rules: []rule.Rule{vkit.NotNil()}}
+var NotNil = rule.CreateNotNil(map[string]string{
+	"ja": "必須です",
+	"en": "this field is required",
+})
+
+// SliceNotEmpty はスライスが空でないことを検証する。
+// 空スライスを「未指定」とみなすので、要素0件を正当な値として受け取りたい場合は
+// フィールドをポインタにして NotNil を使うこと。
+var SliceNotEmpty = rule.CreateSliceNotEmpty(map[string]string{
+	"ja": "1件以上指定してください",
+	"en": "must contain at least one item",
+})
+
+// NumNotZero は数値フィールドが 0 でないことを検証する。
+//
+// フィールドをポインタにしたくない場合の妥協手段。**0 を「未指定」と同義に扱う**ため、
+// 0 が正当な値のフィールド(件数・残高・座標など)には使えない。
+// そういうフィールドを必須にしたい場合は、ポインタにして NotNil を使うこと。
+var NumNotZero = rule.CreateNumNotZero(map[string]string{
+	"ja": "必須です",
+	"en": "this field is required",
+})
+
+// 数値フィールドの下限・上限。
 var MinValue = rule.CreateIntMin(
 	map[string]string{
 		"ja": "%d以上である必要があります",
