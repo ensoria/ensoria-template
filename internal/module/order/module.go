@@ -24,10 +24,19 @@ func NewModule(get *restkit.Endpoint[restkit.NoBody, dto.Order]) *rest.Module {
 	}
 }
 
+func NewPaymentCallbackModule(callback *restkit.Endpoint[dto.PaymentCallback, restkit.NoBody]) *rest.Module {
+	return &rest.Module{
+		Path: "/order/payment-callback",
+		Post: restkit.NewController(callback),
+	}
+}
+
 func init() {
 	dikit.AppendConstructors([]any{
 		dikit.ProvideAs[service.OrderService](service.NewOrderService),
 		http.NewGet,
+		http.NewPaymentCallback,
 		dikit.AsHTTPModule(NewModule),
+		dikit.AsHTTPModule(NewPaymentCallbackModule),
 	})
 }
