@@ -7,6 +7,9 @@ package auth
 
 import (
 	"fmt"
+	"slices"
+
+	"github.com/ensoria/config/pkg/appconfig"
 
 	"github.com/ensoria/config/pkg/env"
 	"github.com/ensoria/config/pkg/registry"
@@ -16,14 +19,17 @@ import (
 // defaultModule is the configuration module the auth settings are read from.
 const defaultModule = "default"
 
-// DevSecret is the shared secret this template ships with so that a checkout
-// boots and its admin endpoints can be called without setting anything up.
+// The credentials this template ships with so that a checkout boots and its
+// endpoints can be called without setting anything up.
 //
-// It is published with the template, so a token signed with it can be forged by
-// anyone. Outside local and test it is treated as "no secret was configured"
-// and the application refuses to start — a convenience default must not be able
-// to become a production credential by being left alone.
-const DevSecret = "ensoria-local-development-secret-change-me"
+// Both are published with the template: a token signed with DevSecret can be
+// forged by anyone, and DevAPIKey is printed in the repository. Outside local
+// and test the application refuses to start with either — a convenience default
+// must not be able to become a production credential by being left alone.
+const (
+	DevSecret = "ensoria-local-development-secret-change-me"
+	DevAPIKey = "ensoria-local-development-api-key-change-me"
+)
 
 // NewVerifier builds the verifier described by the configuration for the given
 // environment.
@@ -40,27 +46,35 @@ func NewVerifier(envVal *string) func() (authkit.Verifier, error) {
 		if err != nil {
 			return nil, fmt.Errorf("auth: reading the %s configuration: %w", defaultModule, err)
 		}
-		if err := checkDevSecret(*envVal, params.Auth.Secret); err != nil {
+		if err := checkDevCredentials(*envVal, params.Auth); err != nil {
 			return nil, err
 		}
 		return authkit.NewVerifier(params.Auth, nil)
 	}
 }
 
-// checkDevSecret refuses the secret shipped with the template outside the
-// environments it exists for.
-func checkDevSecret(envVal, secret string) error {
-	if secret != DevSecret || devSecretAllowed(envVal) {
+// checkDevCredentials refuses the credentials shipped with the template outside
+// the environments they exist for.
+func checkDevCredentials(envVal string, auth *appconfig.Auth) error {
+	if auth == nil || devCredentialsAllowed(envVal) {
 		return nil
 	}
-	return fmt.Errorf("auth: AUTH_SECRET is still the secret shipped with the template, "+
-		"which is public and cannot protect the %s environment: "+
-		"set AUTH_SECRET to a secret of your own, or use AUTH_MODE=jwks", envVal)
+	if auth.Secret == DevSecret {
+		return fmt.Errorf("auth: AUTH_SECRET is still the secret shipped with the template, "+
+			"which is public and cannot protect the %s environment: "+
+			"set AUTH_SECRET to a secret of your own, or use AUTH_MODE=jwks", envVal)
+	}
+	if slices.Contains(auth.APIKeys, DevAPIKey) {
+		return fmt.Errorf("auth: AUTH_API_KEYS still contains the key shipped with the template, "+
+			"which is public and cannot protect the %s environment: "+
+			"issue keys of your own", envVal)
+	}
+	return nil
 }
 
-// devSecretAllowed reports whether the shipped secret may be used as-is.
-// Only the environments a developer runs on their own machine qualify.
-func devSecretAllowed(envVal string) bool {
+// devCredentialsAllowed reports whether the shipped credentials may be used
+// as-is. Only the environments a developer runs on their own machine qualify.
+func devCredentialsAllowed(envVal string) bool {
 	switch env.Environment(envVal) {
 	case env.Local, env.Test:
 		return true

@@ -35,4 +35,23 @@ var MaxLength = rule.CreateStrMaxLength(
 		"en": "exceeds maximum length of %d characters",
 	})
 
+// 数値フィールドの下限・上限。
+//
+// JSON では数値フィールドの「未指定」と 0 を区別できない(ポインタでない限り、
+// 欠けたキーはゼロ値になる)ため、数値に Required は使えない。実質的な必須は
+// MinValue(1) のように「取り得ない値を弾く」形で表す。
+// TODO: 数値の必須をドキュメントの Required 列にも反映するには、validator 側に
+// 存在確認のルールが要る(現状は制約 minimum として出る)。
+var MinValue = rule.CreateIntMin(
+	map[string]string{
+		"ja": "%d以上である必要があります",
+		"en": "must be %d or greater",
+	})
+
+var MaxValue = rule.CreateIntMax(
+	map[string]string{
+		"ja": "%d以下である必要があります",
+		"en": "must be %d or less",
+	})
+
 // TODO: 他のバリデーションも一通り定義する

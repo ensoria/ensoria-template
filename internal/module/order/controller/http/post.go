@@ -34,6 +34,9 @@ func NewPaymentCallback(svc service.OrderService) *restkit.Endpoint[dto.PaymentC
 		BodyRules: []*rule.RuleSet{
 			{Field: "paymentId", Rules: []rule.Rule{vkit.Required(), vkit.MaxLength(64)}},
 			{Field: "status", Rules: []rule.Rule{vkit.Required()}},
+			// 数値には Required が使えない(未指定と 0 を区別できない)ので、
+			// 「取り得ない値を弾く」形で実質的に必須にする。
+			{Field: "orderId", Rules: []rule.Rule{vkit.MinValue(1)}},
 		},
 		FieldDocs: map[string]string{
 			"paymentId": "Identifier assigned by the payment provider, not by this API",

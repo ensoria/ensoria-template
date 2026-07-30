@@ -11,11 +11,13 @@ import (
 	"fmt"
 	"reflect"
 
+	"github.com/ensoria/config/pkg/appconfig"
 	"github.com/ensoria/config/pkg/registry"
 	assets "github.com/ensoria/ensoria-template"
 	"github.com/ensoria/ensoria-template/internal/app/apiinfo"
 	httpdto "github.com/ensoria/ensoria-template/internal/app/http/dto"
 	"github.com/ensoria/ensoria-template/internal/plamo/apidoc"
+	"github.com/ensoria/ensoria-template/internal/plamo/authkit"
 	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
 	"github.com/ensoria/mb/pkg/mb"
 	"github.com/ensoria/rest/pkg/rest"
@@ -81,6 +83,7 @@ func buildConventions() *apidoc.Conventions {
 	conv.BaseURLs = map[string]string{
 		"local": fmt.Sprintf("http://localhost:%d", params.Server.Port),
 	}
+	conv.SecuritySchemes = securitySchemes(params.Auth)
 	conv.CORS = &apidoc.CORS{
 		AllowOrigin:      params.CORS.AllowOrigin(),
 		AllowMethods:     params.CORS.AllowMethods(),
@@ -102,4 +105,37 @@ type stubEnqueuer struct{}
 
 func (stubEnqueuer) Enqueue(ctx context.Context, jobName string, payload any, opts ...*job.Option) (string, error) {
 	return "", nil
+}
+
+// securitySchemes は設定されている検証手段から、呼び出し元が使える資格情報の方式を組む。
+// 設定されていない方式は出さない —— 使えない認証方法をドキュメントに載せないため。
+func securitySchemes(auth *appconfig.Auth) []apidoc.SecurityScheme {
+	if auth == nil {
+		return nil
+	}
+
+	var schemes []apidoc.SecurityScheme
+	if auth.Secret != "" || auth.JWKSURL != "" {
+		schemes = append(schemes, apidoc.SecurityScheme{
+			Name:         authkit.SchemeJWT,
+			Type:         apidoc.SecuritySchemeTypeHTTP,
+			Scheme:       apidoc.SecuritySchemeBearer,
+			BearerFormat: apidoc.BearerFormatJWT,
+			Description:  "Bearer token issued by the identity provider",
+		})
+	}
+	if len(auth.APIKeys) > 0 {
+		header := auth.APIKeyHeader
+		if header == "" {
+			header = appconfig.DefaultAPIKeyHeader
+		}
+		schemes = append(schemes, apidoc.SecurityScheme{
+			Name:        authkit.SchemeAPIKey,
+			Type:        apidoc.SecuritySchemeTypeAPIKey,
+			In:          apidoc.SecuritySchemeInHeader,
+			HeaderName:  header,
+			Description: "Key issued to a machine caller",
+		})
+	}
+	return schemes
 }
