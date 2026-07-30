@@ -72,6 +72,12 @@ type endpointController[Req any, Res any] struct {
 func (c *endpointController[Req, Res]) Handle(r *rest.Request) *rest.Response {
 	langs := preferredLangs(r)
 
+	// 0. 呼び出し元の確認。検証より先に行う —— 認証されていない相手に
+	//    どんなフィールドがありどう制約されているかを教えないため。
+	if res := authorize(c.ep.Security, r); res != nil {
+		return res
+	}
+
 	// 1. リクエストボディの解析 + 検証
 	req, vErrs := vkit.RestRequestBody[Req](r, c.ep.BodyRules...)
 	if vErrs.HasErrors() {
@@ -122,6 +128,7 @@ func (c *endpointController[Req, Res]) EndpointDoc() EndpointDoc {
 		Produces:        c.ep.Produces,
 		Responses:       c.ep.Responses,
 		Errors:          c.ep.Errors,
+		Security:        c.ep.Security,
 		Behavior:        c.ep.Behavior,
 	}
 }

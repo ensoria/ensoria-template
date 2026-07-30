@@ -48,6 +48,7 @@ var _ = Describe("endpoint controller", func() {
 	// name は最大5文字という制約付きの作成エンドポイント。
 	newEndpoint := func(handle func(r *rest.Request, req *createReq) (*rest.Result[createRes], error)) *restkit.Endpoint[createReq, createRes] {
 		return &restkit.Endpoint[createReq, createRes]{
+			Security:  &restkit.SecuritySpec{Public: true},
 			Success:   http.StatusCreated,
 			BodyRules: []*rule.RuleSet{{Field: "name", Rules: []rule.Rule{vkit.MaxLength(5)}}},
 			Handle:    handle,
@@ -81,7 +82,8 @@ var _ = Describe("endpoint controller", func() {
 
 		It("returns a truly empty body via NoContent", func() {
 			ep := &restkit.Endpoint[restkit.NoBody, restkit.NoBody]{
-				Success: http.StatusNoContent,
+				Security: &restkit.SecuritySpec{Public: true},
+				Success:  http.StatusNoContent,
 				Handle: func(r *rest.Request, _ *restkit.NoBody) (*rest.Result[restkit.NoBody], error) {
 					return restkit.NoContent(), nil
 				},

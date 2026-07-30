@@ -127,6 +127,7 @@ func DescribeEndpoint(method, path string, doc restkit.EndpointDoc, idPrefixes m
 		ResponseHeaders:   convertHeaders(doc.ResponseHeaders),
 		Responses:         convertResponses(doc.Responses, opts),
 		Errors:            convertErrors(doc.Errors, opts),
+		Security:          convertSecurity(doc.Security),
 		Behavior:          convertBehavior(doc.Behavior),
 	}
 }
@@ -234,7 +235,20 @@ func convertBehavior(b restkit.BehaviorSpec) Behavior {
 		SideEffects:   b.SideEffects,
 		Idempotent:    b.Idempotent,
 		Preconditions: b.Preconditions,
-		Scopes:        b.Scopes,
+	}
+}
+
+// convertSecurity は restkit.SecuritySpec を apidoc.Security へ写す。
+// 未宣言(nil)は「検証済みの呼び出し元が必要」なので、そのまま nil を伝える
+// (レンダラ側も nil を fail-closed として解釈する)。
+func convertSecurity(s *restkit.SecuritySpec) *Security {
+	if s == nil {
+		return nil
+	}
+	return &Security{
+		Public:  s.Public,
+		Schemes: s.Schemes,
+		Scopes:  s.Scopes,
 	}
 }
 

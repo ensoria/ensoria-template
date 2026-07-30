@@ -19,6 +19,7 @@ func getRequest() *rest.Request {
 // returning builds a controller whose handler answers with the given status.
 func returning(status int, responses ...restkit.ResponseSpec) rest.Controller {
 	ep := &restkit.Endpoint[restkit.NoBody, okBody]{
+		Security:  &restkit.SecuritySpec{Public: true},
 		Success:   http.StatusOK,
 		Responses: responses,
 		Handle: func(r *rest.Request, _ *restkit.NoBody) (*rest.Result[okBody], error) {
@@ -64,6 +65,7 @@ var _ = Describe("undeclared success status", func() {
 
 		It("accepts the implicit 200 when Success is left unset", func() {
 			ep := &restkit.Endpoint[restkit.NoBody, okBody]{
+				Security: &restkit.SecuritySpec{Public: true},
 				Handle: func(r *rest.Request, _ *restkit.NoBody) (*rest.Result[okBody], error) {
 					return rest.NewResult(&okBody{OK: true}), nil
 				},

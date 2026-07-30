@@ -40,12 +40,12 @@ var _ = Describe("Behavior wiring", func() {
 
 	buildBehaviorModule := func() *rest.Module {
 		ep := &restkit.Endpoint[createReq, createRes]{
-			Success: 201,
+			Success:  201,
+			Security: &restkit.SecuritySpec{Scopes: []string{"users:write"}},
 			Behavior: restkit.BehaviorSpec{
 				SideEffects:   []string{"sends a confirmation email"},
 				Idempotent:    &idempotent,
 				Preconditions: []string{"caller must be admin"},
-				Scopes:        []string{"users:write"},
 			},
 			Handle: func(r *rest.Request, req *createReq) (*rest.Result[createRes], error) {
 				return rest.NewResult(&createRes{ID: "usr_01"}), nil
@@ -61,7 +61,7 @@ var _ = Describe("Behavior wiring", func() {
 		Expect(spec.Behavior.Idempotent).NotTo(BeNil())
 		Expect(*spec.Behavior.Idempotent).To(BeTrue())
 		Expect(spec.Behavior.Preconditions).To(ContainElement("caller must be admin"))
-		Expect(spec.Behavior.Scopes).To(ContainElement("users:write"))
+		Expect(spec.Security.Scopes).To(ContainElement("users:write"))
 	})
 
 	It("leaves Idempotent nil when undeclared (renderer emits TODO)", func() {

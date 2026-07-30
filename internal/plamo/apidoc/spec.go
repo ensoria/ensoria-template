@@ -54,7 +54,10 @@ type EndpointSpec struct {
 	// 状況で異なる成功ステータスを返す場合(200/201 併存、202 + 別ボディ型など)に宣言する。
 	Responses []ResponseSpec `json:"responses,omitempty"`
 	Errors    []ErrorSpec    `json:"errors,omitempty"` // エンドポイント固有エラー(§4.1)
-	Behavior  Behavior       `json:"behavior"`
+	// Security は誰が呼べるか。nil は「検証済みの呼び出し元が必要」を意味する
+	// (宣言漏れは閉じる側に倒れる)。
+	Security *Security `json:"security,omitempty"`
+	Behavior Behavior  `json:"behavior"`
 	// Untyped は Documented を実装しない生 Controller(型不明)のとき true。
 	Untyped bool `json:"untyped,omitempty"`
 }
@@ -85,7 +88,16 @@ type Behavior struct {
 	SideEffects   []string `json:"side_effects,omitempty"`
 	Idempotent    *bool    `json:"idempotent,omitempty"` // nil = 未宣言(レンダラで TODO)
 	Preconditions []string `json:"preconditions,omitempty"`
-	Scopes        []string `json:"scopes,omitempty"` // Authorization(認可スコープ)
+}
+
+// Security は誰がエンドポイントを呼べるか。OpenAPI の `security` に 1:1 で写せる。
+type Security struct {
+	// Public は認証不要。これが唯一エンドポイントを開く手段。
+	Public bool `json:"public,omitempty"`
+	// Schemes は受け入れる資格情報の種別(空 = 何でも可)。
+	Schemes []string `json:"schemes,omitempty"`
+	// Scopes は呼び出し元が**すべて**持つ必要のある権限。
+	Scopes []string `json:"scopes,omitempty"`
 }
 
 // SchemaType は JSON の値種別に対応する中立なスキーマ種別。

@@ -133,13 +133,21 @@ type Endpoint[Req any, Res any] struct {
 	// error Handle returns (see HTTPError), not from this declaration.
 	Errors []ErrorSpec
 
+	// --- Who may call this endpoint ---
+
+	// Security declares whether the endpoint needs a verified caller and what
+	// that caller must hold.
+	//
+	// Optional (runtime), but leaving it out means "a verified caller is
+	// required": an endpoint nobody declared is closed, not open. A public
+	// endpoint therefore has to say so explicitly.
+	Security *SecuritySpec
+
 	// --- Behaviour that cannot be derived from the types ---
 
-	// Behavior declares side effects, idempotency, preconditions and the
-	// authorization scopes the endpoint requires.
+	// Behavior declares side effects, idempotency and preconditions.
 	//
-	// Optional (documentation only) for now. Scopes will be enforced once
-	// authentication lands, at which point they stop being documentation-only.
+	// Optional (documentation only).
 	Behavior BehaviorSpec
 
 	// Handle receives the validated request body and returns a typed Result or an
@@ -189,7 +197,22 @@ type BehaviorSpec struct {
 	Idempotent *bool
 	// Preconditions lists what must already be true for the call to succeed.
 	Preconditions []string
-	// Scopes lists the authorization scopes the caller needs.
+}
+
+// SecuritySpec declares who may call an endpoint.
+//
+// The zero value (and a nil *SecuritySpec) means a verified caller is required
+// with no further restriction. That is deliberate: an endpoint whose author
+// forgot to think about access ends up closed rather than open.
+type SecuritySpec struct {
+	// Public serves the endpoint without any caller. This is the only way to
+	// open an endpoint, and it has to be written down.
+	Public bool
+	// Schemes limits which credentials are accepted (authkit.SchemeJWT,
+	// authkit.SchemeAPIKey). Empty accepts any scheme the application verifies.
+	Schemes []string
+	// Scopes are the permissions the caller must hold — all of them, not any of
+	// them, matching how OpenAPI reads a security requirement.
 	Scopes []string
 }
 
@@ -236,6 +259,7 @@ type EndpointDoc struct {
 	Produces        string
 	Responses       []ResponseSpec
 	Errors          []ErrorSpec
+	Security        *SecuritySpec
 	Behavior        BehaviorSpec
 }
 
