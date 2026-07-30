@@ -37,7 +37,7 @@ func NewGet(svc service.UserService) *restkit.Endpoint[restkit.NoBody, dto.GetUs
 | 分類 | 意味 | フィールド |
 |---|---|---|
 | **必須** | 無いと動かない | `Handle` |
-| **任意（動作に影響）** | 省略は「そうしない」という選択 | `Success` / `Produces` / `BodyRules` / `PathRules` / `QueryRules` |
+| **任意（動作に影響）** | 省略は「そうしない」という選択 | `Success` / `Produces` / `BodyRules` / `PathRules` / `QueryRules` / `Security` |
 | **任意（ドキュメント専用）** | 生成器だけが読む。省略しても動作は同じ | `Summary` / `Description` / `FieldDocs` / `Task` / `AlsoRead` / `Related` / `IDPrefix` / `ResponseHeaders` / `Errors` / `Behavior` |
 | **条件付き必須** | 下記参照 | `Responses` |
 
@@ -66,6 +66,58 @@ return rest.NewResult(&user, rest.WithStatus(http.StatusAccepted)), nil
 
 これは「ドキュメント専用の宣言は書き忘れる」という問題への対策です。書き忘れが静かな
 ドキュメント乖離ではなく、テストで落ちる欠陥になります。
+
+### 誰が呼べるか: `Security`
+
+**宣言しないエンドポイントは「要認証」になります。** 検証済みの呼び出し元が無ければ
+アダプタが 401 を返します。認証について何も考えなかったエンドポイントは、開くのではなく
+閉じる側に倒れます。
+
+そのため、**公開エンドポイントは公開だと明示的に書く必要があります**。
+
+```go
+// 公開: 誰でも呼べる
+Security: &restkit.SecuritySpec{Public: true},
+
+// 要認証 + スコープ: 宣言したスコープを「すべて」持つ呼び出し元だけ通す
+Security: &restkit.SecuritySpec{Scopes: []string{"users:write"}},
+
+// 資格情報の種類も限定する場合
+Security: &restkit.SecuritySpec{
+	Schemes: []string{authkit.SchemeJWT},
+	Scopes:  []string{"users:write"},
+},
+
+// 宣言なし = 要認証(スコープの指定は無し)
+```
+
+判定はこうなります。
+
+| 状況 | 応答 |
+|---|---|
+| `Public: true` | 呼び出し元の有無に関わらず処理する |
+| 呼び出し元が未認証 | **401** `unauthenticated` |
+| 呼び出し元は認証済みだがスキームが不一致 | **403** `forbidden` |
+| 呼び出し元は認証済みだがスコープ不足 | **403** `forbidden` |
+
+401 と 403 は別の意味です。401 は「あなたが誰か名乗ってください」、403 は「あなたが誰かは
+分かった上で、それはできません」です。403 のときに資格情報を付け直しても結果は変わりません。
+
+この判定は**検証よりも先**に走ります。未認証の呼び出し元に、どんなフィールドがあり
+どう制約されているかを教えないためです。
+
+`Scopes` は文書化のためだけの宣言ではなく、実際に強制されます。書けば動作が変わるので、
+書き忘れても気づかない、ということが起きません。
+
+> **認証の設定が要ります。** 要認証のエンドポイントが1つでもあるのに認証が未設定
+> （`AUTH_MODE` / `AUTH_SECRET` / `AUTH_JWKS_URL` / `AUTH_API_KEYS` のいずれも無い）だと、
+> アプリケーションは起動時に停止します。全リクエストを拒否し続ける設定ミスを、
+> 最初のリクエストではなく起動時に潰すためです。ローカル開発用の既定値は
+> `internal/config/.env` に入っています。
+
+> **生 Controller には効きません。** `Security` は `restkit.Endpoint` のアダプタが評価します。
+> `rest.Controller` を自分で実装した場合はこの判定を通らないので、認可は自分で書く必要が
+> あります。テンプレート内のコントローラはすべて型付きエンドポイントです。
 
 ### 検証は宣言するだけ
 

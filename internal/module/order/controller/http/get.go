@@ -18,6 +18,8 @@ func NewGet(svc service.OrderService) *restkit.Endpoint[restkit.NoBody, dto.Orde
 		Task:     "read order",
 		IDPrefix: "ord",
 		Success:  http.StatusOK,
+		// 宣言したスコープは実際に強制される —— 呼び出し元が持っていなければ 403。
+		Security: &restkit.SecuritySpec{Scopes: []string{"orders:read"}},
 		FieldDocs: map[string]string{
 			"amount": "Order total amount",
 			"status": "Order lifecycle status",

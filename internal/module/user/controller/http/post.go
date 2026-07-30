@@ -21,6 +21,7 @@ func NewPost(svc service.UserService) *restkit.Endpoint[dto.CreateUser, dto.Crea
 		Task:     "create user",
 		IDPrefix: "usr",
 		Success:  http.StatusCreated,
+		Security: &restkit.SecuritySpec{Scopes: []string{"users:write"}},
 		BodyRules: []*rule.RuleSet{
 			{Field: "name", Rules: []rule.Rule{vkit.Required(), vkit.MaxLength(10)}},
 		},

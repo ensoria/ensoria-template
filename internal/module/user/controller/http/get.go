@@ -25,6 +25,7 @@ func NewGet(svc service.UserService, publish mb.Publish) *restkit.Endpoint[restk
 		Task:     "read user",
 		IDPrefix: "usr",
 		Success:  http.StatusOK,
+		Security: &restkit.SecuritySpec{Scopes: []string{"users:read"}},
 		Produces: rest.MediaTypeXML, // このエンドポイントは XML を返す
 		// パスパラメータ id の検証。違反時はアダプタが 422 + field_errors を返す。
 		PathRules: []*rule.RuleSet{

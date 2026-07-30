@@ -19,6 +19,9 @@ func NewGet(svc service.PostService) *restkit.Endpoint[restkit.NoBody, dto.Post]
 		IDPrefix: "pst",
 		Success:  http.StatusOK,
 		Produces: rest.MediaTypeXML, // このエンドポイントは XML を返す
+		// 公開エンドポイント。宣言しないと「要認証」になるため、
+		// 認証なしで配信したいことは明示的に書く必要がある。
+		Security: &restkit.SecuritySpec{Public: true},
 		FieldDocs: map[string]string{
 			"Title":   "Post title",
 			"Content": "Post body",
