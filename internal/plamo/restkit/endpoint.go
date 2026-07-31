@@ -55,8 +55,20 @@ type Endpoint[Req any, Res any] struct {
 	// path in dot / bracket notation ("address.city", "items[].id"). Keys that
 	// match no field are ignored.
 	//
+	// It applies to both the request and the response, so write what the field
+	// means rather than what this operation does with it: a field named "name"
+	// exists on both sides, and "omit to leave it unchanged" would be wrong on
+	// the response. Use RequestFieldDocs / ResponseFieldDocs when the two sides
+	// genuinely need different wording.
+	//
 	// Optional (documentation only).
 	FieldDocs map[string]string
+	// RequestFieldDocs and ResponseFieldDocs override FieldDocs for one side.
+	// Same key format; a key present here wins over the same key in FieldDocs.
+	//
+	// Optional (documentation only).
+	RequestFieldDocs  map[string]string
+	ResponseFieldDocs map[string]string
 
 	// Task is the client-intent label shown in the INDEX Task column (1-3 words).
 	// Endpoints serving the same client task reuse the same label.
@@ -239,13 +251,15 @@ type ResponseSpec struct {
 // declarations that apidoc reads. Endpoint itself is generic and awkward to
 // reflect over, so the adapter converts it into this shape.
 type EndpointDoc struct {
-	Summary     string
-	Description string
-	FieldDocs   map[string]string
-	IDPrefix    string
-	Task        string
-	AlsoRead    []string
-	Related     []string
+	Summary           string
+	Description       string
+	FieldDocs         map[string]string
+	RequestFieldDocs  map[string]string
+	ResponseFieldDocs map[string]string
+	IDPrefix          string
+	Task              string
+	AlsoRead          []string
+	Related           []string
 
 	ReqType reflect.Type
 	ResType reflect.Type

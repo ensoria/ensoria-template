@@ -99,13 +99,13 @@ func DescribeEndpoint(method, path string, doc restkit.EndpointDoc, idPrefixes m
 
 	req := SchemaFromType(doc.ReqType)
 	applyRules(req, doc.BodyRules)
-	applyFieldDocs(req, doc.FieldDocs)
+	applyFieldDocs(req, doc.FieldDocs, doc.RequestFieldDocs)
 	if req != nil {
 		req.Example = ExampleFromType(doc.ReqType, doc.BodyRules, opts)
 	}
 
 	res := SchemaFromType(doc.ResType)
-	applyFieldDocs(res, doc.FieldDocs)
+	applyFieldDocs(res, doc.FieldDocs, doc.ResponseFieldDocs)
 	if res != nil {
 		res.Example = ExampleFromType(doc.ResType, nil, opts)
 	}
@@ -252,13 +252,26 @@ func convertSecurity(s *restkit.SecuritySpec) *Security {
 	}
 }
 
+// InternalPathPrefix はアプリケーション自身の運用用エンドポイントを示すパス接頭辞。
+// この下のエンドポイントは業務リソースではなく、アプリの内部状態を扱う。
+const InternalPathPrefix = "_"
+
+// InternalResource は InternalPathPrefix 配下のエンドポイントをまとめるリソース名。
+//
+// 接頭辞の次のセグメント(tasks / jobs など)をリソース名にすると、クライアントが
+// 同名の業務リソースを作った時点で衝突する。運用用は1つの名前にまとめ、
+// 業務リソースと取り違えようのない名前を選ぶ。
+const InternalResource = "app-system"
+
 // resourceOf はパスの第1セグメントを単数形にしてリソース名を返す(例 "/users/{id}" → "user")。
-// パラメータと、リソース名を持たない印である `_` は読み飛ばす
-// (`_` は管理用エンドポイントの接頭辞で、それ自体は何のリソースでもない)。
+// パラメータは読み飛ばす。`_` 配下は InternalResource にまとめる。
 func resourceOf(path string) string {
 	for _, seg := range strings.Split(path, "/") {
-		if seg == "" || seg == "_" || strings.HasPrefix(seg, "{") {
+		if seg == "" || strings.HasPrefix(seg, "{") {
 			continue
+		}
+		if seg == InternalPathPrefix {
+			return InternalResource
 		}
 		return singular(seg)
 	}
@@ -295,14 +308,27 @@ func parsePathParamNames(path string) []string {
 }
 
 // applyFieldDocs は宣言されたフィールド意味(ドット/角括弧記法キー)をスキーマ木に反映する。
-func applyFieldDocs(schema *Schema, fieldDocs map[string]string) {
-	if schema == nil || len(fieldDocs) == 0 {
+//
+// shared は request / response の両方に当たる宣言、side は片側だけの宣言。
+// 同じキーがあれば side が勝つ —— 片側に限定して書いたほうが具体的だからである。
+// 順序でそれを実現している(後から書いたほうが残る)。
+func applyFieldDocs(schema *Schema, shared, side map[string]string) {
+	if schema == nil {
 		return
 	}
-	for path, meaning := range fieldDocs {
-		if f := findField(schema, path); f != nil {
-			f.Meaning = meaning
-		}
+	for path, meaning := range shared {
+		setFieldMeaning(schema, path, meaning)
+	}
+	for path, meaning := range side {
+		setFieldMeaning(schema, path, meaning)
+	}
+}
+
+// setFieldMeaning はスキーマ木の該当フィールドに意味を書き込む。
+// キーがどのフィールドにも当たらない場合は何もしない。
+func setFieldMeaning(schema *Schema, path, meaning string) {
+	if f := findField(schema, path); f != nil {
+		f.Meaning = meaning
 	}
 }
 

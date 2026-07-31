@@ -35,13 +35,15 @@ func NewPatch(svc service.UserService) *restkit.Endpoint[dto.UpdateUser, dto.Get
 			// 送られてきた場合のみ検証される。触れなければ何も言わない。
 			{Field: "name", Rules: []rule.Rule{vkit.NotNullIfSet(), vkit.MaxLength(10)}},
 		},
-		// FieldDocs はリクエストとレスポンスの両方に同じ名前で当たるので、
-		// 操作ごとの言い回し(「省略すると変わらない」など)ではなく、
-		// フィールドそのものの意味を書く。省略できることは Required 列に、
-		// 消せないことは制約欄に出る。
+		// フィールドそのものの意味は両方に当てる。
 		FieldDocs: map[string]string{
-			"name":     "User display name",
-			"nickname": "Optional nickname; send null to clear it",
+			"name": "User display name",
+		},
+		// 送り方の話はリクエストにだけ当てる。同じ `name` がレスポンスにもあるので、
+		// FieldDocs に書くと「省略すると変わらない」がレスポンス表にも出てしまう。
+		RequestFieldDocs: map[string]string{
+			"name":     "User display name. Omit to leave it unchanged; it cannot be cleared",
+			"nickname": "New nickname. Omit to leave it unchanged, or send null to clear it",
 		},
 		Behavior: restkit.BehaviorSpec{
 			SideEffects: []string{"changes only the fields present in the request"},
