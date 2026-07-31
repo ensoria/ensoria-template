@@ -55,11 +55,18 @@ func NewVerifier(envVal *string) func() (authkit.Verifier, error) {
 
 // checkDevCredentials refuses the credentials shipped with the template outside
 // the environments they exist for.
+//
+// Each credential is only judged where it is actually used. A value that
+// verifies nothing cannot protect anything either, and refusing to start over
+// one would report a danger that does not exist — with advice the deployment
+// has already taken.
 func checkDevCredentials(envVal string, auth *appconfig.Auth) error {
 	if auth == nil || devCredentialsAllowed(envVal) {
 		return nil
 	}
-	if auth.Secret == DevSecret {
+	// Secret signs and verifies tokens only in hs256 mode. Under jwks, or with
+	// no mode at all, it is read by nothing.
+	if auth.Mode == appconfig.AuthModeHS256 && auth.Secret == DevSecret {
 		return fmt.Errorf("auth: AUTH_SECRET is still the secret shipped with the template, "+
 			"which is public and cannot protect the %s environment: "+
 			"set AUTH_SECRET to a secret of your own, or use AUTH_MODE=jwks", envVal)

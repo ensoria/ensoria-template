@@ -7,7 +7,12 @@ import (
 )
 
 // withSecret and withAPIKey build the configuration under test.
-func withSecret(secret string) *appconfig.Auth { return &appconfig.Auth{Secret: secret} }
+//
+// withSecret picks hs256 because that is the only mode where a secret is read
+// at all; the modes that ignore it are covered separately.
+func withSecret(secret string) *appconfig.Auth {
+	return &appconfig.Auth{Mode: appconfig.AuthModeHS256, Secret: secret}
+}
 
 func withAPIKey(keys ...string) *appconfig.Auth { return &appconfig.Auth{APIKeys: keys} }
 
@@ -51,6 +56,33 @@ var _ = Describe("the secret shipped with the template", func() {
 	It("says nothing about an unset secret", func() {
 		Expect(checkDevCredentials("production", withSecret(""))).To(Succeed())
 	})
+
+	// Under jwks the secret verifies nothing, so a value left behind protects
+	// nothing and endangers nothing. Refusing to start over it would report a
+	// danger that does not exist, and tell the deployment to switch to the mode
+	// it is already running.
+	DescribeTable("is ignored in the modes that never read it",
+		func(mode string) {
+			cfg := &appconfig.Auth{
+				Mode:    mode,
+				Secret:  DevSecret,
+				JWKSURL: "https://issuer.example.com/.well-known/jwks.json",
+			}
+
+			Expect(checkDevCredentials("production", cfg)).To(Succeed())
+		},
+		Entry("jwks verifies against the issuer's public keys", appconfig.AuthModeJWKS),
+		Entry("no mode verifies no token at all", ""),
+	)
+
+	// The guard has to come back on its own once the secret is live again:
+	// switching to hs256 is exactly the change that turns a harmless leftover
+	// into the credential protecting the deployment.
+	It("is refused again once the mode makes it live", func() {
+		cfg := &appconfig.Auth{Mode: appconfig.AuthModeHS256, Secret: DevSecret}
+
+		Expect(checkDevCredentials("production", cfg)).To(HaveOccurred())
+	})
 })
 
 var _ = Describe("the API key shipped with the template", func() {
@@ -75,5 +107,29 @@ var _ = Describe("the API key shipped with the template", func() {
 
 	It("leaves keys of our own alone", func() {
 		Expect(checkDevCredentials("production", withAPIKey("a-key-of-our-own"))).To(Succeed())
+	})
+
+	// Unlike the secret, an API key does not belong to a mode: it is read in
+	// every one of them, so the guard must not be narrowed the same way.
+	DescribeTable("is refused whatever the tokens are verified with",
+		func(mode string) {
+			cfg := withAPIKey(DevAPIKey)
+			cfg.Mode = mode
+
+			Expect(checkDevCredentials("production", cfg)).To(HaveOccurred())
+		},
+		Entry("hs256", appconfig.AuthModeHS256),
+		Entry("jwks", appconfig.AuthModeJWKS),
+		Entry("no tokens at all", ""),
+	)
+
+	// Declaring that keys live elsewhere does not stop the configured ones from
+	// being accepted: the swap happens by injecting a key store, and until that
+	// is done the listed keys are still what a caller is checked against.
+	It("is refused even where the keys are declared to come from elsewhere", func() {
+		cfg := withAPIKey(DevAPIKey)
+		cfg.APIKeysExternal = true
+
+		Expect(checkDevCredentials("production", cfg)).To(HaveOccurred())
 	})
 })
