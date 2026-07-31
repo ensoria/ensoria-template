@@ -33,10 +33,14 @@ func Params() (*appconfig.Parameters, error) {
 }
 
 // rest
-func NewUserByIDModule(get *restkit.Endpoint[restkit.NoBody, dto.GetUser]) *rest.Module {
+func NewUserByIDModule(
+	get *restkit.Endpoint[restkit.NoBody, dto.GetUser],
+	patch *restkit.Endpoint[dto.UpdateUser, dto.GetUser],
+) *rest.Module {
 	return &rest.Module{
-		Path: "/users/{id}",
-		Get:  restkit.NewController(get),
+		Path:  "/users/{id}",
+		Get:   restkit.NewController(get),
+		Patch: restkit.NewController(patch),
 	}
 }
 
@@ -82,6 +86,7 @@ func init() {
 		dikit.ProvideAs[service.UserService](service.NewUserService),
 		http.NewGet,
 		http.NewPost,
+		http.NewPatch,
 		dikit.AsHTTPModule(NewUserByIDModule),
 		dikit.AsHTTPModule(NewUserCollectionModule),
 

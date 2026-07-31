@@ -42,17 +42,22 @@ func applyRules(schema *Schema, ruleSets []*rule.RuleSet) {
 
 // applyNullability は宣言されたルールをスキーマの Nullable に反映する。
 //
-// Nullable は Go の型から導いている(ポインタ = null を取り得る)が、not_nil を宣言した
-// フィールドは null を拒否する。型だけを見ると「必須なのに null 可」という、実装と
-// 食い違うドキュメントになるため、宣言のほうを優先する。
+// Nullable は Go の型から導いている(ポインタと Optional は null を取り得る)が、
+// null を拒否するルールを宣言したフィールドは null を受け付けない。型だけを見ると
+// 「消せないのに null 可」という、実装と食い違うドキュメントになるため、
+// 宣言のほうを優先する。
 func applyNullability(schema *Schema, d rule.Descriptor) {
-	if schema != nil && d.Name == notNilCode {
+	if schema != nil && rejectsNullCodes[d.Name] {
 		schema.Nullable = false
 	}
 }
 
-// notNilCode は「null を許さない」ことを意味するルールの Descriptor.Name。
-const notNilCode = "not_nil"
+// rejectsNullCodes は「null を許さない」ことを意味するルールの Descriptor.Name。
+// not_nil は値そのものを要求し、not_null_if_set は省略は許すが null は許さない。
+var rejectsNullCodes = map[string]bool{
+	"not_nil":         true,
+	"not_null_if_set": true,
+}
 
 // applyRuleDescriptor は「必須」系はフラグに、それ以外は構造化 Constraint に反映する
 // 共通ロジック(フィールド/パス/クエリで共有。文言化はレンダラ側)。

@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/ensoria/gofake/pkg/faker"
+	"github.com/ensoria/validator/pkg/optional"
 	"github.com/ensoria/validator/pkg/rule"
 )
 
@@ -49,6 +50,11 @@ type exampleGen struct {
 
 // typeValue は型を JSON 形の値に変換する(ポインタは剥がす。スライスは要素1つ)。
 func (g *exampleGen) typeValue(t reflect.Type, path string) any {
+	// Optional[T] は中身の型の例を出す。構造体として辿ると、非公開フィールドしか
+	// 無いので空オブジェクトになってしまう。
+	if inner := optional.ValueTypeOf(t); inner != nil {
+		t = inner
+	}
 	for t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}

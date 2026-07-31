@@ -172,6 +172,56 @@ id := *req.OrderId
 あるべきか」だけを述べます。値が無ければ検証されずに通るので、「任意だが、指定されたら
 1 以上」がそのまま書けます。必須にしたい場合は上記の必須ルールを併記してください。
 
+### 部分更新（PATCH）: `optional.Optional[T]`
+
+部分更新では、**「そのフィールドに触れない」と「そのフィールドを空にする」を区別する**
+必要があります。JSON では `{}` と `{"nickname": null}` の差ですが、ポインタでは
+どちらも `nil` になって表せません。
+
+`optional.Optional[T]` はこの3状態を保持します。
+
+```go
+type UpdateUser struct {
+	Name     optional.Optional[string] `json:"name"`
+	Nickname optional.Optional[string] `json:"nickname"`
+}
+```
+
+| リクエスト | `IsSet()` | `Get()` | 意味 |
+|---|---|---|---|
+| `{}` | `false` | `_, false` | 触れない |
+| `{"nickname": null}` | `true` | `_, false` | 空にする |
+| `{"nickname": "taro"}` | `true` | `"taro", true` | その値にする |
+
+`Handle` では **`IsSet()` を見ないと、送られなかったフィールドをゼロ値で上書きします**。
+
+```go
+if name, ok := req.Name.Get(); ok {
+	user.Name = name          // 値が送られてきた場合だけ反映する
+}
+if req.Nickname.IsSet() {
+	// 送られてきた。値があれば設定、null なら削除
+}
+```
+
+フィールドごとに許す操作は宣言で変えられます。
+
+```go
+BodyRules: []*rule.RuleSet{
+	// 省略はできるが、送るなら値が要る（null で消すことは許さない）
+	{Field: "name", Rules: []rule.Rule{vkit.NotNullIfSet(), vkit.MaxLength(10)}},
+	// nickname は宣言なし = 省略も null も値も許す
+},
+```
+
+生成ドキュメントには、`Required` 列（省略できるか）と `Nullable` 列（null にできるか）
+の組み合わせとして出ます。OpenAPI では `type: ["string", "null"]` と `required` の
+有無で同じことを表現します。
+
+> **`Optional[T]` は部分更新のための型です。** 通常の作成・更新（POST / PUT）では
+> 「未指定」と「null」を区別する理由が無いので、ポインタ + `NotNil()` で十分です。
+> 区別が要らない場所で使うと、`Handle` の分岐が無駄に増えます。
+
 
 ## API ドキュメントの生成
 

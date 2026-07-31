@@ -4,6 +4,8 @@ import (
 	"reflect"
 	"strings"
 	"time"
+
+	"github.com/ensoria/validator/pkg/optional"
 )
 
 var timeType = reflect.TypeOf(time.Time{})
@@ -30,6 +32,13 @@ func SchemaFromType(t reflect.Type) *Schema {
 // ガードで、経路から抜けるときに取り除くため、循環でない同一型の再出現は毎回展開される。
 func buildSchema(t reflect.Type, visiting map[reflect.Type]bool) *Schema {
 	s := &Schema{}
+	// Optional[T] は「指定されなかった / null / 値」の3状態を持つ値。JSON 上は
+	// 中身の型か null なので、T のスキーマに Nullable を付けたものと同じになる。
+	// 構造体として展開すると value / set / null という実在しないフィールドが出る。
+	if inner := optional.ValueTypeOf(t); inner != nil {
+		s.Nullable = true
+		t = inner
+	}
 	for t.Kind() == reflect.Pointer {
 		s.Nullable = true
 		t = t.Elem()
@@ -79,8 +88,9 @@ func structFields(t reflect.Type, visiting map[reflect.Type]bool) []*Field {
 			continue
 		}
 		fields = append(fields, &Field{
-			Name:     name,
-			Optional: hasOmitempty(sf),
+			Name: name,
+			// Optional[T] は宣言そのものが「無くてもよい」を意味する。
+			Optional: hasOmitempty(sf) || optional.IsOptionalType(sf.Type),
 			Schema:   buildSchema(sf.Type, visiting),
 		})
 	}

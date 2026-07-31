@@ -49,6 +49,20 @@ var NotNil = rule.CreateNotNil(map[string]string{
 	"en": "this field is required",
 })
 
+// NotNullIfSet はフィールドが指定された場合に、それが null でないことを検証する。
+// 指定されなかった場合は通す。
+//
+// 部分更新(PATCH)で「触れないのは自由だが、消すことは許さない」フィールドに使う。
+// **optional.Optional[T] のフィールドでのみ意味がある** —— 未指定と null を区別できるのは
+// この型だけで、他の型では常に成功する。
+//
+//	// dto: Name optional.Optional[string] `json:"name"`
+//	{Field: "name", Rules: []rule.Rule{vkit.NotNullIfSet()}}
+var NotNullIfSet = rule.CreateNotNullIfSet(map[string]string{
+	"ja": "null にはできません",
+	"en": "cannot be cleared",
+})
+
 // SliceNotEmpty はスライスが空でないことを検証する。
 // 空スライスを「未指定」とみなすので、要素0件を正当な値として受け取りたい場合は
 // フィールドをポインタにして NotNil を使うこと。
