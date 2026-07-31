@@ -46,7 +46,7 @@ func jsonRequestLang(body, lang string) *rest.Request {
 
 var _ = Describe("endpoint controller", func() {
 	// name は最大5文字という制約付きの作成エンドポイント。
-	newEndpoint := func(handle func(r *rest.Request, req *createReq) (*rest.Result[createRes], error)) *restkit.Endpoint[createReq, createRes] {
+	newEndpoint := func(handle func(r *rest.Request, body *createReq) (*rest.Result[createRes], error)) *restkit.Endpoint[createReq, createRes] {
 		return &restkit.Endpoint[createReq, createRes]{
 			Security:  &restkit.SecuritySpec{Public: true},
 			Success:   http.StatusCreated,
@@ -55,8 +55,8 @@ var _ = Describe("endpoint controller", func() {
 		}
 	}
 
-	okHandle := func(r *rest.Request, req *createReq) (*rest.Result[createRes], error) {
-		return rest.NewResult(&createRes{ID: "usr_01", Name: req.Name}), nil
+	okHandle := func(r *rest.Request, body *createReq) (*rest.Result[createRes], error) {
+		return rest.NewResult(&createRes{ID: "usr_01", Name: body.Name}), nil
 	}
 
 	Describe("success path", func() {
@@ -72,7 +72,7 @@ var _ = Describe("endpoint controller", func() {
 		})
 
 		It("lets the handler override the status via Result", func() {
-			ep := newEndpoint(func(r *rest.Request, req *createReq) (*rest.Result[createRes], error) {
+			ep := newEndpoint(func(r *rest.Request, body *createReq) (*rest.Result[createRes], error) {
 				return rest.NewResult(&createRes{ID: "usr_01"}, rest.WithStatus(http.StatusAccepted)), nil
 			})
 			res := restkit.NewController(ep).Handle(jsonRequest(`{"name":"Taro"}`))
@@ -157,7 +157,7 @@ var _ = Describe("endpoint controller", func() {
 
 		It("does not invoke the handler when validation fails", func() {
 			called := false
-			ctrl := restkit.NewController(newEndpoint(func(r *rest.Request, req *createReq) (*rest.Result[createRes], error) {
+			ctrl := restkit.NewController(newEndpoint(func(r *rest.Request, body *createReq) (*rest.Result[createRes], error) {
 				called = true
 				return rest.NewResult(&createRes{}), nil
 			}))
@@ -170,7 +170,7 @@ var _ = Describe("endpoint controller", func() {
 
 	Describe("error mapping", func() {
 		It("uses status and code from an HTTPError", func() {
-			ctrl := restkit.NewController(newEndpoint(func(r *rest.Request, req *createReq) (*rest.Result[createRes], error) {
+			ctrl := restkit.NewController(newEndpoint(func(r *rest.Request, body *createReq) (*rest.Result[createRes], error) {
 				return nil, teapotError{}
 			}))
 
@@ -184,7 +184,7 @@ var _ = Describe("endpoint controller", func() {
 		})
 
 		It("collapses an unknown error to 500 without leaking details", func() {
-			ctrl := restkit.NewController(newEndpoint(func(r *rest.Request, req *createReq) (*rest.Result[createRes], error) {
+			ctrl := restkit.NewController(newEndpoint(func(r *rest.Request, body *createReq) (*rest.Result[createRes], error) {
 				return nil, errorf("db exploded: secret connection string")
 			}))
 

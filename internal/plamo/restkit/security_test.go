@@ -143,7 +143,7 @@ var _ = Describe("endpoint security", func() {
 		It("refuses before looking at the request body", func() {
 			ep := &restkit.Endpoint[createReq, createRes]{
 				BodyRules: []*rule.RuleSet{{Field: "name", Rules: []rule.Rule{vkit.Required()}}},
-				Handle: func(r *rest.Request, req *createReq) (*rest.Result[createRes], error) {
+				Handle: func(r *rest.Request, body *createReq) (*rest.Result[createRes], error) {
 					return rest.NewResult(&createRes{}), nil
 				},
 			}

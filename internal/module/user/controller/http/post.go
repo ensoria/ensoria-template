@@ -65,18 +65,18 @@ func NewPost(svc service.UserService) *restkit.Endpoint[dto.CreateUser, dto.Crea
 				BodyType:     reflect.TypeFor[restkit.ErrorEnvelope](),
 			},
 		},
-		Handle: func(r *rest.Request, req *dto.CreateUser) (*rest.Result[dto.CreateUser], error) {
+		Handle: func(r *rest.Request, body *dto.CreateUser) (*rest.Result[dto.CreateUser], error) {
 			// ここで svc.Create(req) を呼ぶ
 			_ = svc
 
 			// 非同期で作成する経路では 202 を返す(Responses に宣言済み)。
 			// 宣言していないステータスを WithStatus に渡すと、開発環境では即座に失敗する。
 			if async, ok := r.Query("async"); ok && async == "true" {
-				return rest.NewResult(&dto.CreateUser{ID: 1, Name: req.Name},
+				return rest.NewResult(&dto.CreateUser{ID: 1, Name: body.Name},
 					rest.WithStatus(http.StatusAccepted),
 					rest.WithHeader("Retry-After", "5")), nil
 			}
-			return rest.NewResult(&dto.CreateUser{ID: 1, Name: req.Name}), nil
+			return rest.NewResult(&dto.CreateUser{ID: 1, Name: body.Name}), nil
 		},
 	}
 }

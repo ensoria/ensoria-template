@@ -47,7 +47,7 @@ var _ = Describe("Behavior wiring", func() {
 				Idempotent:    &idempotent,
 				Preconditions: []string{"caller must be admin"},
 			},
-			Handle: func(r *rest.Request, req *createReq) (*rest.Result[createRes], error) {
+			Handle: func(r *rest.Request, body *createReq) (*rest.Result[createRes], error) {
 				return rest.NewResult(&createRes{ID: "usr_01"}), nil
 			},
 		}

@@ -61,7 +61,7 @@ func NewPatch(svc service.UserService) *restkit.Endpoint[dto.UpdateUser, dto.Get
 				CallerAction: "Check the id. Do not retry.",
 			},
 		},
-		Handle: func(r *rest.Request, req *dto.UpdateUser) (*rest.Result[dto.GetUser], error) {
+		Handle: func(r *rest.Request, body *dto.UpdateUser) (*rest.Result[dto.GetUser], error) {
 			id, _ := r.PathValue("id")
 			_ = id
 			_ = svc
@@ -69,13 +69,13 @@ func NewPatch(svc service.UserService) *restkit.Endpoint[dto.UpdateUser, dto.Get
 			// 触れられたフィールドだけを反映する。IsSet を見ないと、送られなかった
 			// フィールドをゼロ値で上書きしてしまう。
 			user := &dto.GetUser{ID: 1, Name: "hoge"}
-			if name, ok := req.Name.Get(); ok {
+			if name, ok := body.Name.Get(); ok {
 				user.Name = name
 			}
 			// nickname は null で消せる。IsSet が true で値が無ければ「消す」指示。
-			if req.Nickname.IsSet() {
+			if body.Nickname.IsSet() {
 				// ここで svc に「消す」または「値を入れる」を伝える
-				_ = req.Nickname.OrElse("")
+				_ = body.Nickname.OrElse("")
 			}
 
 			return rest.NewResult(user), nil

@@ -67,14 +67,14 @@ func NewRetryDeadLetterJobsByName(wrk *worker.Worker) *restkit.Endpoint[dto.Retr
 			"retriedCount": "How many jobs were queued again",
 		},
 		Behavior: retryBehavior("queues every matching job to run again"),
-		Handle: func(r *rest.Request, req *dto.RetryByName) (*rest.Result[dto.DeadLetterJobRetry], error) {
-			count, err := wrk.RetryDeadLetterJobsByName(r.Context(), req.JobName)
+		Handle: func(r *rest.Request, body *dto.RetryByName) (*rest.Result[dto.DeadLetterJobRetry], error) {
+			count, err := wrk.RetryDeadLetterJobsByName(r.Context(), body.JobName)
 			if err != nil {
 				// An unrecognised error becomes 500 without leaking its text.
 				return nil, err
 			}
 			return rest.NewResult(&dto.DeadLetterJobRetry{
-				Id:         req.JobName,
+				Id:         body.JobName,
 				Message:    "jobs retried successfully",
 				RetryCount: count,
 			}), nil

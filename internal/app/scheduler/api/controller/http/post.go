@@ -68,9 +68,9 @@ func newControl[Req any](
 			Idempotent:  new(true),
 		},
 		Errors: controlErrors(),
-		Handle: func(r *rest.Request, req *Req) (*rest.Result[dto.TaskControl], error) {
+		Handle: func(r *rest.Request, body *Req) (*rest.Result[dto.TaskControl], error) {
 			name, _ := r.PathValue("name")
-			if err := action(r.Context(), name, req); err != nil {
+			if err := action(r.Context(), name, body); err != nil {
 				// The scheduler does not distinguish "no such task" from
 				// "cannot do that now", so both are reported as a conflict and
 				// the message carries the detail.

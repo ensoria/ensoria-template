@@ -59,7 +59,7 @@ func NewPaymentCallback(svc service.OrderService) *restkit.Endpoint[dto.PaymentC
 				CallerAction: "Do not retry; the notification refers to an unknown order.",
 			},
 		},
-		Handle: func(r *rest.Request, req *dto.PaymentCallback) (*rest.Result[restkit.NoBody], error) {
+		Handle: func(r *rest.Request, body *dto.PaymentCallback) (*rest.Result[restkit.NoBody], error) {
 			// ここで svc.ApplyPayment(req) を呼ぶ
 			_ = svc
 

@@ -166,7 +166,7 @@ type Endpoint[Req any, Res any] struct {
 	// error. Use rest.NewResult for a body, restkit.NoContent for an empty one.
 	//
 	// Required.
-	Handle func(r *rest.Request, req *Req) (*rest.Result[Res], error)
+	Handle func(r *rest.Request, body *Req) (*rest.Result[Res], error)
 }
 
 // HeaderSpec declares one row of the response header table.

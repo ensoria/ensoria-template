@@ -22,8 +22,8 @@ var _ = Describe("field documentation", func() {
 	describeWith := func(ep *restkit.Endpoint[sameShape, sameShape]) *apidoc.EndpointSpec {
 		ep.Success = http.StatusOK
 		ep.Security = &restkit.SecuritySpec{Public: true}
-		ep.Handle = func(r *rest.Request, req *sameShape) (*rest.Result[sameShape], error) {
-			return rest.NewResult(req), nil
+		ep.Handle = func(r *rest.Request, body *sameShape) (*rest.Result[sameShape], error) {
+			return rest.NewResult(body), nil
 		}
 		module := &rest.Module{Path: "/things", Post: restkit.NewController(ep)}
 		return apidoc.DescribeModule(module, nil)[0]

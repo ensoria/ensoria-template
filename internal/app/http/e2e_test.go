@@ -93,8 +93,8 @@ func serve() *httptest.Server {
 			Success:   http.StatusOK,
 			Security:  &restkit.SecuritySpec{Scopes: []string{"things:write"}},
 			BodyRules: []*rule.RuleSet{{Field: "name", Rules: []rule.Rule{vkit.Required()}}},
-			Handle: func(r *rest.Request, req *e2eBody) (*rest.Result[e2eBody], error) {
-				return rest.NewResult(req), nil
+			Handle: func(r *rest.Request, body *e2eBody) (*rest.Result[e2eBody], error) {
+				return rest.NewResult(body), nil
 			},
 		})},
 	}

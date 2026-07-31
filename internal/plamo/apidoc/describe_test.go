@@ -50,7 +50,7 @@ func buildModule() *rest.Module {
 		},
 		FieldDocs:       map[string]string{"name": "User display name"},
 		ResponseHeaders: []restkit.HeaderSpec{{Name: "Location", Meaning: "URL of created user"}},
-		Handle: func(r *rest.Request, req *createReq) (*rest.Result[createRes], error) {
+		Handle: func(r *rest.Request, body *createReq) (*rest.Result[createRes], error) {
 			return rest.NewResult(&createRes{ID: "usr_01"}), nil
 		},
 	}
@@ -89,7 +89,7 @@ var _ = Describe("DescribeModule / DescribeEndpoint", func() {
 						rule.CreateStrMaxLength(vmsgs)(10),
 					}},
 				},
-				Handle: func(r *rest.Request, req *createReq) (*rest.Result[createRes], error) {
+				Handle: func(r *rest.Request, body *createReq) (*rest.Result[createRes], error) {
 					return rest.NewResult(&createRes{}), nil
 				},
 			}
@@ -111,7 +111,7 @@ var _ = Describe("DescribeModule / DescribeEndpoint", func() {
 				QueryRules: []*rule.RuleSet{
 					{Field: "limit", Rules: []rule.Rule{rule.CreateIntMax(vmsgs)(100)}},
 				},
-				Handle: func(r *rest.Request, req *createReq) (*rest.Result[createRes], error) {
+				Handle: func(r *rest.Request, body *createReq) (*rest.Result[createRes], error) {
 					return rest.NewResult(&createRes{}), nil
 				},
 			}
@@ -171,7 +171,7 @@ var _ = Describe("DescribeModule / DescribeEndpoint", func() {
 					// ボディ型を宣言しないケース(本文なし)。
 					{Status: 204, When: "nothing changed"},
 				},
-				Handle: func(r *rest.Request, req *createReq) (*rest.Result[createRes], error) {
+				Handle: func(r *rest.Request, body *createReq) (*rest.Result[createRes], error) {
 					return rest.NewResult(&createRes{}), nil
 				},
 			}
@@ -225,7 +225,7 @@ var _ = Describe("DescribeModule / DescribeEndpoint", func() {
 					"address.city": "City name",
 					"items[].id":   "Item identifier",
 				},
-				Handle: func(r *rest.Request, req *nestedReq) (*rest.Result[createRes], error) {
+				Handle: func(r *rest.Request, body *nestedReq) (*rest.Result[createRes], error) {
 					return rest.NewResult(&createRes{}), nil
 				},
 			}
@@ -308,7 +308,7 @@ var _ = Describe("DescribeModule / DescribeEndpoint", func() {
 					// field-level エラーは BodyType から example + 表を組む。
 					{Status: 422, Code: "validation_failed", BodyType: reflect.TypeFor[envBody]()},
 				},
-				Handle: func(r *rest.Request, req *createReq) (*rest.Result[createRes], error) {
+				Handle: func(r *rest.Request, body *createReq) (*rest.Result[createRes], error) {
 					return rest.NewResult(&createRes{}), nil
 				},
 			}
