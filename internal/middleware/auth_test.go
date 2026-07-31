@@ -25,6 +25,8 @@ func (v verifierStub) Verify(*rest.Request) (*authkit.Principal, error) {
 	return v.principal, v.err
 }
 
+func (verifierStub) Schemes() []string { return []string{authkit.SchemeJWT} }
+
 // authRequest builds a request the auth middleware can run against (test helper).
 func authRequest() *rest.Request {
 	return rest.NewRequest(httptest.NewRequest(http.MethodGet, "/things", nil))

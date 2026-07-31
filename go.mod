@@ -8,7 +8,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/credentials v1.19.27
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.105.0
 	github.com/ensoria/cache v0.0.1
-	github.com/ensoria/config v0.0.26
+	github.com/ensoria/config v0.0.28
 	github.com/ensoria/encli v0.0.3
 	github.com/ensoria/file v0.0.1
 	github.com/ensoria/gofake v0.0.8

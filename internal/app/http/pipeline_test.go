@@ -20,12 +20,16 @@ func (rejectingVerifier) Verify(*rest.Request) (*authkit.Principal, error) {
 	return nil, errors.New("credential could not be verified")
 }
 
+func (rejectingVerifier) Schemes() []string { return []string{authkit.SchemeJWT} }
+
 // anonymousVerifier reports that the request carried no credential (test helper).
 type anonymousVerifier struct{}
 
 func (anonymousVerifier) Verify(*rest.Request) (*authkit.Principal, error) {
 	return nil, authkit.ErrNoCredential
 }
+
+func (anonymousVerifier) Schemes() []string { return []string{authkit.SchemeJWT} }
 
 // chain composes the middlewares the way the pipeline does: the list runs
 // outside-in, so it is applied in reverse (test helper).

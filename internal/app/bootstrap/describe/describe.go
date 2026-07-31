@@ -117,6 +117,10 @@ func (stubEnqueuer) Enqueue(ctx context.Context, jobName string, payload any, op
 
 // securitySchemes は設定されている検証手段から、呼び出し元が使える資格情報の方式を組む。
 // 設定されていない方式は出さない —— 使えない認証方法をドキュメントに載せないため。
+//
+// API キーは、設定に並んでいる場合と「別の場所で検証する」と宣言されている場合の
+// 両方で出す。DB から検証するアプリでも、呼び出し元にとっては API キーが使えることに
+// 変わりないため。
 func securitySchemes(auth *appconfig.Auth) []apidoc.SecurityScheme {
 	if auth == nil {
 		return nil
@@ -132,7 +136,7 @@ func securitySchemes(auth *appconfig.Auth) []apidoc.SecurityScheme {
 			Description:  "Bearer token issued by the identity provider",
 		})
 	}
-	if len(auth.APIKeys) > 0 {
+	if auth.AcceptsAPIKeys() {
 		header := auth.APIKeyHeader
 		if header == "" {
 			header = appconfig.DefaultAPIKeyHeader

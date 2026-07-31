@@ -46,6 +46,14 @@ type Verifier interface {
 	// It returns ErrNoCredential when the request carried none, and an error
 	// wrapping ErrInvalidCredential when it carried one that cannot be trusted.
 	Verify(r *rest.Request) (*Principal, error)
+	// Schemes reports which kinds of credential this verifier can check, in a
+	// stable order (SchemeJWT, SchemeAPIKey).
+	//
+	// It is the verifier, not the configuration, that knows the answer: a key
+	// store injected by application code never appears in the configuration.
+	// The startup checks ask for it so that an application verifying API keys
+	// against a database is not mistaken for one that cannot verify them at all.
+	Schemes() []string
 }
 
 // KeyStore resolves an API key into the caller it belongs to.
@@ -223,6 +231,18 @@ func scopesOf(claims jwt.MapClaims) []string {
 		return nil
 	}
 	return strings.Fields(scope)
+}
+
+// Schemes reports what this verifier was built to check.
+func (v *verifier) Schemes() []string {
+	var schemes []string
+	if v.jwtKeyfunc != nil {
+		schemes = append(schemes, SchemeJWT)
+	}
+	if v.keys != nil {
+		schemes = append(schemes, SchemeAPIKey)
+	}
+	return schemes
 }
 
 func (v *verifier) verifyAPIKey(key string) (*Principal, error) {

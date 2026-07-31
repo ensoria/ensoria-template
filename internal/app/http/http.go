@@ -71,7 +71,7 @@ func CreateHTTPPipeline(modules []*rest.Module, verifier authkit.Verifier) *pipe
 
 	// 宣言と設定の食い違いを起動時に潰す。放っておくと全リクエストが拒否されるだけで、
 	// 原因が見えない。
-	if err := checkAuthConfiguration(modules, configParams.Auth); err != nil {
+	if err := checkAuthConfiguration(modules, verifier); err != nil {
 		log.Fatalf("%s", err)
 	}
 

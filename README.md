@@ -109,15 +109,95 @@ Security: &restkit.SecuritySpec{
 `Scopes` は文書化のためだけの宣言ではなく、実際に強制されます。書けば動作が変わるので、
 書き忘れても気づかない、ということが起きません。
 
-> **認証の設定が要ります。** 要認証のエンドポイントが1つでもあるのに認証が未設定
-> （`AUTH_MODE` / `AUTH_SECRET` / `AUTH_JWKS_URL` / `AUTH_API_KEYS` のいずれも無い）だと、
-> アプリケーションは起動時に停止します。全リクエストを拒否し続ける設定ミスを、
-> 最初のリクエストではなく起動時に潰すためです。ローカル開発用の既定値は
-> `internal/config/.env` に入っています。
+> **認証の設定が要ります。** 要認証のエンドポイントが1つでもあるのに**呼び出し元を検証
+> できるものが何も無い**と、アプリケーションは起動時に停止します。全リクエストを拒否し
+> 続ける設定ミスを、最初のリクエストではなく起動時に潰すためです。
+> 同様に、`Schemes` で限定した資格情報を検証できない場合も停止します。
+> ローカル開発用の既定値は `internal/config/.env` に入っています。
 
 > **生 Controller には効きません。** `Security` は `restkit.Endpoint` のアダプタが評価します。
 > `rest.Controller` を自分で実装した場合はこの判定を通らないので、認可は自分で書く必要が
 > あります。テンプレート内のコントローラはすべて型付きエンドポイントです。
+
+### 認証の設定
+
+呼び出し元の検証は2種類あり、片方だけでも両方でも使えます。設定値そのものの説明は
+[config の README](https://github.com/ensoria/config#認証の設定auth_) にあります。
+
+| 種類 | 想定する呼び出し元 | 何が身元になるか |
+|---|---|---|
+| **JWT** | 人間の利用者（ブラウザ・モバイル） | トークンの `sub` / `scope` クレーム |
+| **API キー** | 他のサーバ（サービス間通信） | キーそのもの |
+
+**`AUTH_SECRET` は利用者ごとの鍵ではありません。** JWT の署名鍵で、アプリケーションに1つです。
+利用者が1万人いても鍵は1つで、誰なのかはトークンの中身に入っています。また `hs256` は共有鍵
+（鍵を持てばトークンを偽造できる）なので**ローカル開発向け**です。本番は `jwks` を使い、
+IdP の公開鍵で検証してください。
+
+> **このテンプレートはトークンを発行しません。** 発行（ログイン）は IdP か、自分で書く
+> ログインエンドポイントの仕事です。`Auth` に署名鍵や有効期限の設定が無いのはそのためで、
+> `AUTH_SECRET` は検証専用です。
+
+#### API キーの保管を差し替える（`KeyStore`）
+
+`AUTH_API_KEYS` に並べたキーは、**呼び出し元を識別しません**。既定の実装は「通す / 通さない」
+だけを返すので、3社にキーを配ってもログには同じ呼び出し元としか残らず、社ごとに権限を
+変えることもできません。
+
+実運用でキーを配るなら [`authkit.KeyStore`](internal/plamo/authkit/verifier.go) を実装して
+差し替えます。インターフェースは1メソッドだけです。
+
+```go
+type KeyStore interface {
+	Lookup(key string) (*Principal, error)
+}
+```
+
+```go
+func (s *dbKeyStore) Lookup(key string) (*authkit.Principal, error) {
+	client, err := s.repo.FindByKeyHash(hash(key))
+	if err != nil {
+		return nil, err
+	}
+	return &authkit.Principal{
+		Subject: client.ID,      // ログに残る「どの取引先か」
+		Scheme:  authkit.SchemeAPIKey,
+		Scopes:  client.Scopes,  // Endpoint.Security のスコープ判定がそのまま効く
+	}, nil
+}
+```
+
+差し替えは [internal/app/auth/auth.go](internal/app/auth/auth.go) の1行です。
+
+```go
+// 既定（設定のキーを使う）
+return authkit.NewVerifier(params.Auth, nil)
+
+// 差し替え後
+return authkit.NewVerifier(params.Auth, apikey.NewDBKeyStore(repo))
+```
+
+**設定は次のようにします。**
+
+| 環境変数 | 値 | 理由 |
+|---|---|---|
+| `AUTH_API_KEYS_EXTERNAL` | `true` | **必須。** 立てないと起動時に停止します（後述） |
+| `AUTH_API_KEYS` | **空のまま** | 差し替えた時点で無視されます。値を残すと「このキーで入れる」という誤解を招きます |
+| `AUTH_API_KEY_HEADER` | 既定のままで可 | ヘッダ名は差し替え後も設定から読まれます |
+
+`AUTH_API_KEYS_EXTERNAL` が必要なのは、**設定しか読めない処理があるため**です。実行中の
+アプリケーションは検証器に「何を検証できるか」を直接聞けますが、ドキュメント生成
+（`encli generate ...`）は DB に繋がずに設定だけを読みます。この宣言が無いと、設定にキーが
+1つも無いことから「API キーは使えない」と判断され、生成される OpenAPI から
+`securitySchemes` の API キーが消えます。
+
+実装するときの注意点です。
+
+- **キーは平文で保存しない。** ハッシュで保存し、照合もハッシュで行います
+- **`Lookup` は毎リクエスト呼ばれます。** DB に毎回問い合わせると負荷になるので短時間の
+  キャッシュを検討してください。ただしキャッシュ時間がそのまま失効の反映遅延になります
+- **エラーの中身は外に漏れません。** アダプタが 401 に丸め、本文は理由を明かしません。
+  `Lookup` のエラーに内部情報を書いてもクライアントには出ません（ログには出ます）
 
 ### 検証は宣言するだけ
 

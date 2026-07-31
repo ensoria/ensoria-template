@@ -21,6 +21,8 @@ func (rejectingVerifier) Verify(*rest.Request) (*authkit.Principal, error) {
 	return nil, errors.New("credential could not be verified")
 }
 
+func (rejectingVerifier) Schemes() []string { return []string{authkit.SchemeJWT} }
+
 func upgradeRequest() *rest.Request {
 	return rest.NewRequest(httptest.NewRequest(http.MethodGet, "/ws/things", nil))
 }
