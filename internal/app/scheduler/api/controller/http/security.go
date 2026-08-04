@@ -1,5 +1,7 @@
 package http
 
+// FIXME: 他とスコープの定義が違うため、共通化する
+// 他は、`user:read` のように、`:`1つで区切るのに対し、ここは `admin:tasks:read` のように `:`2つで区切っている
 // Scopes required by the scheduler admin endpoints.
 //
 // Reading task state and changing it are separate scopes so that an operator
