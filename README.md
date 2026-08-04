@@ -185,6 +185,43 @@ func (s *dbKeyStore) Lookup(key string) (*authkit.Principal, error) {
 }
 ```
 
+> **⚠ `Lookup` は毎回、呼び出し元ごとに新しい `Principal` を返してください。**
+> 手元のキャッシュや表に入っている `*Principal` を**そのまま返さない**ことが重要です。
+>
+> 返した `Principal` は `authkit.WithPrincipal` でリクエスト context に載り、
+> アプリケーションコードが `PrincipalFrom` で取り出して自由に触れます。
+> **そこで `Scopes` に `append` されると、同じキーを使う次のリクエストの権限が広がります。**
+> `Scopes` はスライスなので、共有インスタンスを返していると変更がそのまま残ります。
+>
+> ```go
+> // ✗ 表の *Principal をそのまま返している
+> func (s *cachedKeyStore) Lookup(key string) (*authkit.Principal, error) {
+> 	return s.principals[key], nil // 呼び出し側の変更が次のリクエストに残る
+> }
+>
+> // ⭕️ 毎回組み立て直す（スライス・マップは clone する）
+> func (s *cachedKeyStore) Lookup(key string) (*authkit.Principal, error) {
+> 	p, ok := s.principals[key]
+> 	if !ok {
+> 		return nil, errors.New("unknown API key")
+> 	}
+> 	return &authkit.Principal{
+> 		Subject: p.Subject,
+> 		Scopes:  slices.Clone(p.Scopes),
+> 		Scheme:  p.Scheme,
+> 		Claims:  maps.Clone(p.Claims),
+> 	}, nil
+> }
+> ```
+>
+> 上の `dbKeyStore` の例のように**毎回 DB から読んで組み立てる実装なら自然に満たせます**。
+> 注意が要るのは、キーの表をメモリに持つ実装（キャッシュ、起動時ロード）です。
+> [`plamo/stub` の `APIKeyStore`](internal/plamo/stub/apikey.go) はまさにそれなので、
+> 構築時と `Lookup` の両方で `Principal` をコピーしています。
+>
+> なお `authkit` 既定の実装（`AUTH_API_KEYS` を使うもの）も毎回新しい `Principal` を作るため、
+> この問題は起きません。
+
 差し替えは [internal/app/auth/auth.go](internal/app/auth/auth.go) の1行です。
 
 ```go
