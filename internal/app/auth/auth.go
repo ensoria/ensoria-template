@@ -14,6 +14,7 @@ import (
 	"github.com/ensoria/config/pkg/env"
 	"github.com/ensoria/config/pkg/registry"
 	"github.com/ensoria/ensoria-template/internal/plamo/authkit"
+	"github.com/ensoria/ensoria-template/internal/plamo/stub"
 )
 
 // defaultModule is the configuration module the auth settings are read from.
@@ -31,6 +32,37 @@ const (
 	DevAPIKey = "ensoria-local-development-api-key-change-me"
 )
 
+// TODO: 最終的なテンプレートとしては調整する
+// DevPaymentAPIKey stands for a caller that may do one thing and no more.
+//
+// POST /order/payment-callback declares Schemes: [apiKey] and Scopes:
+// [orders:write], and the point of that declaration is lost if the only API key
+// in the project can do everything. This key holds orders:write alone, so the
+// difference between "authenticated" and "permitted" can actually be observed:
+// it opens the callback and is refused by GET /order.
+//
+// Unlike DevAPIKey it is not in the configuration. It exists only inside the
+// development key store, which cannot be built outside local and test.
+const DevPaymentAPIKey = "ensoria-local-development-payment-provider-key"
+
+// The callers the development key store hands back. Names rather than ids,
+// because the only place they appear is a local log.
+const (
+	DevSubject        = "local-dev"
+	DevPaymentSubject = "payment-provider"
+)
+
+// TODO: 最終的なテンプレートとしては調整する
+// 全体でスコープをそもそも、`orders`や`users`のようなリソース単位で分け内容にするか?
+// devScopes returns every permission the template's endpoints declare, which is
+// what the configured keys are given locally so that any endpoint can be tried.
+//
+// It is a function rather than a package-level slice so that a caller cannot
+// append to the one copy everyone reads.
+func devScopes() []string {
+	return []string{"orders:read", "orders:write", "users:read", "users:write"}
+}
+
 // NewVerifier builds the verifier described by the configuration for the given
 // environment.
 //
@@ -39,7 +71,8 @@ const (
 // request that presents a token.
 //
 // Applications that keep API keys outside the configuration replace this
-// constructor with one that passes their own authkit.KeyStore.
+// constructor with one that passes their own authkit.KeyStore. The development
+// store below is where that argument goes; swapping it is a one-line change.
 func NewVerifier(envVal *string) func() (authkit.Verifier, error) {
 	return func() (authkit.Verifier, error) {
 		params, err := registry.ModuleParams(defaultModule)
@@ -49,8 +82,43 @@ func NewVerifier(envVal *string) func() (authkit.Verifier, error) {
 		if err := checkDevCredentials(*envVal, params.Auth); err != nil {
 			return nil, err
 		}
-		return authkit.NewVerifier(params.Auth, nil)
+		keys, err := devKeyStore(*envVal, params.Auth)
+		if err != nil {
+			return nil, err
+		}
+		return authkit.NewVerifier(params.Auth, keys)
 	}
+}
+
+// devKeyStore gives the configured API keys permissions they cannot carry on
+// their own, and adds one key that deliberately has fewer.
+//
+// It returns nil outside local and test, which leaves authkit with the keys
+// from the configuration — the same behaviour as before this existed. A
+// deployment therefore gains nothing from this function, and loses nothing to
+// it either.
+//
+// nil is also returned when the configuration lists no API keys at all: an
+// application that turned them off must not have them turned back on here, and
+// one that set AUTH_API_KEYS_EXTERNAL is expected to inject a store of its own,
+// which this would shadow.
+func devKeyStore(envVal string, cfg *appconfig.Auth) (authkit.KeyStore, error) {
+	if !devCredentialsAllowed(envVal) || cfg == nil || len(cfg.APIKeys) == 0 {
+		return nil, nil
+	}
+
+	// The keys still come from the configuration, so adding one to
+	// AUTH_API_KEYS locally keeps working. Only the permissions are added here.
+	keys := make(map[string]*authkit.Principal, len(cfg.APIKeys)+1)
+	for _, key := range cfg.APIKeys {
+		keys[key] = &authkit.Principal{Subject: DevSubject, Scopes: devScopes()}
+	}
+	// TODO: 最終的なテンプレートとしては調整する
+	keys[DevPaymentAPIKey] = &authkit.Principal{
+		Subject: DevPaymentSubject,
+		Scopes:  []string{"orders:write"},
+	}
+	return stub.NewAPIKeyStore(envVal, keys)
 }
 
 // checkDevCredentials refuses the credentials shipped with the template outside

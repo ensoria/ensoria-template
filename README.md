@@ -188,12 +188,70 @@ func (s *dbKeyStore) Lookup(key string) (*authkit.Principal, error) {
 差し替えは [internal/app/auth/auth.go](internal/app/auth/auth.go) の1行です。
 
 ```go
-// 既定（設定のキーを使う）
-return authkit.NewVerifier(params.Auth, nil)
+// 既定（開発用のスタブ。local / test 以外では nil = 設定のキー）
+keys, err := devKeyStore(*envVal, params.Auth)
+if err != nil {
+	return nil, err
+}
+return authkit.NewVerifier(params.Auth, keys)
 
 // 差し替え後
 return authkit.NewVerifier(params.Auth, apikey.NewDBKeyStore(repo))
 ```
+
+#### 開発用のスタブ `KeyStore`
+
+上の `KeyStore` は DB を用意しないと書けませんが、**ローカルでは
+[`plamo/stub`](internal/plamo/stub/apikey.go) のスタブが既定で入っています**。
+固定の表から呼び出し元を返すだけの実装で、DB も外部サービスも要りません。
+
+**`local` と `test` 以外では構築できません**（コンストラクタがエラーを返します）。
+キーがソースや設定に書かれている以上、それ以外の環境では何も守れないためです。
+「`stub` という名前だから本番では使わないだろう」は期待であって保証ではないので、
+仕組みで閉じています。
+
+配られるキーは2つです。
+
+| キー | `sub` | スコープ | 出どころ |
+|---|---|---|---|
+| `AUTH_API_KEYS` に並べたキー（同梱キーを含む） | `local-dev` | `orders:read` `orders:write` `users:read` `users:write` | 設定。**ローカルでキーを足せばそのまま使えます** |
+| `ensoria-local-development-payment-provider-key` | `payment-provider` | `orders:write` **のみ** | スタブの中だけ。設定には**入っていません** |
+
+2つ目は `POST /order/payment-callback` のためにあります。このエンドポイントは
+`Schemes: [apiKey]` と `Scopes: [orders:write]` を宣言していますが、**プロジェクトの
+API キーが何でもできてしまうと、この宣言の意味が確かめられません**。権限を絞ったキーが
+1つあることで、「認証は通るが権限が足りない」を実際に観測できます。
+
+```sh
+# 決済事業者のキー → 通る
+curl -i -X POST localhost:8080/order/payment-callback \
+  -H "X-API-Key: ensoria-local-development-payment-provider-key" \
+  -H "Content-Type: application/json" \
+  -d '{"paymentId":"pay_1","orderId":1,"status":"settled"}'
+# HTTP/1.1 204 No Content
+
+# 同じキーで GET /order → 403（orders:read を持たない）
+curl -i localhost:8080/order \
+  -H "X-API-Key: ensoria-local-development-payment-provider-key"
+# HTTP/1.1 403 Forbidden
+
+# 知らないキー → 401
+curl -i -X POST localhost:8080/order/payment-callback \
+  -H "X-API-Key: nope" -H "Content-Type: application/json" -d '{}'
+# HTTP/1.1 401 Unauthorized
+```
+
+> **なぜ設定のキーだけでは 403 になるのか。** `AUTH_API_KEYS` に並べたキーは
+> **スコープを持てません**（`authkit` の既定の実装は「通す / 通さない」だけを返します）。
+> そのため `Scopes` を宣言したエンドポイントは、認証が通ったあとに 403 を返します。
+> スタブはここを埋めるためのもので、**本番で同じことをするのが上の `KeyStore` 実装**です。
+
+スタブが入るのは、次のすべてを満たすときだけです。それ以外では `nil` が渡り、
+**このスタブが存在しなかったときとまったく同じ動作**になります。
+
+- `local` または `test` 環境である
+- `AUTH_API_KEYS` に1つ以上キーがある（API キーを使わない設定を、ここで勝手に有効化しない）
+- `AUTH_API_KEYS_EXTERNAL` が立っていない（自前の `KeyStore` を隠さない）
 
 **設定は次のようにします。**
 

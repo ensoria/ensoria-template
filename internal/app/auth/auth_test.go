@@ -4,6 +4,8 @@ import (
 	"github.com/ensoria/config/pkg/appconfig"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
+
+	"github.com/ensoria/ensoria-template/internal/plamo/authkit"
 )
 
 // withSecret and withAPIKey build the configuration under test.
@@ -131,5 +133,121 @@ var _ = Describe("the API key shipped with the template", func() {
 		cfg.APIKeysExternal = true
 
 		Expect(checkDevCredentials("production", cfg)).To(HaveOccurred())
+	})
+})
+
+var _ = Describe("the development key store", func() {
+	// The configured keys carry no permissions of their own, so without this an
+	// endpoint declaring any scope refuses every API key with 403.
+	It("gives the configured keys the scopes the endpoints declare", func() {
+		keys, err := devKeyStore("local", withAPIKey(DevAPIKey))
+		Expect(err).NotTo(HaveOccurred())
+
+		principal, err := keys.Lookup(DevAPIKey)
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(principal.Subject).To(Equal(DevSubject))
+		Expect(principal.HasScopes(devScopes())).To(BeTrue())
+	})
+
+	// The keys still come from the configuration, so adding one locally keeps
+	// working. Only the permissions are added here.
+	It("covers a key the developer added to the configuration", func() {
+		keys, err := devKeyStore("local", withAPIKey(DevAPIKey, "a-key-of-my-own"))
+		Expect(err).NotTo(HaveOccurred())
+
+		principal, err := keys.Lookup("a-key-of-my-own")
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(principal.HasScopes(devScopes())).To(BeTrue())
+	})
+
+	Describe("the payment provider key", func() {
+		It("holds orders:write and nothing else", func() {
+			keys, err := devKeyStore("local", withAPIKey(DevAPIKey))
+			Expect(err).NotTo(HaveOccurred())
+
+			principal, err := keys.Lookup(DevPaymentAPIKey)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(principal.Subject).To(Equal(DevPaymentSubject))
+			Expect(principal.HasScopes([]string{"orders:write"})).To(BeTrue())
+			Expect(principal.HasScopes([]string{"orders:read"})).To(BeFalse())
+		})
+
+		// It exists to make the difference between "authenticated" and
+		// "permitted" observable, which it cannot do if it can do everything.
+		It("cannot do what the configured key can", func() {
+			keys, err := devKeyStore("local", withAPIKey(DevAPIKey))
+			Expect(err).NotTo(HaveOccurred())
+
+			payment, _ := keys.Lookup(DevPaymentAPIKey)
+			configured, _ := keys.Lookup(DevAPIKey)
+
+			Expect(payment.HasScopes(devScopes())).To(BeFalse())
+			Expect(configured.HasScopes(devScopes())).To(BeTrue())
+		})
+
+		// Unlike DevAPIKey it is not in the configuration, so nothing outside
+		// local and test can be holding it.
+		It("is not one of the configured keys", func() {
+			Expect(withAPIKey(DevAPIKey).APIKeys).NotTo(ContainElement(DevPaymentAPIKey))
+		})
+	})
+
+	// A deployment gets the same key store it got before this existed, so the
+	// stub cannot change what production accepts.
+	DescribeTable("is not built outside the environments it exists for",
+		func(envVal string) {
+			keys, err := devKeyStore(envVal, withAPIKey(DevAPIKey))
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(keys).To(BeNil())
+		},
+		Entry("development", "development"),
+		Entry("staging", "staging"),
+		Entry("production", "production"),
+		Entry("unrecognized", "prod"),
+	)
+
+	// An application that turned API keys off must not have them turned back on
+	// here: injecting a store would make the verifier report that it accepts a
+	// scheme the configuration never asked for.
+	It("is not built when the configuration lists no keys", func() {
+		keys, err := devKeyStore("local", withAPIKey())
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(keys).To(BeNil())
+	})
+
+	// A project setting this is expected to inject a store of its own, which
+	// the stub would shadow.
+	It("is not built when the keys are declared to come from elsewhere", func() {
+		cfg := &appconfig.Auth{APIKeysExternal: true}
+
+		keys, err := devKeyStore("local", cfg)
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(keys).To(BeNil())
+	})
+
+	It("is not built when there is no auth configuration at all", func() {
+		keys, err := devKeyStore("local", nil)
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(keys).To(BeNil())
+	})
+
+	// Handed to authkit as-is, so a caller presenting the key is authorized by
+	// the same path a request takes.
+	It("is what the verifier looks keys up in", func() {
+		cfg := withAPIKey(DevAPIKey)
+		keys, err := devKeyStore("local", cfg)
+		Expect(err).NotTo(HaveOccurred())
+
+		verifier, err := authkit.NewVerifier(cfg, keys)
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(verifier.Schemes()).To(ContainElement(authkit.SchemeAPIKey))
 	})
 })
