@@ -3,9 +3,6 @@ package restkit
 import (
 	"net/http"
 	"reflect"
-	"sort"
-	"strconv"
-	"strings"
 
 	"github.com/ensoria/ensoria-template/internal/plamo/vkit"
 	"github.com/ensoria/rest/pkg/rest"
@@ -25,8 +22,6 @@ const (
 	internalErrorMessage = "internal server error"
 	// internalErrorCode は上記に対応する機械判定用コード。
 	internalErrorCode = "internal_error"
-	// defaultLang は Accept-Language が無い/未対応のときの表示言語。
-	defaultLang = "en"
 )
 
 // HTTPError はハンドラが返すエラーのうち、ステータス/コードを自ら決められるもの。
@@ -169,7 +164,7 @@ func validationErrorResponse(vErrs verr.ValidationErrors, langs []string) *rest.
 	status := validationErrorStatus
 
 	for _, fe := range vErrs {
-		msg := pickMessage(fe.Messages, langs)
+		msg := vkit.PickMessage(fe.Messages, langs)
 		if fe.Field == "" {
 			// リクエスト全体エラー(例: JSON パース失敗)は top-level メッセージにする
 			detail.Code = fe.Code
@@ -192,84 +187,12 @@ func validationErrorResponse(vErrs verr.ValidationErrors, langs []string) *rest.
 	}
 }
 
-// preferredLangs は Accept-Language を q 値順に解析し、言語サブタグ(小文字)の
-// 優先順リストを返す。末尾には必ず defaultLang を付ける(最終フォールバック)。
-// 例: "fr;q=0.8, ja-JP, en;q=0.9" -> ["ja", "en", "fr", defaultLang]
+// preferredLangs は Accept-Language を解析し、表示言語の優先順リストを返す。
+// 解析そのものは vkit が持つ —— WebSocket 側も同じ選択を行うため、
+// 二重に実装すると同じ呼び出し元が経路によって別の言語を受け取り得る。
 func preferredLangs(r *rest.Request) []string {
 	header, _ := r.Header("Accept-Language")
-	langs := parseAcceptLanguage(header)
-	return append(langs, defaultLang)
-}
-
-// parseAcceptLanguage は Accept-Language ヘッダを解析し、q 値の降順(同値は出現順)で
-// 言語サブタグ(小文字, 重複排除)を返す。`*` と q=0 は除外する。
-func parseAcceptLanguage(header string) []string {
-	header = strings.TrimSpace(header)
-	if header == "" {
-		return nil
-	}
-
-	type langQ struct {
-		lang string
-		q    float64
-	}
-	var entries []langQ
-	for _, part := range strings.Split(header, ",") {
-		part = strings.TrimSpace(part)
-		if part == "" {
-			continue
-		}
-		lang := part
-		q := 1.0
-		if semi := strings.IndexByte(part, ';'); semi >= 0 {
-			lang = strings.TrimSpace(part[:semi])
-			for _, p := range strings.Split(part[semi+1:], ";") {
-				if value, ok := strings.CutPrefix(strings.TrimSpace(p), "q="); ok {
-					if parsed, err := strconv.ParseFloat(strings.TrimSpace(value), 64); err == nil {
-						q = parsed
-					}
-				}
-			}
-		}
-		// 一次サブタグ(例: "ja-JP" -> "ja")に正規化
-		if dash := strings.IndexByte(lang, '-'); dash >= 0 {
-			lang = lang[:dash]
-		}
-		lang = strings.ToLower(strings.TrimSpace(lang))
-		if lang == "" || lang == "*" || q <= 0 {
-			continue
-		}
-		entries = append(entries, langQ{lang, q})
-	}
-
-	// q 値の降順で安定ソート(同値は出現順を保持)
-	sort.SliceStable(entries, func(i, j int) bool {
-		return entries[i].q > entries[j].q
-	})
-
-	seen := make(map[string]bool, len(entries))
-	langs := make([]string, 0, len(entries))
-	for _, e := range entries {
-		if !seen[e.lang] {
-			seen[e.lang] = true
-			langs = append(langs, e.lang)
-		}
-	}
-	return langs
-}
-
-// pickMessage は langs(優先順)で最初に見つかったメッセージを返す。
-// どれも無ければ messages 内の任意の1つを返す。
-func pickMessage(messages map[string]string, langs []string) string {
-	for _, lang := range langs {
-		if msg, ok := messages[lang]; ok {
-			return msg
-		}
-	}
-	for _, msg := range messages {
-		return msg
-	}
-	return ""
+	return vkit.PreferredLangs(header)
 }
 
 // errorResponse はハンドラが返したエラーをレスポンスに変換する。

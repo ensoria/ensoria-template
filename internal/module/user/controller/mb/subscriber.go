@@ -38,7 +38,7 @@ func NewHelloWorldSubscription(us service.UserService) *mbkit.SubscriptionModule
 		},
 		Behavior: mbkit.BehaviorSpec{
 			SideEffects:   []string{"writes a log line"},
-			Idempotent:    ptr(true),
+			Idempotent:    new(true),
 			Preconditions: []string{"none"},
 			Ordering:      "none",
 			Delivery: mbkit.DeliverySpec{
@@ -64,7 +64,3 @@ func NewHelloWorldSubscription(us service.UserService) *mbkit.SubscriptionModule
 		},
 	})
 }
-
-// ptr returns a pointer to v, for the declarations whose "undeclared" state has
-// to stay distinguishable from false.
-func ptr[T any](v T) *T { return &v }

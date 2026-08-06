@@ -83,7 +83,7 @@ require (
 	github.com/aws/smithy-go v1.27.3 // indirect
 	github.com/ensoria/scheduler v0.0.2
 	github.com/ensoria/worker v0.0.5
-	github.com/gorilla/websocket v1.5.3 // indirect
+	github.com/gorilla/websocket v1.5.3
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/joho/godotenv v1.5.1 // indirect
 	github.com/klauspost/compress v1.18.0 // indirect

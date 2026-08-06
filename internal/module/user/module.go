@@ -15,8 +15,8 @@ import (
 	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
 	"github.com/ensoria/ensoria-template/internal/plamo/mbkit"
 	"github.com/ensoria/ensoria-template/internal/plamo/restkit"
+	"github.com/ensoria/ensoria-template/internal/plamo/wskit"
 	"github.com/ensoria/rest/pkg/rest"
-	"github.com/ensoria/websocket/pkg/wsconfig"
 
 	"github.com/ensoria/ensoria-template/internal/infra/grpcclt"
 	pbPost "github.com/ensoria/ensoria-template/pb/post"
@@ -49,16 +49,11 @@ func NewUserCollectionModule(post *restkit.Endpoint[dto.CreateUser, dto.CreateUs
 }
 
 // websocket
-func NewWebSocketModule(onOpen *ws.OnOpen, onMessage *ws.OnMessage) *wsconfig.Module {
-	module := wsconfig.NewDefaultModule("/ws/" + ModuleName)
-	// for logging
-	module.AddOnOpenMiddleware(ws.LogOnOpen)
-	module.OnOpen = onOpen.OnOpen()
-
-	// for logging
-	module.AddOnMessageMiddleware(ws.LogOnMessage)
-	module.OnMessage = onMessage.OnMessage()
-	return module
+//
+// 経路の宣言(パス・メッセージカタログ)はcontroller側のChannelが持つ。
+// wskitがそこから実行時モジュールを組み立て、受信ディスパッチを差し込む。
+func NewWebSocketModule(channel *ws.Channel) *wskit.Module {
+	return wskit.NewModule(channel.Declare())
 }
 
 func init() {
@@ -73,7 +68,7 @@ func init() {
 
 		// WebSocket
 		ws.NewOnOpen,
-		ws.NewOnMessage,
+		ws.NewChannel,
 		dikit.AsWSModule(NewWebSocketModule),
 
 		// gRPC server

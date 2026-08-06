@@ -4,6 +4,7 @@ import (
 	"github.com/ensoria/ensoria-template/internal/middleware"
 	"github.com/ensoria/ensoria-template/internal/plamo/authkit"
 	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
+	"github.com/ensoria/ensoria-template/internal/plamo/wskit"
 	"github.com/ensoria/websocket/pkg/wsconfig"
 	"github.com/ensoria/websocket/pkg/wsrouter"
 	"go.uber.org/fx"
@@ -15,14 +16,17 @@ import (
 // Guarding here rather than in each module is deliberate: a module added later
 // cannot forget the guard, which would otherwise leave that endpoint reachable
 // without authentication.
-func CreateWSRouter(modules []*wsconfig.Module, verifier authkit.Verifier) *wsrouter.Router {
+func CreateWSRouter(modules []*wskit.Module, verifier authkit.Verifier) *wsrouter.Router {
 	guard := middleware.AuthUpgrade(verifier)
+	runtime := make([]*wsconfig.Module, 0, len(modules))
 	for _, m := range modules {
-		m.AddHTTPMiddleware(guard)
+		rm := m.RuntimeModule()
+		rm.AddHTTPMiddleware(guard)
+		runtime = append(runtime, rm)
 	}
 
 	return &wsrouter.Router{
-		Modules: modules,
+		Modules: runtime,
 	}
 }
 
