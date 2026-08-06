@@ -97,18 +97,8 @@ func DescribeModule(m *rest.Module, idPrefixes map[string]string) []*EndpointSpe
 func DescribeEndpoint(method, path string, doc restkit.EndpointDoc, idPrefixes map[string]string) *EndpointSpec {
 	opts := ExampleOptions{Resource: resourceOf(path), IDPrefixes: idPrefixes}
 
-	req := SchemaFromType(doc.ReqType)
-	applyRules(req, doc.BodyRules)
-	applyFieldDocs(req, doc.FieldDocs, doc.RequestFieldDocs)
-	if req != nil {
-		req.Example = ExampleFromType(doc.ReqType, doc.BodyRules, opts)
-	}
-
-	res := SchemaFromType(doc.ResType)
-	applyFieldDocs(res, doc.FieldDocs, doc.ResponseFieldDocs)
-	if res != nil {
-		res.Example = ExampleFromType(doc.ResType, nil, opts)
-	}
+	req := BodySchema(doc.ReqType, doc.BodyRules, opts, doc.FieldDocs, doc.RequestFieldDocs)
+	res := BodySchema(doc.ResType, nil, opts, doc.FieldDocs, doc.ResponseFieldDocs)
 
 	return &EndpointSpec{
 		Method:            method,
@@ -145,12 +135,7 @@ func convertResponses(responses []restkit.ResponseSpec, opts ExampleOptions) []R
 			When:    r.When,
 			Headers: convertHeaders(r.Headers),
 		}
-		if r.BodyType != nil {
-			if body := SchemaFromType(r.BodyType); body != nil {
-				body.Example = ExampleFromType(r.BodyType, nil, opts)
-				spec.Body = body
-			}
-		}
+		spec.Body = BodySchema(r.BodyType, nil, opts)
 		out = append(out, spec)
 	}
 	return out
@@ -305,23 +290,6 @@ func parsePathParamNames(path string) []string {
 		}
 	}
 	return names
-}
-
-// applyFieldDocs は宣言されたフィールド意味(ドット/角括弧記法キー)をスキーマ木に反映する。
-//
-// shared は request / response の両方に当たる宣言、side は片側だけの宣言。
-// 同じキーがあれば side が勝つ —— 片側に限定して書いたほうが具体的だからである。
-// 順序でそれを実現している(後から書いたほうが残る)。
-func applyFieldDocs(schema *Schema, shared, side map[string]string) {
-	if schema == nil {
-		return
-	}
-	for path, meaning := range shared {
-		setFieldMeaning(schema, path, meaning)
-	}
-	for path, meaning := range side {
-		setFieldMeaning(schema, path, meaning)
-	}
 }
 
 // setFieldMeaning はスキーマ木の該当フィールドに意味を書き込む。
