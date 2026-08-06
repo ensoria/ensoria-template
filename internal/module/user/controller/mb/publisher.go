@@ -17,7 +17,7 @@ const UserCreatedTarget = "user.created"
 // Publishing through the declaration is what puts the message in the generated
 // document: a raw mb.Publish call would emit a message no document knows about.
 func NewHelloWorldPublication(publish enmb.Publish) *mbkit.Publication[dto.HelloWorld] {
-	return mbkit.NewPublication(publish, &mbkit.Publication[dto.HelloWorld]{
+	return mbkit.NewPublication(publish, &mbkit.PublicationSpec[dto.HelloWorld]{
 		Target:      HelloWorldTarget,
 		Summary:     "Emit the demonstration hello_world message",
 		Description: "Sample publication paired with the hello_world subscription, so the same channel shows both directions.",
@@ -49,7 +49,7 @@ func NewHelloWorldPublication(publish enmb.Publish) *mbkit.Publication[dto.Hello
 // delivery guarantee and its ordering can be written down for the teams that
 // subscribe to it.
 func NewUserCreatedPublication(publish enmb.Publish) *mbkit.Publication[dto.UserCreated] {
-	return mbkit.NewPublication(publish, &mbkit.Publication[dto.UserCreated]{
+	return mbkit.NewPublication(publish, &mbkit.PublicationSpec[dto.UserCreated]{
 		Target:      UserCreatedTarget,
 		Summary:     "Announce that a user was created",
 		Description: "Emitted once the user has been persisted. Consumers may treat it as the authoritative record that the user now exists.",

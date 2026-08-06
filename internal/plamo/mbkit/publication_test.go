@@ -40,15 +40,15 @@ func (p *published) broker() mb.Publish {
 }
 
 // newPublication binds a declaration to the recording broker.
-func newPublication(rec *published, adjust func(*mbkit.Publication[order])) *mbkit.Publication[order] {
-	decl := &mbkit.Publication[order]{
+func newPublication(rec *published, adjust func(*mbkit.PublicationSpec[order])) *mbkit.Publication[order] {
+	spec := &mbkit.PublicationSpec[order]{
 		Target:  "orders",
 		Summary: "Announce an order",
 	}
 	if adjust != nil {
-		adjust(decl)
+		adjust(spec)
 	}
-	return mbkit.NewPublication(rec.broker(), decl)
+	return mbkit.NewPublication(rec.broker(), spec)
 }
 
 var _ = Describe("Publication Publish", func() {
@@ -92,7 +92,7 @@ var _ = Describe("Publication Publish", func() {
 	Describe("options", func() {
 		It("applies the declared options to every call", func() {
 			rec := &published{}
-			pub := newPublication(rec, func(p *mbkit.Publication[order]) {
+			pub := newPublication(rec, func(p *mbkit.PublicationSpec[order]) {
 				p.Options = []mb.PublishOption{mb.WithPriority(5)}
 			})
 
@@ -103,7 +103,7 @@ var _ = Describe("Publication Publish", func() {
 
 		It("lets a per-call option override a declared one", func() {
 			rec := &published{}
-			pub := newPublication(rec, func(p *mbkit.Publication[order]) {
+			pub := newPublication(rec, func(p *mbkit.PublicationSpec[order]) {
 				p.Options = []mb.PublishOption{mb.WithPriority(5)}
 			})
 
@@ -116,7 +116,7 @@ var _ = Describe("Publication Publish", func() {
 
 		It("does not let a per-call option leak into the next call", func() {
 			rec := &published{}
-			pub := newPublication(rec, func(p *mbkit.Publication[order]) {
+			pub := newPublication(rec, func(p *mbkit.PublicationSpec[order]) {
 				p.Options = []mb.PublishOption{mb.WithPriority(5)}
 			})
 
@@ -130,7 +130,7 @@ var _ = Describe("Publication Publish", func() {
 	Describe("a message that fails its validation rules", func() {
 		It("is not published at all", func() {
 			rec := &published{}
-			pub := newPublication(rec, func(p *mbkit.Publication[order]) {
+			pub := newPublication(rec, func(p *mbkit.PublicationSpec[order]) {
 				p.BodyRules = []*rule.RuleSet{
 					{Field: "id", Rules: []rule.Rule{vkit.Required()}},
 				}
@@ -146,23 +146,21 @@ var _ = Describe("Publication Publish", func() {
 		})
 	})
 
-	It("refuses to publish when the declaration was never bound to a broker", func() {
-		unbound := &mbkit.Publication[order]{Target: "orders"}
+	// A declaration cannot be injected in place of a publication: writing
+	// &mbkit.Publication[order]{Target: "orders"} does not compile, because the
+	// declared fields live on PublicationSpec. Only the degenerate empty literal
+	// remains constructible, and it is refused rather than left to panic.
+	It("refuses to publish when it was not built by NewPublication", func() {
+		unbuilt := &mbkit.Publication[order]{}
 
-		err := unbound.Publish(context.Background(), &order{ID: "ord_1"}, nil)
+		err := unbuilt.Publish(context.Background(), &order{ID: "ord_1"}, nil)
 
-		Expect(err).To(MatchError(ContainSubstring("not bound")))
+		Expect(err).To(MatchError(ContainSubstring("NewPublication")))
+		Expect(unbuilt.Target()).To(BeEmpty())
 	})
 
-	It("freezes the declaration at construction", func() {
-		rec := &published{}
-		decl := &mbkit.Publication[order]{Target: "orders"}
-		pub := mbkit.NewPublication(rec.broker(), decl)
-
-		decl.Target = "somewhere-else"
-
-		Expect(pub.Publish(context.Background(), &order{ID: "ord_1"}, nil)).To(Succeed())
-		Expect(rec.target).To(Equal("orders"))
+	It("reports the target it was declared with", func() {
+		Expect(newPublication(&published{}, nil).Target()).To(Equal("orders"))
 	})
 })
 
@@ -170,7 +168,7 @@ var _ = Describe("PublicationDoc", func() {
 	It("carries the declaration through in a non-generic shape", func() {
 		idempotent := true
 		rec := &published{}
-		pub := newPublication(rec, func(p *mbkit.Publication[order]) {
+		pub := newPublication(rec, func(p *mbkit.PublicationSpec[order]) {
 			p.Description = "Longer explanation"
 			p.Task = "announce order"
 			p.FieldDocs = map[string]string{"id": "identifier of the order"}
@@ -193,7 +191,7 @@ var _ = Describe("PublicationDoc", func() {
 
 	It("resolves the declared options into the configuration really in force", func() {
 		rec := &published{}
-		pub := newPublication(rec, func(p *mbkit.Publication[order]) {
+		pub := newPublication(rec, func(p *mbkit.PublicationSpec[order]) {
 			p.Options = []mb.PublishOption{mb.WithPriority(5), mb.WithExpiration("60000")}
 		})
 
