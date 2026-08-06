@@ -1,9 +1,6 @@
 package user
 
 import (
-	"context"
-	"log/slog"
-
 	"github.com/ensoria/config/pkg/appconfig"
 	"github.com/ensoria/config/pkg/registry"
 	usergrpc "github.com/ensoria/ensoria-template/internal/module/user/controller/grpc"
@@ -16,8 +13,8 @@ import (
 	"github.com/ensoria/ensoria-template/internal/module/user/service"
 	"github.com/ensoria/ensoria-template/internal/module/user/task"
 	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
+	"github.com/ensoria/ensoria-template/internal/plamo/mbkit"
 	"github.com/ensoria/ensoria-template/internal/plamo/restkit"
-	"github.com/ensoria/mb/pkg/mb"
 	"github.com/ensoria/rest/pkg/rest"
 	"github.com/ensoria/websocket/pkg/wsconfig"
 
@@ -64,22 +61,6 @@ func NewWebSocketModule(onOpen *ws.OnOpen, onMessage *ws.OnMessage) *wsconfig.Mo
 	return module
 }
 
-// メッセージブローカーSubscriberは戻り値がないため、injectされることもない。そのため、constructorでは起動させることができない。
-// 登録はconstructorsではなく、invocationsに登録する必要がある
-func NewSubscribeModule(lc dikit.LC, subscribe mb.StartSubscription, handler mb.SubscribeHandler) {
-	// NOTE: onStartのctxはfxの起動処理用ctx（起動完了時にキャンセルされる）なので、
-	// 購読の生存期間には使わない。生存期間ctxはNewSubscribe（StartSubscription生成側）が
-	// アプリのルートコンテキストとして保持する。そのためsubscribeはctxを引数に取らない。
-	onStart := func(ctx context.Context) error {
-		slog.Info("start subscribing to hello_world")
-		return subscribe("hello_world", handler,
-			mb.WithErrorStrategy(mb.ErrorStrategyDiscard),
-		)
-	}
-	// Subscriberは、onStartを定義したら、RegisterMBSubscriberOnStartLifecycleに登録する
-	dikit.RegisterOnStartLifecycle(lc, onStart)
-}
-
 func init() {
 	dikit.AppendConstructors([]any{
 		dikit.ProvideAs[repository.UserRepository](repository.NewUserRepository),
@@ -99,8 +80,16 @@ func init() {
 		dikit.AsGRPCService(usergrpc.NewUserGRPCService),
 		dikit.ProvideAs[pb.UserServer](usergrpc.NewUserGRPCService),
 
-		// MB Subscriber
-		dikit.ProvideAsNamed[mb.SubscribeHandler](usermb.NewUserSubscriber, "UserSubscriber"),
+		// MB subscriptions: 宣言をgroupへ登録すると、app層のinvocationが
+		// まとめて購読を開始する（モジュールごとの起動用invocationは不要）。
+		dikit.AsMBSubscription(usermb.NewHelloWorldSubscription),
+
+		// MB publications: 型付きのPublicationをserviceやcontrollerへ直接注入しつつ、
+		// 同じ宣言をdescribe用のgroupにも登録する。
+		usermb.NewHelloWorldPublication,
+		dikit.AsMBPublication(mbkit.AsPublicationDoc[dto.HelloWorld]),
+		usermb.NewUserCreatedPublication,
+		dikit.AsMBPublication(mbkit.AsPublicationDoc[dto.UserCreated]),
 
 		// gRPC client
 		// 別のgRPCサーバーのクライアントが必要な場合は、コンストラクタを追加
@@ -116,10 +105,5 @@ func init() {
 		// scheduler tasks
 		task.NewSimpleTask,
 		dikit.AsScheduledTask(task.NewUserTask),
-	})
-
-	// IMPORTANT! メッセージブローカーの場合は、constructorsではなく、invocationsに登録する
-	dikit.AppendInvocations([]any{
-		dikit.InjectSubscriber(NewSubscribeModule, "UserSubscriber"),
 	})
 }

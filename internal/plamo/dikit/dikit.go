@@ -8,11 +8,13 @@ import (
 )
 
 const (
-	GroupTagHttpModules    = `group:"http_modules"`
-	GroupTagWSModules      = `group:"ws_modules"`
-	GroupTagGRPCServices   = `group:"grpc_services"`
-	GroupTagWorkerJobs     = `group:"worker_jobs"`
-	GroupTagScheduledTasks = `group:"scheduled_tasks"`
+	GroupTagHttpModules     = `group:"http_modules"`
+	GroupTagWSModules       = `group:"ws_modules"`
+	GroupTagGRPCServices    = `group:"grpc_services"`
+	GroupTagWorkerJobs      = `group:"worker_jobs"`
+	GroupTagScheduledTasks  = `group:"scheduled_tasks"`
+	GroupTagMBSubscriptions = `group:"mb_subscriptions"`
+	GroupTagMBPublications  = `group:"mb_publications"`
 )
 
 // gRPCサービス登録用のインターフェース
@@ -64,9 +66,9 @@ func ProvideAs[T any](concrete any) any {
 //
 // 使用例:
 //
-//	dikit.ProvideAsNamed[mb.SubscribeHandler](usermb.NewUserSubscriber, "UserSubscriber")
+//	dikit.ProvideAsNamed[storage.Storage](storage.NewArchiveStorage, "ArchiveStorage")
 //
-// 注入側では `name:"UserSubscriber"` タグで mb.SubscribeHandler として受け取る
+// 注入側では `name:"ArchiveStorage"` タグで storage.Storage として受け取る
 //
 // ProvideNamedとの違い:
 //   - ProvideAsNamed: 具象型 → インターフェースT に変換して名前付きで提供
@@ -135,6 +137,36 @@ func AsScheduledTask(f any) any {
 	)
 }
 
+// メッセージブローカーの購読宣言(*mbkit.SubscriptionModule)をgroupに登録する。
+//
+// 以前のように起動用のinvocationをモジュールごとに書く必要はない。app層の
+// invocationが1つ、このgroupを走査してまとめて購読を開始する。
+// group経由にすることで、購読対象とオプションが宣言として残り、
+// describeがリフレクションで読み取れるようになる。
+func AsMBSubscription(f any) any {
+	return fx.Annotate(
+		f,
+		fx.ResultTags(GroupTagMBSubscriptions),
+	)
+}
+
+// メッセージブローカーの発行宣言をドキュメント用groupに登録する。
+//
+// 登録するのは`*mbkit.Publication[Msg]`本体ではなく、
+// `mbkit.AsPublicationDoc[Msg]`のような非ジェネリックなインターフェースへの
+// アダプタである。serviceには`*mbkit.Publication[Msg]`を型付きのまま注入し、
+// describeは同じ宣言オブジェクトをこのgroupから見る。
+//
+// 使用例:
+//
+//	dikit.AsMBPublication(mbkit.AsPublicationDoc[dto.UserCreated]),
+func AsMBPublication(f any) any {
+	return fx.Annotate(
+		f,
+		fx.ResultTags(GroupTagMBPublications),
+	)
+}
+
 // === Injectors ===
 
 // 汎用版 - 複数の引数位置に対してタグを指定可能
@@ -142,14 +174,6 @@ func AsScheduledTask(f any) any {
 // dikit.InjectWithTags(SomeConstructor, `name:"Something"`, `group:"items"`),
 func InjectWithTags(constructor any, tags ...string) any {
 	return fx.Annotate(constructor, fx.ParamTags(tags...))
-}
-
-// Subscriber注入用
-func InjectSubscriber(constructor any, tag string) any {
-	return fx.Annotate(
-		constructor,
-		fx.ParamTags(``, ``, `name:"`+tag+`"`),
-	)
 }
 
 // gRPCクライアントの注入用

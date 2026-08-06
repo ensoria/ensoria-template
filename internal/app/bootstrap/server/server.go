@@ -59,6 +59,9 @@ func Run(envVal *string) error {
 		// application invocations
 		httpApp.NewHTTPApp(envVal),
 		grpcApp.InjectGRPCServices(grpcApp.NewGRPCApp(envVal)),
+		// 宣言された購読をまとめて開始する。購読は戻り値を持たず誰からも参照されないため、
+		// constructorsではなくinvocationsに登録する必要がある。
+		mbApp.InjectMBSubscriptions(mbApp.StartSubscriptions),
 	})
 
 	params, err := registry.ModuleParams("default")
