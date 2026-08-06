@@ -31,7 +31,7 @@ func NewHelloWorldPublication(publish enmb.Publish) *mbkit.Publication[dto.Hello
 		},
 		Behavior: mbkit.BehaviorSpec{
 			SideEffects:   []string{"none"},
-			Idempotent:    ptr(true),
+			Idempotent:    new(true),
 			Preconditions: []string{"none"},
 			Ordering:      "none",
 			Delivery: mbkit.DeliverySpec{
@@ -67,7 +67,7 @@ func NewUserCreatedPublication(publish enmb.Publish) *mbkit.Publication[dto.User
 			SideEffects: []string{"none in this application; consumers act on it"},
 			// Consumers may see the event more than once, so their handling has
 			// to be idempotent even though emitting it is not repeated.
-			Idempotent:    ptr(true),
+			Idempotent:    new(true),
 			Preconditions: []string{"the user has been persisted"},
 			Ordering:      "none; consumers must not assume creation order across users",
 			Delivery: mbkit.DeliverySpec{
