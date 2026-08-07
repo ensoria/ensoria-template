@@ -41,17 +41,24 @@ func BuildMessaging(envVal *string) (*msgdoc.MessagingSpec, error) {
 		return nil, err
 	}
 
-	broker := inframb.BrokerConfig(envVal)
-	protocol := string(broker.Type)
+	// An application may run without a broker at all, in which case only the
+	// WebSocket side is described rather than the whole run failing.
+	broker := inframb.BrokerConfig()
+	protocol := ""
+	brokerServers := []string(nil)
+	if broker != nil {
+		protocol = string(broker.Type)
+		brokerServers = []string{brokerServerName}
+	}
 
 	var operations []*msgdoc.OperationSpec
 	for _, sub := range declared.Subscriptions {
 		operations = append(operations, msgdoc.DescribeSubscription(
-			sub.SubscriptionDoc(), protocol, []string{brokerServerName}))
+			sub.SubscriptionDoc(), protocol, brokerServers))
 	}
 	for _, pub := range declared.Publications {
 		operations = append(operations, msgdoc.DescribePublication(
-			pub.PublicationDoc(), protocol, []string{brokerServerName}))
+			pub.PublicationDoc(), protocol, brokerServers))
 	}
 	for _, channel := range declared.Channels {
 		operations = append(operations, msgdoc.DescribeChannel(

@@ -28,8 +28,12 @@ func DescribeSubscription(doc *mbkit.SubscriptionDoc, protocol string, serverNam
 			ServerNames: serverNames,
 		},
 		Messages: []*MessageSpec{{
-			Name:        messageName(doc.MsgType, doc.Target),
-			Summary:     doc.Summary,
+			Name: messageName(doc.MsgType, doc.Target),
+			// The operation's summary is deliberately not copied here. It
+			// describes the act ("consume the event", "announce the event"),
+			// while a message is the same message in both directions — and on a
+			// channel this application both sends and receives, one direction's
+			// wording would end up shown for the other.
 			ContentType: rest.MediaTypeJSON,
 			Payload:     payloadSchema(doc.MsgType, doc.BodyRules, doc.FieldDocs, doc.Target),
 		}},
@@ -53,8 +57,12 @@ func DescribePublication(doc *mbkit.PublicationDoc, protocol string, serverNames
 			ServerNames: serverNames,
 		},
 		Messages: []*MessageSpec{{
-			Name:        messageName(doc.MsgType, doc.Target),
-			Summary:     doc.Summary,
+			Name: messageName(doc.MsgType, doc.Target),
+			// The operation's summary is deliberately not copied here. It
+			// describes the act ("consume the event", "announce the event"),
+			// while a message is the same message in both directions — and on a
+			// channel this application both sends and receives, one direction's
+			// wording would end up shown for the other.
 			ContentType: rest.MediaTypeJSON,
 			Payload:     payloadSchema(doc.MsgType, doc.BodyRules, doc.FieldDocs, doc.Target),
 		}},

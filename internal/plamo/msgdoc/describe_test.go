@@ -151,6 +151,22 @@ var _ = Describe("DescribePublication", func() {
 		Expect(resolved).To(HaveKeyWithValue(msgdoc.DeliveryExpiration, "60000"))
 	})
 
+	It("does not put the operation's wording on the message", func() {
+		receive := msgdoc.DescribeSubscription(subscriptionDoc(nil), "rabbitmq", nil)
+		send := msgdoc.DescribePublication(publicationDoc(nil), "rabbitmq", nil)
+
+		// Both directions of a channel produce the same message, and a renderer
+		// keeps one entry per message name. If the operation's summary were
+		// copied onto it, whichever direction rendered last would leave its
+		// wording — "Announce that a user was created" — showing for the other.
+		Expect(receive.Messages[0].Name).To(Equal(send.Messages[0].Name))
+		Expect(receive.Messages[0].Summary).To(BeEmpty())
+		Expect(send.Messages[0].Summary).To(BeEmpty())
+		// The prose is not lost: it stays on the operation, where it belongs.
+		Expect(receive.Summary).To(Equal("Consume the user-created event"))
+		Expect(send.Summary).To(Equal("Announce that a user was created"))
+	})
+
 	It("reports nothing for a stream, which carries none of those attributes", func() {
 		Expect(msgdoc.DescribePublication(publicationDoc(nil), "kafka", nil).Behavior.Delivery.Resolved).
 			To(BeEmpty())
