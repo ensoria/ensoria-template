@@ -425,6 +425,9 @@ encli generate docai      # LLM 向けドキュメント一式（docs/INDEX.md �
 encli generate openapi    # OpenAPI 3.1（docs/openapi.yaml）
 ```
 
+> These cover the HTTP surface. For the message broker and WebSocket surface,
+> see [Messaging documentation](#messaging-documentation) below.
+
 ### 仕組み
 
 どちらのコマンドも、`cmd/apidoc-describe` を `go run -tags apidoc_describe` で実行し、
@@ -455,6 +458,82 @@ describe は build tag `apidoc_describe` で本番ビルドから隔離されて
 
 生成物には目印（docai はメタスタンプ行、OpenAPI は `x-generated`）が入ります。
 目印の無い既存ファイルは**手書きとみなして上書きしません**ので、`docs/` 配下に手書きの補足を置けます。
+
+
+## Messaging documentation
+
+The messaging surface — what the application consumes from and publishes to a
+message broker, and what flows over its WebSocket channels — is generated the
+same way the HTTP surface is: from the implementation, with no annotations.
+
+```sh
+encli generate asyncapi    # AsyncAPI 3.0 (docs/asyncapi.yaml)
+```
+
+Every operation is written from this application's own point of view, so `send`
+always means this application sends and `receive` that it consumes. Without that
+fixed perspective, a channel with a producer and a consumer reads ambiguously.
+
+### What it reads
+
+Generation reflects over declarations, so a channel only appears in the document
+if it was declared. Three kinds of declaration exist:
+
+| Declaration | What it describes |
+|---|---|
+| `mbkit.Subscription[Msg]` | one broker subscription (a `receive` operation) |
+| `mbkit.PublicationSpec[Msg]` | one broker publication (a `send` operation) |
+| `wskit.Channel` | one WebSocket path and its message catalog, in both directions |
+
+These are not documentation-only. A subscription's handler is reached through
+its declaration, a publication is the only way the application publishes, and a
+WebSocket message reaches application code only through its declared receiver.
+Changing the code without the declaration does not compile, which is what keeps
+the document from drifting away from what runs.
+
+### The WebSocket envelope
+
+A WebSocket path carries many kinds of message in both directions, and the frame
+itself says nothing about which one it is. Every message is therefore wrapped in
+a fixed envelope, which supplies that discriminator once:
+
+```json
+{"type": "user.echo", "data": {"message": "hi"}}
+```
+
+`wskit` parses it, routes the message to the receiver declared under that name,
+validates the payload, and calls the handler with the decoded value. A message
+that cannot be decoded, or whose type is not declared, is answered with an error
+message and the connection stays open — one bad message from a client should not
+cost it every other message on the socket.
+
+### Where the facts come from
+
+As with the HTTP documents, anything no type can express has to be declared.
+A `TODO` in the output means the corresponding declaration is empty.
+
+| Output | Declared in |
+|---|---|
+| Title, version, summary, license | [internal/app/apiinfo](internal/app/apiinfo/apiinfo.go) |
+| Summary, description, field meanings, related operations | `Summary` / `Description` / `FieldDocs` / `Related` on the declaration |
+| Side effects, idempotency, preconditions, scopes, ordering | `Behavior` on the declaration |
+| Delivery guarantee | `Behavior.Delivery` on the mb declaration |
+| Payload type, required fields, constraints | the type parameter and `BodyRules` |
+| Broker and WebSocket endpoints | `BROKER_*` and `HTTP_PORT` in the environment configuration |
+
+The delivery section carries two things: the guarantee the author declared, and
+the settings the subscribe/publish options actually resolve to. Both are kept
+because they can disagree — a document showing only the prose would hide a
+subscription whose options contradict it.
+
+### Not overwritten
+
+Generated documents carry an `x-generated` marker, and a file without one is
+treated as hand-written and never overwritten, exactly as for OpenAPI.
+
+> `encli generate docai --messaging` (DocAI Messaging) is not supported yet, as
+> that format is still a draft. Use `encli generate asyncapi` for the messaging
+> surface in the meantime.
 
 
 ## サーバタイムアウト

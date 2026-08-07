@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gorilla/websocket"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-	"github.com/gorilla/websocket"
 
 	"github.com/ensoria/ensoria-template/internal/plamo/vkit"
 	"github.com/ensoria/ensoria-template/internal/plamo/wskit"
