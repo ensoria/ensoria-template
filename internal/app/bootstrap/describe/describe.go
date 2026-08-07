@@ -35,8 +35,8 @@ import (
 	_ "github.com/ensoria/ensoria-template/internal/query"
 )
 
-// Build は HTTP モジュールを実インフラなしで解決し、APISpec を返す。
-func Build(envVal *string) (*apidoc.APISpec, error) {
+// BuildHTTP は HTTP モジュールを実インフラなしで解決し、APISpec を返す。
+func BuildHTTP(envVal *string) (*apidoc.APISpec, error) {
 	registry.InitializeConfiguration(envVal, assets.ConfigFS(*envVal), "internal", "config")
 
 	modules, err := resolveHTTPModules()

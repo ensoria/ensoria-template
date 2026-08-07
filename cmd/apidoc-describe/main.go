@@ -22,7 +22,7 @@ func main() {
 	envVal := pflag.StringP("env", "e", "local", "config environment: [local], [development], [staging], [production] or [test].")
 	pflag.Parse()
 
-	spec, err := describe.Build(envVal)
+	spec, err := describe.BuildHTTP(envVal)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "apidoc-describe: "+err.Error())
 		os.Exit(1)

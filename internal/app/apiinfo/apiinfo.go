@@ -13,8 +13,8 @@ const (
 	// Version は API 契約のバージョン(OpenAPI info.version)。
 	// アプリケーション実装のバージョンとは別物で、API の互換性を表す。
 	Version = "0.1.0"
-	// Description は HTTP API の概要(OpenAPI info.description)。空でもよい。
-	Description = "HTTP API of the Ensoria application."
+	// HTTPDescription は HTTP API の概要(OpenAPI info.description)。空でもよい。
+	HTTPDescription = "HTTP API of the Ensoria application."
 	// MessagingDescription はメッセージング面の概要(AsyncAPI info.description)。
 	// 説明だけを面ごとに分けているのは、タイトル・バージョン・ライセンスが
 	// 同じ製品・同じ契約バージョンを指すのに対し、概要文はどの面を説明している
@@ -33,7 +33,7 @@ const (
 
 // Info は HTTP API の宣言されたメタ情報を中立モデルにして返す。
 func Info() *apidoc.Info {
-	return info(Description)
+	return info(HTTPDescription)
 }
 
 // MessagingInfo はメッセージング面のメタ情報を返す。
