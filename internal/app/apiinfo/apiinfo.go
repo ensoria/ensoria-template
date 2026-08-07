@@ -13,8 +13,13 @@ const (
 	// Version は API 契約のバージョン(OpenAPI info.version)。
 	// アプリケーション実装のバージョンとは別物で、API の互換性を表す。
 	Version = "0.1.0"
-	// Description は API の概要(OpenAPI info.description)。空でもよい。
+	// Description は HTTP API の概要(OpenAPI info.description)。空でもよい。
 	Description = "HTTP API of the Ensoria application."
+	// MessagingDescription はメッセージング面の概要(AsyncAPI info.description)。
+	// 説明だけを面ごとに分けているのは、タイトル・バージョン・ライセンスが
+	// 同じ製品・同じ契約バージョンを指すのに対し、概要文はどの面を説明している
+	// のかを述べるものだからである。
+	MessagingDescription = "Message broker and WebSocket surface of the Ensoria application."
 	// LicenseName は API のライセンス名(OpenAPI info.license.name)。
 	// ライセンスを出す場合、OpenAPI では name が必須。既定は非公開 API 向けの
 	// プレースホルダなので、公開 API では実際のライセンスに書き換えること。
@@ -26,12 +31,22 @@ const (
 	LicenseURL = ""
 )
 
-// Info は宣言されたメタ情報を中立モデルにして返す。
+// Info は HTTP API の宣言されたメタ情報を中立モデルにして返す。
 func Info() *apidoc.Info {
+	return info(Description)
+}
+
+// MessagingInfo はメッセージング面のメタ情報を返す。
+// Info との違いは概要文だけで、タイトル・バージョン・ライセンスは共有する。
+func MessagingInfo() *apidoc.Info {
+	return info(MessagingDescription)
+}
+
+func info(description string) *apidoc.Info {
 	return &apidoc.Info{
 		Title:       Title,
 		Version:     Version,
-		Description: Description,
+		Description: description,
 		License: &apidoc.License{
 			Name:       LicenseName,
 			Identifier: LicenseIdentifier,

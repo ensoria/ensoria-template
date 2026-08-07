@@ -26,20 +26,28 @@ func (h *SubscriberPanicHandler) OnPanic(panicValue interface{}, stackTrace []by
 	)
 }
 
+// BrokerConfig はこの環境で使うメッセージブローカーの接続設定を返す。
+//
+// SubscriberとPublisher、そしてdescribe（AsyncAPI生成）の3者が同じ値を見るように、
+// 設定はここ1箇所だけで組み立てる。接続だけが知っていてドキュメントが知らない
+// ブローカーがあると、生成物は実際の接続先とずれる。
+//
+// TODO: configにメッセージブローカーの設定項目を追加したら、envValで環境ごとの値を
+// 引くように差し替える（現状appconfig.ParametersにBrokerセクションが無い）。
+func BrokerConfig(envVal *string) *enmb.Config {
+	return &enmb.Config{
+		Type: enmb.TypeRabbitMQ,
+		URL:  "amqp://localhost:5672/",
+		Credentials: &enmb.Credentials{
+			Username: "myuser",
+			Password: "mypassword",
+		},
+	}
+}
+
 func NewSubscriberConnection(envVal *string) func(lc dikit.LC) (enmb.Subscriber, error) {
 	return func(lc dikit.LC) (enmb.Subscriber, error) {
-		// TODO: envValを使って、その環境の値をconfigから取得するようにする
-		// configにはメッセージブローカーの実装がないので、configで実装してから変更
-		config := &enmb.Config{
-			Type: enmb.TypeRabbitMQ,
-			URL:  "amqp://localhost:5672/",
-			Credentials: &enmb.Credentials{
-				Username: "myuser",
-				Password: "mypassword",
-			},
-		}
-
-		subConn, err := mq.NewSubscriber(config)
+		subConn, err := mq.NewSubscriber(BrokerConfig(envVal))
 		if err != nil {
 			return nil, fmt.Errorf("failed to create subscriber: %w", err)
 		}
@@ -72,17 +80,7 @@ func NewSubscriberConnection(envVal *string) func(lc dikit.LC) (enmb.Subscriber,
 
 func NewPublisherConnection(envVal *string) func(lc dikit.LC) (enmb.Publisher, error) {
 	return func(lc dikit.LC) (enmb.Publisher, error) {
-		// configから取得する
-		config := &enmb.Config{
-			Type: enmb.TypeRabbitMQ,
-			URL:  "amqp://localhost:5672/",
-			Credentials: &enmb.Credentials{
-				Username: "myuser",
-				Password: "mypassword",
-			},
-		}
-
-		pubConn, err := mq.NewPublisher(config)
+		pubConn, err := mq.NewPublisher(BrokerConfig(envVal))
 		if err != nil {
 			return nil, fmt.Errorf("failed to create publisher: %w", err)
 		}
