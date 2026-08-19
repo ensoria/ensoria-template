@@ -44,7 +44,7 @@ const (
 // scheduler state) and closed on shutdown along with the tiered cache.
 func NewDefaultCache(envVal *string) func(lc dikit.LC) (enscache.Cache, error) {
 	return func(lc dikit.LC) (enscache.Cache, error) {
-		// TODO: envValとconfigパッケージを使って設定を取得するようにする
+		// TODO: configパッケージを使って設定を取得するようにする
 		// worker, schedulerとは別の値になるので、設定値を分ける必要がある
 		client := goredis.NewClient(&goredis.Options{
 			Addr: cacheRedisAddr,
@@ -94,7 +94,7 @@ func NewDefaultCache(envVal *string) func(lc dikit.LC) (enscache.Cache, error) {
 
 func NewDefaultWorkerCacheClient(envVal *string) func(lc dikit.LC) *goredis.Client {
 	return func(lc dikit.LC) *goredis.Client {
-		// TODO: envValとconfigパッケージを使って設定を取得するようにする
+		// TODO: configパッケージを使って設定を取得するようにする
 		// params := registry.ModuleParams("default")
 		client := goredis.NewClient(&goredis.Options{
 			Addr: "localhost:6379",
@@ -122,7 +122,7 @@ func NewDefaultWorkerCacheClient(envVal *string) func(lc dikit.LC) *goredis.Clie
 
 func NewDefaultSchedulerCacheClient(envVal *string) func(lc dikit.LC) *goredis.Client {
 	return func(lc dikit.LC) *goredis.Client {
-		// TODO: envValとconfigパッケージを使って設定を取得するようにする
+		// TODO: configパッケージを使って設定を取得するようにする
 		// params := registry.ModuleParams("default")
 		client := goredis.NewClient(&goredis.Options{
 			Addr: "localhost:6379",

@@ -62,10 +62,10 @@ func NewDefaultDBClient[C DatabaseConfig, T DatabaseClient](
 func NewDefaultWorkerDBClient(envVal *string) func(lc dikit.LC) (workerDB.DatabaseClient, error) {
 	return NewDefaultDBClient(
 		envVal,
-		string(workerDB.DBTypePostgreSQL), // TODO: envValとconfigパッケージを使って設定を取得するようにする
+		string(workerDB.DBTypePostgreSQL), // TODO: configパッケージを使って設定を取得するようにする
 		workerDB.NewDatabaseClient,
 		func(dbType string) *workerDB.DatabaseConfig {
-			// TODO: envValとconfigパッケージを使って設定を取得するようにする
+			// TODO: configパッケージを使って設定を取得するようにする
 			return &workerDB.DatabaseConfig{
 				Type:     workerDB.DBType(dbType),
 				Host:     "localhost",
@@ -83,10 +83,10 @@ func NewDefaultWorkerDBClient(envVal *string) func(lc dikit.LC) (workerDB.Databa
 func NewDefaultSchedulerDBClient(envVal *string) func(lc dikit.LC) (schedulerDB.DatabaseClient, error) {
 	return NewDefaultDBClient(
 		envVal,
-		string(schedulerDB.DBTypePostgreSQL), // TODO: envValとconfigパッケージを使って設定を取得するようにする
+		string(schedulerDB.DBTypePostgreSQL), // TODO: configパッケージを使って設定を取得するようにする
 		schedulerDB.NewDatabaseClient,
 		func(dbType string) *schedulerDB.DatabaseConfig {
-			// TODO: envValとconfigパッケージを使って設定を取得するようにする
+			// TODO: configパッケージを使って設定を取得するようにする
 			return &schedulerDB.DatabaseConfig{
 				Type:     schedulerDB.DBType(dbType),
 				Host:     "localhost",

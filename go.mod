@@ -15,7 +15,7 @@ require (
 	github.com/ensoria/grpcgear v0.0.4
 	github.com/ensoria/loggear v0.0.1
 	github.com/ensoria/mb v0.0.7
-	github.com/ensoria/rest v0.0.22
+	github.com/ensoria/rest v0.0.23
 	github.com/ensoria/testutil v0.0.4
 	github.com/ensoria/validator v0.0.10
 	github.com/ensoria/websocket v0.0.6

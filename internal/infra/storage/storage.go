@@ -31,7 +31,7 @@ const (
 
 	// defaultDisk selects the backend exposed by Storage.Default() and injected
 	// as file.FileSystem. Switch the default backend here.
-	// TODO: envValとconfigパッケージを使って設定を取得するようにする
+	// TODO: configパッケージを使って設定を取得するようにする
 	defaultDisk = diskS3
 
 	// Local disk: root directory (created if missing by filelocal.New).
@@ -53,7 +53,7 @@ const (
 // borrows the injected client and needs no cleanup.
 func NewDefaultStorage(envVal *string) func(lc dikit.LC) (file.Storage, error) {
 	return func(lc dikit.LC) (file.Storage, error) {
-		// TODO: envValとconfigパッケージを使って設定を取得するようにする
+		// TODO: configパッケージを使って設定を取得するようにする
 		local, err := filelocal.New(localRoot)
 		if err != nil {
 			return nil, fmt.Errorf("local disk init failed: %w", err)
