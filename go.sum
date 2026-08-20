@@ -72,6 +72,8 @@ github.com/ensoria/config v0.0.29 h1:ty2UKdpFDCjWqhsyFEooBp3YlViDcQRE0dLf3CDaBEI
 github.com/ensoria/config v0.0.29/go.mod h1:smi7IfzjWCbg+7O8yppSNVgkPoZCqwfMtq3oNXDwv7s=
 github.com/ensoria/config v0.0.30 h1:M/GhuxZ/GWBFOj5Wg2vhahO0sm+oW8c8nqfEhN5emks=
 github.com/ensoria/config v0.0.30/go.mod h1:smi7IfzjWCbg+7O8yppSNVgkPoZCqwfMtq3oNXDwv7s=
+github.com/ensoria/config v0.0.31 h1:Mgbpg56NY7jiskHPi/WiesteDR4yAUOiN2Uxv1XxBrw=
+github.com/ensoria/config v0.0.31/go.mod h1:smi7IfzjWCbg+7O8yppSNVgkPoZCqwfMtq3oNXDwv7s=
 github.com/ensoria/encli v0.0.3 h1:lqx3X8iKoBsgbykbbOQQ4bZRUfUqqkpRKj1vD3Iv8Qs=
 github.com/ensoria/encli v0.0.3/go.mod h1:vHUI7tY9UMWTX9EEgfEUrm6H4oXDCX81g24J0Wb/B2A=
 github.com/ensoria/file v0.0.1 h1:2E01UvHiSG4sC8oPW8i79YUFZRA2oc1q2DFQZ79X8II=

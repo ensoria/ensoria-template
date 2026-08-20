@@ -2,66 +2,126 @@ package cache
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
-	"time"
+	"net"
+	"strconv"
 
 	enscache "github.com/ensoria/cache/pkg/cache"
 	"github.com/ensoria/cache/pkg/cacheotter"
 	"github.com/ensoria/cache/pkg/cacheredis"
 	"github.com/ensoria/cache/pkg/cachetiered"
+	"github.com/ensoria/config/pkg/appconfig"
+	"github.com/ensoria/config/pkg/registry"
 	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
 	"github.com/ensoria/loggear/pkg/loggear"
 	goredis "github.com/redis/go-redis/v9"
 )
 
-// Application cache configuration. Values are hardcoded for now, mirroring the
-// worker/scheduler clients above.
 const (
-	// TODO: derive from envVal/config package instead of hardcoding.
-	cacheRedisAddr = "localhost:6379"
-	// cacheRedisDB isolates the application cache from the worker job queue
-	// (DB 0) and the scheduler state store (DB 1). Those must never evict keys,
-	// whereas a cache wants an LRU/LFU eviction policy; since maxmemory-policy is
-	// instance-wide, a dedicated DB keeps their keyspaces and FLUSHDB blast radius
-	// apart. For production, a separate Redis instance is recommended so the cache
-	// can run its own eviction policy and memory cap.
-	cacheRedisDB = 2
 	// TODO: align with the config/module name.
 	cacheKeyPrefix = "app"
-	// l1MaxEntries bounds the in-process otter L1 by entry count.
-	l1MaxEntries = 1_000
-	// cacheNearTTL caps how long a value lives in L1, bounding cross-replica
-	// staleness (equals cachetiered's default, set explicitly for clarity).
-	cacheNearTTL = 5 * time.Second
 	// cacheName is recorded on the tier metrics (attribute cache.name).
 	cacheName = "app"
 )
 
+// The purpose names that appear in connection log lines and error messages.
+// Each one has its own Redis database, so telling them apart in a log matters.
+const (
+	appCachePurpose  = "cache"
+	workerPurpose    = "worker cache"
+	schedulerPurpose = "scheduler cache"
+)
+
+// redisOptions converts a configured Redis connection into go-redis options.
+//
+// It is the single place the configuration's shape meets the client's, which is
+// why it is a plain function rather than inline setup: the mapping is worth
+// testing on its own, and every purpose has to be mapped the same way.
+func redisOptions(cfg *appconfig.Redis) *goredis.Options {
+	if cfg == nil {
+		return nil
+	}
+
+	opts := &goredis.Options{
+		Addr:     net.JoinHostPort(cfg.Host, strconv.Itoa(cfg.Port)),
+		Username: cfg.User,
+		Password: cfg.Password,
+		DB:       cfg.DB,
+	}
+
+	// A non-nil TLSConfig is what turns encryption on for go-redis, so it is
+	// only set when the configuration asks for it. ServerName is left empty on
+	// purpose: the client dials with tls.DialWithDialer, which fills it in from
+	// the address being dialed.
+	if cfg.TLSEnabled() {
+		opts.TLSConfig = &tls.Config{MinVersion: tls.VersionTLS12}
+	}
+
+	return opts
+}
+
+// defaultParams reads the application-wide configuration. Every connection here
+// belongs to the application rather than to one module, so they all read the
+// default module's settings.
+func defaultParams() (*appconfig.Parameters, error) {
+	params, err := registry.ModuleParams("default")
+	if err != nil {
+		return nil, fmt.Errorf("cache configuration is unavailable: %w", err)
+	}
+	return params, nil
+}
+
+// newRedisClient builds a client for one purpose and hangs its connection check
+// and shutdown off the lifecycle.
+//
+// The check is a hook rather than part of construction so that every connection
+// the application needs is dialed at startup: a Redis that is unreachable
+// should stop the application, not the first request that happens to need it.
+func newRedisClient(lc dikit.LC, cfg *appconfig.Redis, purpose string) *goredis.Client {
+	client := goredis.NewClient(redisOptions(cfg))
+
+	lc.Append(dikit.Hook{
+		OnStart: func(ctx context.Context) error {
+			if err := client.Ping(ctx).Err(); err != nil {
+				return fmt.Errorf("%s connection check failed: %w", purpose, err)
+			}
+			loggear.Info("Redis connection verified", "purpose", purpose, "addr", cfg.Host, "db", cfg.DB)
+			return nil
+		},
+		OnStop: func(ctx context.Context) error {
+			loggear.Info("Shutting down Redis connection", "purpose", purpose)
+			return client.Close()
+		},
+	})
+
+	return client
+}
+
 // NewDefaultCache builds the application cache as a cachetiered.Cache: a bounded
 // in-process otter L1 over a Redis L2, exposed as enscache.Cache for DI. The L2
-// Redis client is owned here (its own DB, separate from the worker queue and
-// scheduler state) and closed on shutdown along with the tiered cache.
+// Redis client is owned here (its own database, separate from the worker queue
+// and the scheduler state) and closed on shutdown along with the tiered cache.
 func NewDefaultCache(envVal *string) func(lc dikit.LC) (enscache.Cache, error) {
 	return func(lc dikit.LC) (enscache.Cache, error) {
-		// TODO: configパッケージを使って設定を取得するようにする
-		// worker, schedulerとは別の値になるので、設定値を分ける必要がある
-		client := goredis.NewClient(&goredis.Options{
-			Addr: cacheRedisAddr,
-			DB:   cacheRedisDB,
-		})
+		params, err := defaultParams()
+		if err != nil {
+			return nil, err
+		}
+		cfg := params.Cache
 
-		// TODO: otterの設定値も、config/moduleから取得するようにする
+		client := goredis.NewClient(redisOptions(cfg.Redis))
+
 		// L1: bounded in-process otter store. L2: raw redis store. The codec is
 		// applied once, on top, by cachetiered.New.
-		l1, err := cacheotter.NewStore(cacheKeyPrefix, cacheotter.MaxEntries(l1MaxEntries))
+		l1, err := cacheotter.NewStore(cacheKeyPrefix, cacheotter.MaxEntries(cfg.Otter.MaxEntries))
 		if err != nil {
 			return nil, fmt.Errorf("cache L1 init failed: %w", err)
 		}
-		// TODO: 設定値をconfig/moduleから取得するようにする
 		l2 := cacheredis.NewStore(client, cacheKeyPrefix)
 		c, err := cachetiered.New(l1, l2,
-			cachetiered.WithNearTTL(cacheNearTTL),
+			cachetiered.WithNearTTL(cfg.NearTTL),
 			cachetiered.WithName(cacheName),
 		)
 		if err != nil {
@@ -71,9 +131,10 @@ func NewDefaultCache(envVal *string) func(lc dikit.LC) (enscache.Cache, error) {
 		lc.Append(dikit.Hook{
 			OnStart: func(ctx context.Context) error {
 				if err := client.Ping(ctx).Err(); err != nil {
-					return fmt.Errorf("cache connection check failed: %w", err)
+					return fmt.Errorf("%s connection check failed: %w", appCachePurpose, err)
 				}
-				loggear.Info("Cache connection verified")
+				loggear.Info("Redis connection verified",
+					"purpose", appCachePurpose, "addr", cfg.Redis.Host, "db", cfg.Redis.DB)
 				return nil
 			},
 			OnStop: func(ctx context.Context) error {
@@ -92,58 +153,27 @@ func NewDefaultCache(envVal *string) func(lc dikit.LC) (enscache.Cache, error) {
 	}
 }
 
-func NewDefaultWorkerCacheClient(envVal *string) func(lc dikit.LC) *goredis.Client {
-	return func(lc dikit.LC) *goredis.Client {
-		// TODO: configパッケージを使って設定を取得するようにする
-		// params := registry.ModuleParams("default")
-		client := goredis.NewClient(&goredis.Options{
-			Addr: "localhost:6379",
-			DB:   0,
-		})
+// NewDefaultWorkerCacheClient builds the Redis client the job queue runs on.
+func NewDefaultWorkerCacheClient(envVal *string) func(lc dikit.LC) (*goredis.Client, error) {
+	return func(lc dikit.LC) (*goredis.Client, error) {
+		params, err := defaultParams()
+		if err != nil {
+			return nil, err
+		}
 
-		lc.Append(dikit.Hook{
-			OnStart: func(ctx context.Context) error {
-				if err := client.Ping(ctx).Err(); err != nil {
-					return fmt.Errorf("worker cache connection check failed: %w", err)
-				}
-				loggear.Info("Worker cache connection verified")
-				return nil
-			},
-			OnStop: func(ctx context.Context) error {
-				loggear.Info("Shutting down worker cache")
-				return client.Close()
-			},
-		})
-
-		return client
+		return newRedisClient(lc, params.Worker.Redis, workerPurpose), nil
 	}
-
 }
 
-func NewDefaultSchedulerCacheClient(envVal *string) func(lc dikit.LC) *goredis.Client {
-	return func(lc dikit.LC) *goredis.Client {
-		// TODO: configパッケージを使って設定を取得するようにする
-		// params := registry.ModuleParams("default")
-		client := goredis.NewClient(&goredis.Options{
-			Addr: "localhost:6379",
-			DB:   1,
-		})
+// NewDefaultSchedulerCacheClient builds the Redis client the scheduler keeps its
+// locks and control state in.
+func NewDefaultSchedulerCacheClient(envVal *string) func(lc dikit.LC) (*goredis.Client, error) {
+	return func(lc dikit.LC) (*goredis.Client, error) {
+		params, err := defaultParams()
+		if err != nil {
+			return nil, err
+		}
 
-		lc.Append(dikit.Hook{
-			OnStart: func(ctx context.Context) error {
-				if err := client.Ping(ctx).Err(); err != nil {
-					return fmt.Errorf("scheduler cache connection check failed: %w", err)
-				}
-				loggear.Info("Scheduler cache connection verified")
-				return nil
-			},
-			OnStop: func(ctx context.Context) error {
-				loggear.Info("Shutting down scheduler cache")
-				return client.Close()
-			},
-		})
-
-		return client
+		return newRedisClient(lc, params.Scheduler.Redis, schedulerPurpose), nil
 	}
-
 }
