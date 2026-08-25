@@ -10,126 +10,44 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-var _ = Describe("dbSettingsFrom", func() {
-	Describe("the driver mapping", func() {
-		// appconfig normalizes "sqlite" to "sqlite3" while the libraries spell
-		// it "sqlite", so the names cannot simply be cast across.
-		DescribeTable("maps a configured driver onto the library's name",
-			func(configured, expected string) {
-				s, err := dbSettingsFrom(&appconfig.DB{Driver: configured})
+// The driver name is handed to the libraries unchanged, which is only safe
+// while all three packages spell these drivers the same way. That agreement is
+// what these specs hold in place: if appconfig ever normalizes to a different
+// name, or a library renames one of its DBType constants, the mapping starts
+// producing a driver nobody registers, and the failure would otherwise surface
+// as a connection error at startup rather than here.
+var _ = Describe("the shared driver vocabulary", func() {
+	DescribeTable("a configured driver reaches both libraries unchanged",
+		func(configured string, worker workerDB.DBType, scheduler schedulerDB.DBType) {
+			params, err := (&appconfig.Parameters{}).OverwriteParams(map[string]string{
+				"DB_DRIVER": configured,
+				"DB_HOST":   "history.internal",
+			})
+			Expect(err).NotTo(HaveOccurred())
 
-				Expect(err).NotTo(HaveOccurred())
-				Expect(s.Type).To(Equal(expected))
-			},
-			Entry("postgres", "postgres", string(workerDB.DBTypePostgreSQL)),
-			Entry("mysql", "mysql", string(workerDB.DBTypeMySQL)),
-			Entry("sqlite3", "sqlite3", string(workerDB.DBTypeSQLite)),
-		)
+			Expect(workerDBConfig(params.DB).Type).To(Equal(worker))
+			Expect(schedulerDBConfig(params.DB).Type).To(Equal(scheduler))
+		},
+		Entry("postgres", "postgres", workerDB.DBTypePostgreSQL, schedulerDB.DBTypePostgreSQL),
+		Entry("mysql", "mysql", workerDB.DBTypeMySQL, schedulerDB.DBTypeMySQL),
+		Entry("sqlite", "sqlite", workerDB.DBTypeSQLite, schedulerDB.DBTypeSQLite),
+		// appconfig accepts the driver's own registered name as an alias and
+		// normalizes it, so this has to arrive as "sqlite" too.
+		Entry("sqlite3", "sqlite3", workerDB.DBTypeSQLite, schedulerDB.DBTypeSQLite),
+	)
 
-		It("names the setting and the working drivers when one is unsupported", func() {
-			_, err := dbSettingsFrom(&appconfig.DB{Driver: "cockroach"})
-
-			Expect(err).To(MatchError(ContainSubstring("DB_DRIVER")))
-			Expect(err).To(MatchError(ContainSubstring("cockroach")))
-			Expect(err).To(MatchError(ContainSubstring("postgres")))
-		})
-
-		It("rejects an empty driver", func() {
-			_, err := dbSettingsFrom(&appconfig.DB{})
-
-			Expect(err).To(HaveOccurred())
-		})
-
-		It("rejects a nil configuration rather than panicking", func() {
-			_, err := dbSettingsFrom(nil)
-
-			Expect(err).To(HaveOccurred())
-		})
+	It("agrees on the name this file has to recognize", func() {
+		Expect(string(workerDB.DBTypeSQLite)).To(Equal(sqliteDriver))
+		Expect(string(schedulerDB.DBTypeSQLite)).To(Equal(sqliteDriver))
 	})
 
-	Describe("the connection fields", func() {
-		It("carries host, port, credentials and the SSL mode", func() {
-			s, err := dbSettingsFrom(&appconfig.DB{
-				Driver:   "postgres",
-				Host:     "history.internal",
-				Port:     5432,
-				User:     "app",
-				Password: "secret",
-				DBName:   "worker_history",
-				SSLMode:  "require",
-			})
+	// Deciding what an unfamiliar driver means is the libraries' job now: they
+	// reject it when they open the connection, and their message names the
+	// values that would have worked.
+	It("passes an unrecognized driver through for the libraries to reject", func() {
+		got := workerDBConfig(&appconfig.DB{Driver: "cockroach"})
 
-			Expect(err).NotTo(HaveOccurred())
-			Expect(s.Host).To(Equal("history.internal"))
-			Expect(s.Port).To(Equal(5432))
-			Expect(s.User).To(Equal("app"))
-			Expect(s.Password).To(Equal("secret"))
-			Expect(s.Database).To(Equal("worker_history"))
-			// The libraries call it TLSMode; the value domain is the driver's.
-			Expect(s.TLSMode).To(Equal("require"))
-		})
-
-		It("carries the pool settings", func() {
-			s, err := dbSettingsFrom(&appconfig.DB{
-				Driver:          "postgres",
-				MaxOpenConns:    40,
-				MaxIdleConns:    7,
-				ConnMaxLifetime: 3 * time.Minute,
-				ConnMaxIdleTime: time.Minute,
-			})
-
-			Expect(err).NotTo(HaveOccurred())
-			Expect(s.MaxOpenConns).To(Equal(40))
-			Expect(s.MaxIdleConns).To(Equal(7))
-			Expect(s.ConnMaxLifetime).To(Equal(3 * time.Minute))
-			Expect(s.ConnMaxIdleTime).To(Equal(time.Minute))
-		})
-	})
-
-	// SQLite has no host: the libraries read the file path out of Database.
-	Describe("where SQLite keeps its file", func() {
-		It("uses DB_NAME when it is set", func() {
-			s, err := dbSettingsFrom(&appconfig.DB{
-				Driver: "sqlite3",
-				DBName: "./worker.db",
-			})
-
-			Expect(err).NotTo(HaveOccurred())
-			Expect(s.Database).To(Equal("./worker.db"))
-		})
-
-		It("falls back to DB_HOST, which is where the template configs put it", func() {
-			s, err := dbSettingsFrom(&appconfig.DB{
-				Driver: "sqlite3",
-				Host:   "./tmp/ensoria.sqlite",
-			})
-
-			Expect(err).NotTo(HaveOccurred())
-			Expect(s.Database).To(Equal("./tmp/ensoria.sqlite"))
-		})
-
-		It("prefers DB_NAME when both are set", func() {
-			s, err := dbSettingsFrom(&appconfig.DB{
-				Driver: "sqlite3",
-				Host:   "./tmp/ensoria.sqlite",
-				DBName: "./worker.db",
-			})
-
-			Expect(err).NotTo(HaveOccurred())
-			Expect(s.Database).To(Equal("./worker.db"))
-		})
-
-		// A server's host is not a database name, so the fallback must not
-		// leak into the other drivers.
-		It("does not fall back to the host on a server driver", func() {
-			s, err := dbSettingsFrom(&appconfig.DB{
-				Driver: "postgres",
-				Host:   "history.internal",
-			})
-
-			Expect(err).NotTo(HaveOccurred())
-			Expect(s.Database).To(BeEmpty())
-		})
+		Expect(got.Type).To(Equal(workerDB.DBType("cockroach")))
 	})
 })
 
@@ -151,16 +69,14 @@ var _ = Describe("the library-specific configs", func() {
 	}
 
 	It("builds the worker library's config", func() {
-		got, err := workerDBConfig(cfg())
-
-		Expect(err).NotTo(HaveOccurred())
-		Expect(got).To(Equal(&workerDB.DatabaseConfig{
-			Type:            workerDB.DBTypePostgreSQL,
-			Host:            "history.internal",
-			Port:            5432,
-			User:            "app",
-			Password:        "secret",
-			Database:        "history",
+		Expect(workerDBConfig(cfg())).To(Equal(&workerDB.DatabaseConfig{
+			Type:     workerDB.DBTypePostgreSQL,
+			Host:     "history.internal",
+			Port:     5432,
+			User:     "app",
+			Password: "secret",
+			Database: "history",
+			// The libraries call it TLSMode; the value domain is the driver's.
 			TLSMode:         "require",
 			MaxOpenConns:    40,
 			MaxIdleConns:    7,
@@ -170,10 +86,7 @@ var _ = Describe("the library-specific configs", func() {
 	})
 
 	It("builds the scheduler library's config", func() {
-		got, err := schedulerDBConfig(cfg())
-
-		Expect(err).NotTo(HaveOccurred())
-		Expect(got).To(Equal(&schedulerDB.DatabaseConfig{
+		Expect(schedulerDBConfig(cfg())).To(Equal(&schedulerDB.DatabaseConfig{
 			Type:            schedulerDB.DBTypePostgreSQL,
 			Host:            "history.internal",
 			Port:            5432,
@@ -187,14 +100,50 @@ var _ = Describe("the library-specific configs", func() {
 			ConnMaxIdleTime: time.Minute,
 		}))
 	})
+})
 
-	It("reports an unsupported driver from both", func() {
-		bad := &appconfig.DB{Driver: "cockroach"}
+// SQLite has no host: the libraries read the file path out of Database.
+var _ = Describe("where SQLite keeps its file", func() {
+	It("uses DB_NAME when it is set", func() {
+		Expect(databaseFor(&appconfig.DB{
+			Driver: sqliteDriver,
+			DBName: "./worker.db",
+		})).To(Equal("./worker.db"))
+	})
 
-		_, workerErr := workerDBConfig(bad)
-		_, schedulerErr := schedulerDBConfig(bad)
+	It("falls back to DB_HOST, which is where the template configs put it", func() {
+		Expect(databaseFor(&appconfig.DB{
+			Driver: sqliteDriver,
+			Host:   "./tmp/ensoria.sqlite",
+		})).To(Equal("./tmp/ensoria.sqlite"))
+	})
 
-		Expect(workerErr).To(HaveOccurred())
-		Expect(schedulerErr).To(HaveOccurred())
+	It("prefers DB_NAME when both are set", func() {
+		Expect(databaseFor(&appconfig.DB{
+			Driver: sqliteDriver,
+			Host:   "./tmp/ensoria.sqlite",
+			DBName: "./worker.db",
+		})).To(Equal("./worker.db"))
+	})
+
+	// A server's host is not a database name, so the fallback must not leak
+	// into the other drivers.
+	It("does not fall back to the host on a server driver", func() {
+		Expect(databaseFor(&appconfig.DB{
+			Driver: "postgres",
+			Host:   "history.internal",
+		})).To(BeEmpty())
+	})
+
+	// The alias is normalized before it ever reaches here, so the rule keys off
+	// the normalized name alone.
+	It("reaches the file path through the normalized name", func() {
+		params, err := (&appconfig.Parameters{}).OverwriteParams(map[string]string{
+			"DB_DRIVER": "sqlite3",
+			"DB_HOST":   "./tmp/ensoria.sqlite",
+		})
+		Expect(err).NotTo(HaveOccurred())
+
+		Expect(workerDBConfig(params.Worker.HistoryDB).Database).To(Equal("./tmp/ensoria.sqlite"))
 	})
 })
