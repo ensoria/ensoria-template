@@ -1,9 +1,10 @@
 package main
 
 import (
-	"log"
+	"os"
 
 	"github.com/ensoria/ensoria-template/internal/app/bootstrap/server"
+	"github.com/ensoria/loggear/pkg/loggear"
 	"github.com/spf13/pflag"
 )
 
@@ -14,6 +15,12 @@ func main() {
 	pflag.Parse()
 
 	if err := server.Run(envVal); err != nil {
-		log.Fatal(err)
+		// A failed startup is the first thing an operator looks for in the log
+		// platform, so it is written as a structured record rather than as the
+		// standard library's unstructured stderr line. The logger is built here
+		// with no options — JSON on stdout — because the configuration that
+		// would otherwise shape it is the very thing that may have failed.
+		loggear.NewSlogLogger().Error("server startup failed", "error", err)
+		os.Exit(1)
 	}
 }

@@ -22,7 +22,9 @@ import (
 )
 
 func Start(envVal *string) error {
-	registry.InitializeConfiguration(envVal, assets.ConfigFS(*envVal), "internal", "config")
+	if err := registry.InitializeConfiguration(*envVal, assets.ConfigFS(*envVal), "internal", "config"); err != nil {
+		return fmt.Errorf("app initialization error: %w", err)
+	}
 
 	dikit.AppendConstructors([]any{
 		// アプリのルートコンテキスト（常駐処理の生存期間 = アプリの生存期間）

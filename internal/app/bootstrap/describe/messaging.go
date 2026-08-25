@@ -34,7 +34,9 @@ const (
 // BuildMessaging resolves the messaging declarations without real infrastructure
 // and returns the MessagingSpec.
 func BuildMessaging(envVal *string) (*msgdoc.MessagingSpec, error) {
-	registry.InitializeConfiguration(envVal, assets.ConfigFS(*envVal), "internal", "config")
+	if err := registry.InitializeConfiguration(*envVal, assets.ConfigFS(*envVal), "internal", "config"); err != nil {
+		return nil, fmt.Errorf("app initialization error: %w", err)
+	}
 
 	declared, err := resolveMessagingModules()
 	if err != nil {

@@ -24,7 +24,9 @@ import (
 )
 
 func Run(envVal *string) error {
-	registry.InitializeConfiguration(envVal, assets.ConfigFS(*envVal), "internal", "config")
+	if err := registry.InitializeConfiguration(*envVal, assets.ConfigFS(*envVal), "internal", "config"); err != nil {
+		return fmt.Errorf("app initialization error: %w", err)
+	}
 
 	// 宣言(Endpoint.Success / Responses)と実挙動の不一致を、開発環境では即座に失敗させる。
 	// 生成ドキュメントが黙って実装から乖離しないようにするための検査。

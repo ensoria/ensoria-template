@@ -37,7 +37,9 @@ import (
 
 // BuildHTTP は HTTP モジュールを実インフラなしで解決し、APISpec を返す。
 func BuildHTTP(envVal *string) (*apidoc.APISpec, error) {
-	registry.InitializeConfiguration(envVal, assets.ConfigFS(*envVal), "internal", "config")
+	if err := registry.InitializeConfiguration(*envVal, assets.ConfigFS(*envVal), "internal", "config"); err != nil {
+		return nil, fmt.Errorf("app initialization error: %w", err)
+	}
 
 	modules, err := resolveHTTPModules()
 	if err != nil {
