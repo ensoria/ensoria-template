@@ -7,6 +7,8 @@
 package mock
 
 import (
+	"context"
+
 	"github.com/ensoria/ensoria-template/internal/query/user_post/record"
 	"github.com/ensoria/testutil/pkg/mock"
 )
@@ -19,7 +21,7 @@ func NewUserPostServiceMock() *UserPostServiceMock {
 	return &UserPostServiceMock{Mock: mock.New()}
 }
 
-func (m *UserPostServiceMock) GetByID(p0 int64) *record.UserPostRecord {
-	r := m.Called("GetByID", p0)
-	return mock.Get[*record.UserPostRecord](r, 0)
+func (m *UserPostServiceMock) GetByID(p0 context.Context, p1 int64) (*record.UserPostRecord, error) {
+	r := m.Called("GetByID", p0, p1)
+	return mock.Get[*record.UserPostRecord](r, 0), mock.Get[error](r, 1)
 }

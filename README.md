@@ -564,6 +564,111 @@ HTTPサーバのタイムアウトは **2層** で構成されています。値
 - **ストリーミング・WebSocket は対象外**です。ストリーミング/ファイルレスポンスは「計算」の後に書き込まれるため上限の対象外、WebSocket は別ルータ（`wsrouter`）のため影響を受けません。
 - **重要**: タイムアウトでクライアントにはレスポンスが返りますが、打ち切られたコントローラの処理自体を中断させるには、コントローラが `r.Context()` を下流（DB クエリ・外部 HTTP 呼び出し等）へ伝播させる必要があります。詳細は `rest` の README「Request Timeout」を参照してください。
 
+## Caching a read (`enscache.Cache`)
+
+The application cache is a tiered store: a bounded in-process L1 (otter) over a
+shared L2 (Redis), built in
+[internal/infra/cache/cache.go](internal/infra/cache/cache.go) and injected as
+`enscache.Cache`. `internal/query/user_post` is the worked example.
+
+### The shape a read-through cache wants
+
+```go
+func (s *userPostService) GetByID(ctx context.Context, id int64) (*record.UserPostRecord, error) {
+	return enscache.GetOrSetFunc(ctx, s.cache, cacheKey(id), cacheTTL,
+		func(ctx context.Context) (*record.UserPostRecord, error) {
+			return s.repository.GetByID(ctx, id)
+		})
+}
+```
+
+`GetOrSetFunc` returns the cached value on a hit, and otherwise runs the
+function, stores what it returns and hands it back. The repository is therefore
+consulted only on a miss, and only once per key even when several requests miss
+at the same time.
+
+An error from the function is returned as-is and **nothing is stored**, so one
+unlucky moment never becomes the answer for as long as the entry would live.
+
+Two things follow from adding the cache:
+
+- **The method takes a `ctx`.** The read now reaches Redis, and a caller that
+  goes away should stop the work it started.
+- **The method returns an `error`.** The record itself may be incapable of
+  failing, but the L2 is a network hop; a caller has to hear about a Redis that
+  is unreachable rather than have it read through silently.
+
+### Keys
+
+A key has to name **every input the value depends on**. `GetByID` depends only
+on the id, so that is all the key carries:
+
+```go
+const cacheKeyNamespace = "user_post"
+
+func cacheKey(id int64) string {
+	return fmt.Sprintf("%s:%d", cacheKeyNamespace, id)
+}
+```
+
+A read that also varied by, say, a locale or by who is asking would have to put
+those in the key too — otherwise two different answers overwrite each other and
+one caller is served the other's.
+
+The store prepends its own `cacheKeyPrefix` (`"app"`), so the key a Redis
+instance actually holds is `app:user_post:42`. The namespace only has to be
+unique among the modules of one application.
+
+### Two different TTLs
+
+| Setting | What it bounds |
+|---|---|
+| `cacheTTL` in the module | how stale the cached value may be — a question about the data |
+| `CACHE_NEAR_TTL` | how long one replica's in-process L1 copy may differ from the shared L2 |
+
+### Invalidation
+
+This example is a read-only query module, so it lets entries expire. An
+application that also writes has a better option: **delete the key where the
+write happens.**
+
+```go
+// In the module that writes, after the write succeeds.
+func (s *postService) Update(ctx context.Context, post *record.PostRecord) error {
+	if err := s.repository.Update(ctx, post); err != nil {
+		return err
+	}
+
+	// The reader would otherwise serve the old value until its TTL runs out.
+	return s.cache.Delete(ctx, cacheKey(post.ID))
+}
+```
+
+Two things make this work, and both are easy to get wrong:
+
+- **The writer and the reader have to build the key the same way.** They are
+  usually in different modules, so the key builder belongs somewhere both can
+  reach rather than copied into each.
+- **Delete after the write succeeds, not before.** Deleting first leaves a
+  window where a read can repopulate the entry from the old data and then the
+  write lands, leaving a cache that disagrees with the database until the TTL
+  expires.
+
+A TTL is still worth setting even with invalidation in place: it is what bounds
+the damage when a delete is missed.
+
+### Why anything is injected at all
+
+`fx` builds lazily, so a constructor nothing depends on never runs. Before this
+example existed, `NewDefaultCache` was provided but unused — which meant a
+misconfigured cache Redis stayed invisible until somebody wrote the first cached
+read. With the injection in place, startup dials it and says so:
+
+```
+{"level":"INFO","msg":"Redis connection verified","purpose":"cache","addr":"localhost","db":2}
+```
+
+
 ## .envファイルの注意事項
 
 `.env`ファイルは、ローカル環境、テスト環境でのみ利用することが想定されています。

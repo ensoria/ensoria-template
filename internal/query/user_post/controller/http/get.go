@@ -30,8 +30,15 @@ func NewGet(svc service.UserPostService) *restkit.Endpoint[restkit.NoBody, dto.G
 			Idempotent:  new(true),
 		},
 		Handle: func(r *rest.Request, _ *restkit.NoBody) (*rest.Result[dto.GetUserPost], error) {
+			// The request's context is what the read is cancelled with: it
+			// reaches the cache and, on a miss, the repository behind it, so a
+			// caller that goes away stops the work it started.
+			//
 			// TODO: read the id from the path instead of the fixed value below.
-			user := svc.GetByID(1)
+			user, err := svc.GetByID(r.Context(), 1)
+			if err != nil {
+				return nil, err
+			}
 
 			return rest.NewResult(&dto.GetUserPost{ID: user.ID}), nil
 		},
