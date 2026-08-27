@@ -33,11 +33,22 @@ const (
 
 // stubs returns the providers describe puts underneath the module constructors.
 //
-// Every type listed here is one the running application provides (server.Run or
-// scheduler.Start) and that a module can therefore inject. describe registers no
-// real infrastructure constructor, so a type a module reaches but this list does
-// not carry makes the whole resolution fail with `missing type: X` — see the
-// README's "Adding a dependency that describe has to stub".
+// What belongs here is decided by one mechanical rule: a type is stubbed when
+// server.Run or scheduler.Start provides it and a module could inject it. Not
+// "does a module inject it today" — that answer changes every time a module
+// gains a dependency, which is exactly how describe broke before: fx builds
+// lazily, so a type nobody reached was a hole nobody could see. Stubbing by what
+// is injectable keeps the decision independent of what the modules currently do.
+//
+// The only types the application provides that are left out are *pipeline.HTTP
+// and *wsrouter.Router. That is structural rather than a preference: both
+// consume the module groups (fx.ParamTags(GroupTagHttpModules) on
+// CreateHTTPPipeline), so a module injecting one would be a dependency cycle in
+// the running application too.
+//
+// A type a module reaches but this list does not carry makes the whole
+// resolution fail with `missing type: X` — see the README's "Adding a dependency
+// that describe has to stub".
 //
 // Both resolvers take this one list. They used to keep separate hand-written
 // lists, which drifted apart and left each of them with holes the other did not
@@ -77,6 +88,15 @@ func stubs() []any {
 		// Broker publishing and job enqueueing.
 		func() mb.Publish { return stubPublish },
 		func() worker.Enqueuer { return &stubEnqueuer{} },
+
+		// The broker connections and the subscribe entry point. Modules reach
+		// the broker through mb.Publish and declare subscriptions with mbkit, so
+		// nothing injects these today — but the application provides all three
+		// unnamed, so a module can, and the rule above does not ask whether one
+		// currently does.
+		func() mb.Subscriber { return &stubSubscriber{} },
+		func() mb.Publisher { return &stubPublisher{} },
+		func() mb.StartSubscription { return stubStartSubscription },
 
 		// The management endpoints take these to declare their endpoints, and
 		// describe does not run a handler. Building the real ones would need
@@ -151,3 +171,40 @@ type stubEnqueuer struct{}
 func (*stubEnqueuer) Enqueue(ctx context.Context, jobName string, payload any, opts ...*job.Option) (string, error) {
 	return "", nil
 }
+
+// stubStartSubscription accepts every subscription and starts none.
+var stubStartSubscription mb.StartSubscription = func(target string, handler mb.SubscribeHandler, opts ...mb.SubscribeOption) error {
+	return nil
+}
+
+// stubSubscriber is a broker subscriber that never dials.
+//
+// Connect succeeds without a broker, which is the whole point: mb dials
+// explicitly rather than lazily, so the real connection would need a running
+// broker even to be built.
+type stubSubscriber struct{}
+
+func (*stubSubscriber) Connect(ctx context.Context) error { return nil }
+func (s *stubSubscriber) SetOptions(opts ...mb.SubscribeOption) mb.Subscriber {
+	return s
+}
+
+func (*stubSubscriber) Subscribe(ctx context.Context, target string, handler mb.MessageHandler, opts ...mb.SubscribeOption) error {
+	return nil
+}
+func (*stubSubscriber) Ping(ctx context.Context) error { return nil }
+func (*stubSubscriber) Close() error                   { return nil }
+
+// stubPublisher is the publishing half of the same non-connection.
+type stubPublisher struct{}
+
+func (*stubPublisher) Connect(ctx context.Context) error { return nil }
+func (p *stubPublisher) SetOptions(opts ...mb.PublishOption) mb.Publisher {
+	return p
+}
+
+func (*stubPublisher) Publish(ctx context.Context, target string, data []byte, metadata map[string]string, opts ...mb.PublishOption) error {
+	return nil
+}
+func (*stubPublisher) Ping(ctx context.Context) error { return nil }
+func (*stubPublisher) Close() error                   { return nil }
