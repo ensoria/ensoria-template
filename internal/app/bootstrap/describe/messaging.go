@@ -97,7 +97,7 @@ func resolveMessagingModules() (*messagingModules, error) {
 		fx.NopLogger,
 	)
 	if err := app.Err(); err != nil {
-		return nil, fmt.Errorf("describe: resolve messaging modules: %w", err)
+		return nil, withStubHint(fmt.Errorf("describe: resolve messaging modules: %w", err))
 	}
 	return &modules, nil
 }

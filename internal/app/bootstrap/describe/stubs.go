@@ -3,6 +3,9 @@ package describe
 import (
 	"context"
 	"database/sql"
+	"fmt"
+	"regexp"
+	"strings"
 
 	enscache "github.com/ensoria/cache/pkg/cache"
 	"github.com/ensoria/cache/pkg/cachememory"
@@ -26,6 +29,50 @@ import (
 // resolve under every environment, including one with no cache configured.
 const stubCacheKeyPrefix = "describe"
 
+// stubsFile is where the hint on a resolution failure sends the reader. It is
+// this file; the path is written out because the person reading the message is
+// looking at a generator's output, not at this package.
+const stubsFile = "internal/app/bootstrap/describe/stubs.go"
+
+// missingTypePattern reads the type names out of fx's dependency report.
+var missingTypePattern = regexp.MustCompile(`missing type:\s*(\S+)`)
+
+// withStubHint appends the fix to a resolution failure.
+//
+// fx reports a missing provider as a chain that names reflect internals and ends,
+// many lines in, with `missing type: X`. Whoever hits it is usually not thinking
+// about describe at all — they added a dependency to a module and ran the
+// document generator — so the type names are lifted out of the wall of text into
+// a sentence that says what to do with them.
+//
+// The original error is wrapped, never replaced: the hint is an addition. When no
+// type name can be read out (fx reworded its report, or the failure was something
+// else entirely) err is returned exactly as it came, so a pattern that stops
+// matching costs the guidance and nothing else.
+func withStubHint(err error) error {
+	matches := missingTypePattern.FindAllStringSubmatch(err.Error(), -1)
+	if len(matches) == 0 {
+		return err
+	}
+
+	// One failure can name several types, and can name the same type twice when
+	// two branches of the graph both reach it. Listing it twice tells the reader
+	// nothing, so each name is reported once, in the order fx reached it.
+	seen := make(map[string]struct{}, len(matches))
+	names := make([]string, 0, len(matches))
+	for _, match := range matches {
+		name := match[1]
+		if _, duplicate := seen[name]; duplicate {
+			continue
+		}
+		seen[name] = struct{}{}
+		names = append(names, name)
+	}
+
+	return fmt.Errorf("%w\n\ndescribe has no stub for: %s\nAdd one for each to %s",
+		err, strings.Join(names, ", "), stubsFile)
+}
+
 // stubs returns the providers describe puts underneath the module constructors.
 //
 // What belongs here is decided by one mechanical rule: a type is stubbed when
@@ -42,8 +89,8 @@ const stubCacheKeyPrefix = "describe"
 // the running application too.
 //
 // A type a module reaches but this list does not carry makes the whole
-// resolution fail with `missing type: X` — see the README's "Adding a dependency
-// that describe has to stub".
+// resolution fail with `missing type: X`; withStubHint turns that into a line
+// saying which type to add here.
 //
 // Both resolvers take this one list. They used to keep separate hand-written
 // lists, which drifted apart and left each of them with holes the other did not

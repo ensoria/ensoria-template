@@ -62,7 +62,7 @@ func resolveHTTPModules() ([]*rest.Module, error) {
 		fx.NopLogger,
 	)
 	if err := app.Err(); err != nil {
-		return nil, fmt.Errorf("describe: resolve http modules: %w", err)
+		return nil, withStubHint(fmt.Errorf("describe: resolve http modules: %w", err))
 	}
 	return modules, nil
 }
