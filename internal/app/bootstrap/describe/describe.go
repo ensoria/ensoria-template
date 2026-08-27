@@ -7,7 +7,6 @@
 package describe
 
 import (
-	"context"
 	"fmt"
 	"reflect"
 
@@ -19,11 +18,7 @@ import (
 	"github.com/ensoria/ensoria-template/internal/plamo/apidoc"
 	"github.com/ensoria/ensoria-template/internal/plamo/authkit"
 	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
-	"github.com/ensoria/mb/pkg/mb"
 	"github.com/ensoria/rest/pkg/rest"
-	"github.com/ensoria/scheduler/pkg/scheduler"
-	"github.com/ensoria/worker/pkg/job"
-	"github.com/ensoria/worker/pkg/worker"
 	"go.uber.org/fx"
 
 	// モジュールの init() でコンストラクタ(repository/service/controller/module)を登録する。
@@ -53,23 +48,16 @@ func BuildHTTP(envVal *string) (*apidoc.APISpec, error) {
 }
 
 // resolveHTTPModules は fx で `http_modules` group だけを解決する。
-// 接続系(mb.Publish / worker.Enqueuer)はスタブを Provide し、実 infra は登録しない
-// (repository は db 非依存、gRPC は grpc.NewClient で遅延接続のため接続は走らない)。
+// アプリが提供する infra 型は stubs.go の一覧をそのまま Provide し、実 infra は
+// 登録しない(repository は db 非依存、gRPC は grpc.NewClient で遅延接続のため
+// 接続は走らない)。
 // `.Run()` / `.Start()` は呼ばないので OnStart ライフサイクルも実行されない。
 func resolveHTTPModules() ([]*rest.Module, error) {
 	var modules []*rest.Module
 
 	app := fx.New(
 		fx.Provide(dikit.Constructors()...),
-		fx.Provide(
-			func() mb.Publish { return stubPublish },
-			func() worker.Enqueuer { return stubEnqueuer{} },
-			// 管理系エンドポイントは *scheduler.Scheduler / *worker.Worker を受け取って
-			// エンドポイントを組むだけで、describe は Handle を実行しない。実物を作ると
-			// Redis と DB が要るので、値としてだけ存在するゼロ値を渡す。
-			func() *scheduler.Scheduler { return &scheduler.Scheduler{} },
-			func() *worker.Worker { return &worker.Worker{} },
-		),
+		fx.Provide(stubs()...),
 		fx.Populate(fx.Annotate(&modules, fx.ParamTags(dikit.GroupTagHttpModules))),
 		fx.NopLogger,
 	)
@@ -103,18 +91,6 @@ func buildConventions() *apidoc.Conventions {
 		MaxAge:           params.CORS.MaxAge(),
 	}
 	return conv
-}
-
-// --- describe 用のスタブ(接続を張らない) ---
-
-var stubPublish mb.Publish = func(ctx context.Context, target string, data []byte, metadata map[string]string, opts ...mb.PublishOption) error {
-	return nil
-}
-
-type stubEnqueuer struct{}
-
-func (stubEnqueuer) Enqueue(ctx context.Context, jobName string, payload any, opts ...*job.Option) (string, error) {
-	return "", nil
 }
 
 // securitySchemes は設定されている検証手段から、呼び出し元が使える資格情報の方式を組む。

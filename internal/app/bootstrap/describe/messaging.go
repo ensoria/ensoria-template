@@ -17,7 +17,6 @@ import (
 	"github.com/ensoria/ensoria-template/internal/plamo/msgdoc"
 	"github.com/ensoria/ensoria-template/internal/plamo/wskit"
 	"github.com/ensoria/mb/pkg/mb"
-	"github.com/ensoria/worker/pkg/worker"
 	"go.uber.org/fx"
 )
 
@@ -85,18 +84,15 @@ type messagingModules struct {
 
 // resolveMessagingModules resolves the three declaration groups with fx.
 //
-// It mirrors resolveHTTPModules: the connection-shaped dependencies are stubbed
-// and no lifecycle runs, so nothing dials a broker or binds a port. What differs
-// is only which groups are populated.
+// It mirrors resolveHTTPModules: the same stubs.go list stands in for the
+// infrastructure and no lifecycle runs, so nothing dials a broker or binds a
+// port. What differs is only which groups are populated.
 func resolveMessagingModules() (*messagingModules, error) {
 	var modules messagingModules
 
 	app := fx.New(
 		fx.Provide(dikit.Constructors()...),
-		fx.Provide(
-			func() mb.Publish { return stubPublish },
-			func() worker.Enqueuer { return stubEnqueuer{} },
-		),
+		fx.Provide(stubs()...),
 		fx.Populate(&modules),
 		fx.NopLogger,
 	)
