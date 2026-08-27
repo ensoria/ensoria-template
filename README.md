@@ -438,6 +438,42 @@ describe は build tag `apidoc_describe` で本番ビルドから隔離されて
 **DB やメッセージブローカーには接続しません**（接続系はスタブが注入され、fx のライフサイクルも起動しません）。
 そのためインフラを立ち上げずにドキュメントを生成できます。
 
+### Adding a dependency that describe has to stub
+
+describe registers no real infrastructure. It builds the DI graph from the module
+constructors plus one fixed list of stubs in
+[internal/app/bootstrap/describe/stubs.go](internal/app/bootstrap/describe/stubs.go).
+So when a module — a controller, service, repository, job or task — starts
+injecting an infrastructure type that list does not carry, resolution fails, and
+the generator names the type it could not build:
+
+```
+apidoc-describe: describe: resolve http modules: ... missing type: cache.Cache
+
+describe has no stub for: cache.Cache
+Add one for each to internal/app/bootstrap/describe/stubs.go
+```
+
+**Add a stub for the named type to `stubs.go`, in the same change that introduces
+the dependency.** `apidoc-describe` and `msgdoc-describe` share that one list, so
+a single entry covers both.
+
+**A stub is never executed.** describe reads declarations: it runs no handler, job
+or subscription, and it never starts the fx lifecycle. All a stub has to do is be
+constructible, so an in-memory implementation from the library, a zero value, or a
+no-op fake is enough — it does not have to behave like the real thing.
+
+`stubs.go` carries every type `server.Run` or `scheduler.Start` provides that a
+module can inject, whether or not a module injects one today. Carrying only what
+is currently used is what left the hole in the first place: the answer to "does
+anything inject this" changes the moment somebody adds a dependency, and `fx`
+builds lazily, so nothing notices until some module actually reaches the type.
+
+The specs in that package resolve both graphs, so a missing stub turns
+`go test ./internal/app/bootstrap/describe/...` red as well. Without them the only
+thing that broke was document generation — a path most work never touches, which
+is why the last gap went unnoticed until somebody regenerated the documents.
+
 ### 生成物の元になる宣言
 
 型から導けない情報は、コードの宣言が唯一の出所です。ドキュメントに `TODO` が出たら、
@@ -473,6 +509,10 @@ encli generate asyncapi    # AsyncAPI 3.0 (docs/asyncapi.yaml)
 Every operation is written from this application's own point of view, so `send`
 always means this application sends and `receive` that it consumes. Without that
 fixed perspective, a channel with a producer and a consumer reads ambiguously.
+
+`msgdoc-describe` resolves its declarations the same way `apidoc-describe` does,
+from the same stub list — so when a module gains an infrastructure dependency, see
+[Adding a dependency that describe has to stub](#adding-a-dependency-that-describe-has-to-stub).
 
 ### What it reads
 
@@ -667,6 +707,29 @@ read. With the injection in place, startup dials it and says so:
 ```
 {"level":"INFO","msg":"Redis connection verified","purpose":"cache","addr":"localhost","db":2}
 ```
+
+### Inject `enscache.Cache`, not the Redis client
+
+A module can reach the raw `*redis.Client` as well — `server.Run` provides the
+worker's client unnamed — but a module that injects it will run under `server` and
+fail to start under `scheduler`:
+
+| | `*redis.Client` | `enscache.Cache` |
+|---|---|---|
+| `server.Run` | provided unnamed | provided |
+| `scheduler.Start` | only named: `workerCache`, `schedulerCache` | provided |
+
+`scheduler.Start` registers both of its clients through `dikit.ProvideNamed`, so
+an unnamed `*redis.Client` has no provider there and the scheduler dies at startup
+with `missing type: *redis.Client` — while the HTTP application, built from the
+same modules, has been running fine the whole time.
+
+Inject `enscache.Cache`. Both applications provide it unnamed, it is the
+abstraction the codec and the L1/L2 tiering live behind, and it leaves the raw
+handle and its connection lifecycle owned by one place.
+
+describe stubs `*redis.Client` too, so document generation will not catch this for
+you: it fails at scheduler startup, not at generation time.
 
 
 ## .envファイルの注意事項

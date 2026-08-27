@@ -90,7 +90,8 @@ func withStubHint(err error) error {
 //
 // A type a module reaches but this list does not carry makes the whole
 // resolution fail with `missing type: X`; withStubHint turns that into a line
-// saying which type to add here.
+// saying which type to add here. The README says the same thing to whoever hits
+// it from the other end, under "Adding a dependency that describe has to stub".
 //
 // Both resolvers take this one list. They used to keep separate hand-written
 // lists, which drifted apart and left each of them with holes the other did not
