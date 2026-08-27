@@ -115,6 +115,13 @@ func stubs() []any {
 // Each disk gets its own filememory instance: local and s3 are separate
 // backends in the application, so writing through one is not meant to be visible
 // through the other.
+//
+// TODO: revisit this once storage moves to the config package. The disk names
+// are constants today, which is what makes mirroring them a compile-time link.
+// Once they come from configuration they become per-environment, and a stub that
+// resolves under every environment can no longer name them — it will have to
+// derive the registry from the same configuration, or stop promising that
+// Disk(name) resolves at all.
 func stubStorage() (file.Storage, error) {
 	return file.NewStorage(
 		file.WithDisk(infrastorage.DiskLocal, filememory.New()),

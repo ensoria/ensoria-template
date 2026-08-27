@@ -35,6 +35,9 @@ const (
 	// DefaultDisk selects the backend exposed by Storage.Default() and injected
 	// as file.FileSystem. Switch the default backend here.
 	// TODO: configパッケージを使って設定を取得するようにする
+	// そのときは describe のスタブ registry (bootstrap/describe/stubs.go の
+	// stubStorage) の前提も見直すこと。ディスク名が定数でなくなると、
+	// 名前を写して揃えるという今の作りが成り立たなくなる。
 	DefaultDisk = DiskS3
 
 	// Local disk: root directory (created if missing by filelocal.New).
