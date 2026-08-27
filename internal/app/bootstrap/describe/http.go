@@ -1,33 +1,17 @@
-// Package describe は、実インフラに接続せずに HTTP モジュールを DI で解決し、
-// apidoc.APISpec を組み立てる「describe モード」を提供する。
-//
-// docai / OpenAPI 生成のために、サーバを起動せずルーティング・型・宣言メタだけを
-// 取り出す。DB/MB などの接続系はスタブを注入し、fx のライフサイクル(OnStart)は
-// 起動しない(= ポート bind も接続も走らない)。
 package describe
 
 import (
 	"fmt"
 	"reflect"
 
-	"github.com/ensoria/config/pkg/appconfig"
 	"github.com/ensoria/config/pkg/registry"
 	assets "github.com/ensoria/ensoria-template"
 	"github.com/ensoria/ensoria-template/internal/app/apiinfo"
 	httpdto "github.com/ensoria/ensoria-template/internal/app/http/dto"
 	"github.com/ensoria/ensoria-template/internal/plamo/apidoc"
-	"github.com/ensoria/ensoria-template/internal/plamo/authkit"
 	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
 	"github.com/ensoria/rest/pkg/rest"
 	"go.uber.org/fx"
-
-	// モジュールの init() でコンストラクタ(repository/service/controller/module)を登録する。
-	// アプリが配信するものと同じ集合を取り込む —— 取りこぼすと、実際には存在する
-	// エンドポイントが生成ドキュメントから静かに消える。
-	_ "github.com/ensoria/ensoria-template/internal/app/scheduler/api"
-	_ "github.com/ensoria/ensoria-template/internal/app/worker/api"
-	_ "github.com/ensoria/ensoria-template/internal/module"
-	_ "github.com/ensoria/ensoria-template/internal/query"
 )
 
 // BuildHTTP は HTTP モジュールを実インフラなしで解決し、APISpec を返す。
@@ -91,41 +75,4 @@ func buildConventions() *apidoc.Conventions {
 		MaxAge:           params.CORS.MaxAge(),
 	}
 	return conv
-}
-
-// securitySchemes は設定されている検証手段から、呼び出し元が使える資格情報の方式を組む。
-// 設定されていない方式は出さない —— 使えない認証方法をドキュメントに載せないため。
-//
-// API キーは、設定に並んでいる場合と「別の場所で検証する」と宣言されている場合の
-// 両方で出す。DB から検証するアプリでも、呼び出し元にとっては API キーが使えることに
-// 変わりないため。
-func securitySchemes(auth *appconfig.Auth) []apidoc.SecurityScheme {
-	if auth == nil {
-		return nil
-	}
-
-	var schemes []apidoc.SecurityScheme
-	if auth.Secret != "" || auth.JWKSURL != "" {
-		schemes = append(schemes, apidoc.SecurityScheme{
-			Name:         authkit.SchemeJWT,
-			Type:         apidoc.SecuritySchemeTypeHTTP,
-			Scheme:       apidoc.SecuritySchemeBearer,
-			BearerFormat: apidoc.BearerFormatJWT,
-			Description:  "Bearer token issued by the identity provider",
-		})
-	}
-	if auth.AcceptsAPIKeys() {
-		header := auth.APIKeyHeader
-		if header == "" {
-			header = appconfig.DefaultAPIKeyHeader
-		}
-		schemes = append(schemes, apidoc.SecurityScheme{
-			Name:        authkit.SchemeAPIKey,
-			Type:        apidoc.SecuritySchemeTypeAPIKey,
-			In:          apidoc.SecuritySchemeInHeader,
-			HeaderName:  header,
-			Description: "Key issued to a machine caller",
-		})
-	}
-	return schemes
 }
