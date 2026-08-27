@@ -6,6 +6,7 @@ import (
 
 	enscache "github.com/ensoria/cache/pkg/cache"
 	"github.com/ensoria/cache/pkg/cachememory"
+	infrastorage "github.com/ensoria/ensoria-template/internal/infra/storage"
 	"github.com/ensoria/ensoria-template/internal/plamo/authkit"
 	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
 	"github.com/ensoria/file/pkg/file"
@@ -20,16 +21,10 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 )
 
-// Names that only ever exist inside describe. They are not read from the
-// configuration: describe has to resolve under every environment, including one
-// where no cache or storage is configured at all.
-const (
-	// stubCacheKeyPrefix namespaces the keys of the in-memory application cache.
-	stubCacheKeyPrefix = "describe"
-	// stubDiskName is the single disk the stub Storage registers, and the one it
-	// exposes as its default.
-	stubDiskName = "memory"
-)
+// stubCacheKeyPrefix namespaces the keys of the in-memory application cache. It
+// is fixed rather than read from the configuration, because describe has to
+// resolve under every environment, including one with no cache configured.
+const stubCacheKeyPrefix = "describe"
 
 // stubs returns the providers describe puts underneath the module constructors.
 //
@@ -69,8 +64,9 @@ func stubs() []any {
 		// there is no fake to keep in step with the interface.
 		func() enscache.Cache { return cachememory.New(stubCacheKeyPrefix) },
 
-		// File storage. Storage and FileSystem come from the same in-memory
-		// disk, the way the application derives one from the other.
+		// File storage. The same disk names the application registers, backed by
+		// memory, with FileSystem derived from the default disk the way the
+		// application derives it.
 		stubStorage,
 		stubFileSystem,
 
@@ -106,12 +102,24 @@ func stubs() []any {
 	}
 }
 
-// stubStorage builds the storage registry describe injects: a single in-memory
-// disk, registered as the default.
+// stubStorage builds the storage registry describe injects: the same disks the
+// application registers, under the same names and with the same default, each
+// one backed by memory instead of a directory or a bucket.
+//
+// The names are the exported constants rather than copies, because Disk(name) is
+// most of what a Storage is for. A registry that resolves the type but rejects
+// every name the application accepts would break a constructor that resolves its
+// disk up front — and it would break it in document generation only, saying no
+// more than `unknown disk "s3"`.
+//
+// Each disk gets its own filememory instance: local and s3 are separate
+// backends in the application, so writing through one is not meant to be visible
+// through the other.
 func stubStorage() (file.Storage, error) {
 	return file.NewStorage(
-		file.WithDisk(stubDiskName, filememory.New()),
-		file.WithDefault(stubDiskName),
+		file.WithDisk(infrastorage.DiskLocal, filememory.New()),
+		file.WithDisk(infrastorage.DiskS3, filememory.New()),
+		file.WithDefault(infrastorage.DefaultDisk),
 	)
 }
 
@@ -121,8 +129,8 @@ func stubStorage() (file.Storage, error) {
 //
 // Default() cannot be nil here: file.NewStorage rejects a default that names no
 // registered disk, so stubStorage would have failed first.
-func stubFileSystem(storage file.Storage) file.FileSystem {
-	return storage.Default()
+func stubFileSystem(st file.Storage) file.FileSystem {
+	return st.Default()
 }
 
 // stubWorkerDBClient is a worker history client that owns no connection.

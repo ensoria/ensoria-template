@@ -3,7 +3,7 @@
 // It composes two file.FileSystem backends — a local disk (filelocal) and an
 // S3 disk (files3, pointed at MinIO for local development) — into a single
 // file.Storage registry. Switching between backends is done through Storage;
-// the disk named by defaultDisk is also exposed directly as file.FileSystem so
+// the disk named by DefaultDisk is also exposed directly as file.FileSystem so
 // controllers can inject one FileSystem without knowing about disks.
 package storage
 
@@ -25,14 +25,17 @@ import (
 // Storage configuration. Values are hardcoded for now; they will be derived
 // from registry.ModuleParams() once the config package supports storage.
 const (
-	// Disk names registered in the Storage registry.
-	diskLocal = "local"
-	diskS3    = "s3"
+	// Disk names registered in the Storage registry. They are exported because
+	// they are what a caller passes to Storage.Disk, and because describe's stub
+	// registry mirrors them: the names have to be declared once, or the two
+	// registries drift apart without anything reporting it.
+	DiskLocal = "local"
+	DiskS3    = "s3"
 
-	// defaultDisk selects the backend exposed by Storage.Default() and injected
+	// DefaultDisk selects the backend exposed by Storage.Default() and injected
 	// as file.FileSystem. Switch the default backend here.
 	// TODO: configパッケージを使って設定を取得するようにする
-	defaultDisk = diskS3
+	DefaultDisk = DiskS3
 
 	// Local disk: root directory (created if missing by filelocal.New).
 	localRoot = "./.storage/local"
@@ -48,7 +51,7 @@ const (
 )
 
 // NewDefaultStorage builds the file.Storage registry with a local disk and an
-// S3 disk, exposing defaultDisk as the default. The local disk owns a directory
+// S3 disk, exposing DefaultDisk as the default. The local disk owns a directory
 // fd (filelocal implements io.Closer) and is closed on shutdown; the S3 disk
 // borrows the injected client and needs no cleanup.
 func NewDefaultStorage(envVal *string) func(lc dikit.LC) (file.Storage, error) {
@@ -64,9 +67,9 @@ func NewDefaultStorage(envVal *string) func(lc dikit.LC) (file.Storage, error) {
 		s3fs := files3.New(s3Client, s3Bucket, s3KeyPrefix)
 
 		storage, err := file.NewStorage(
-			file.WithDisk(diskLocal, local),
-			file.WithDisk(diskS3, s3fs),
-			file.WithDefault(defaultDisk),
+			file.WithDisk(DiskLocal, local),
+			file.WithDisk(DiskS3, s3fs),
+			file.WithDefault(DefaultDisk),
 		)
 		if err != nil {
 			return nil, fmt.Errorf("storage init failed: %w", err)
@@ -76,14 +79,14 @@ func NewDefaultStorage(envVal *string) func(lc dikit.LC) (file.Storage, error) {
 			OnStart: func(ctx context.Context) error {
 				// Verify S3 connectivity and that the target bucket exists and is
 				// reachable (HeadBucket). Like the other infra connections, this
-				// fails startup when the backend is unavailable. Because defaultDisk
+				// fails startup when the backend is unavailable. Because DefaultDisk
 				// is S3, MinIO and the bucket must be up before the app starts.
 				if _, err := s3Client.HeadBucket(ctx, &s3.HeadBucketInput{
 					Bucket: aws.String(s3Bucket),
 				}); err != nil {
 					return fmt.Errorf("S3 bucket check failed (bucket=%q): %w", s3Bucket, err)
 				}
-				loggear.Info("Storage connection verified", "default", defaultDisk, "disks", storage.Names())
+				loggear.Info("Storage connection verified", "default", DefaultDisk, "disks", storage.Names())
 				return nil
 			},
 			OnStop: func(ctx context.Context) error {
