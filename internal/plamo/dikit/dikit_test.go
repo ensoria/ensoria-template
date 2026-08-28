@@ -130,7 +130,7 @@ var _ = Describe("ProvideAndRun", func() {
 
 	Context("when the application requests a non-zero exit code", func() {
 		It("returns an ExitError carrying the code", func() {
-			err := runApp(nil, []any{shutdownAfter(fx.ExitCode(requestedExitCode))})
+			err := runApp(nil, []any{shutdownAfter(dikit.ExitCode(requestedExitCode))})
 
 			var exitErr *dikit.ExitError
 			Expect(errors.As(err, &exitErr)).To(BeTrue(), "expected an *ExitError, got %v", err)
@@ -163,7 +163,7 @@ var _ = Describe("ProvideAndRun", func() {
 		})
 
 		It("reports the shutdown failure rather than the requested exit code", func() {
-			err := runApp(nil, []any{failingOnStop, shutdownAfter(fx.ExitCode(requestedExitCode))})
+			err := runApp(nil, []any{failingOnStop, shutdownAfter(dikit.ExitCode(requestedExitCode))})
 
 			var exitErr *dikit.ExitError
 			Expect(errors.As(err, &exitErr)).To(BeFalse(), "a failed shutdown outranks a requested exit code")

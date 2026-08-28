@@ -741,3 +741,79 @@ you: it fails at scheduler startup, not at generation time.
 
 
 
+
+## Failing at startup
+
+Everything the application assembles at startup runs inside fx, and fx has one
+way of being told that something is wrong: a returned `error`. Constructors and
+invocations use it. **Do not call `log.Fatal`, `panic` or `os.Exit` from a
+constructor or an invocation.**
+
+```go
+// Constructor: it produces a value, so it returns (T, error).
+func NewThing(lc dikit.LC) (*Thing, error) {
+	params, err := registry.ModuleParams("default")
+	if err != nil {
+		return nil, fmt.Errorf("default config parameters not found: %w", err)
+	}
+	...
+}
+
+// Invocation: it may produce a value or nothing, and returns an error either way.
+func StartThing(thing *Thing) error { ... }
+```
+
+The reason is what an operator sees when the application refuses to start.
+`dikit.ProvideAndRun` hands the failure back to `main`, which writes exactly one
+structured record through the configured logger and exits 1:
+
+```json
+{"level":"ERROR","msg":"server exited abnormally","error":"... : dial tcp [::1]:5432: connect: connection refused"}
+```
+
+`log.Fatal` would write an unstructured line to stderr instead, outside the log
+setup, and its `os.Exit` would cut the shutdown short. Writing the reason only
+through fx's own event log is no better: that log is on solely when
+`LOG_LEVEL=debug`, so in every other environment the failure would be silent.
+
+The same applies to a startup check. An `OnStart` hook that cannot reach what it
+needs returns an error, and fx rolls back the hooks that had already started:
+
+```go
+lc.Append(dikit.Hook{
+	OnStart: func(ctx context.Context) error {
+		if err := conn.Ping(ctx); err != nil {
+			return fmt.Errorf("cache connection check failed: %w", err)
+		}
+		return nil
+	},
+})
+```
+
+### A server that dies after it has started
+
+Once the application is running, a long-lived server that dies is not a startup
+failure and has no error to return — it is running in its own goroutine. It logs
+why and asks for shutdown **with an exit code**:
+
+```go
+if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	loggear.Error("HTTP server stopped unexpectedly", "error", err)
+	_ = shutdowner.Shutdown(dikit.ExitCode(1))
+}
+```
+
+`dikit.ExitCode` is what makes the process exit non-zero. Without it the shutdown
+is indistinguishable from a clean one: the process ends with 0, and a supervisor
+set to restart on failure (systemd's `Restart=on-failure`, a Kubernetes
+`restartPolicy`) reads that as a deliberate stop and leaves the application down.
+
+The result is two records — the reason, and the exit:
+
+```json
+{"level":"ERROR","msg":"HTTP server stopped unexpectedly","error":"listen tcp :8080: bind: address already in use"}
+{"level":"INFO","msg":"server exited with requested exit code","code":1}
+```
+
+The error record is yours to write: `main` only reports *that* the application
+asked to exit with a code, never *why*.

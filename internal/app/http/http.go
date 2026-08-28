@@ -110,7 +110,12 @@ func RegisterHTTPServerLifecycle(lc dikit.LC, shutdowner dikit.Shutdowner, srv *
 				loggear.Info("HTTP server starting", "addr", srv.Addr)
 				if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 					loggear.Error("HTTP server stopped unexpectedly", "error", err)
-					_ = shutdowner.Shutdown()
+					// The exit code has to say the process failed. Shutting down
+					// without one ends the process with 0, and a supervisor that
+					// restarts on failure (systemd Restart=on-failure, a
+					// Kubernetes restartPolicy) reads that as a clean stop and
+					// leaves the application down.
+					_ = shutdowner.Shutdown(dikit.ExitCode(1))
 				}
 			}()
 			return nil

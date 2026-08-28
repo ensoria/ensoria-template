@@ -43,8 +43,12 @@ func BuildMessaging(envVal *string) (*msgdoc.MessagingSpec, error) {
 	}
 
 	// An application may run without a broker at all, in which case only the
-	// WebSocket side is described rather than the whole run failing.
-	broker := inframb.BrokerConfig()
+	// WebSocket side is described rather than the whole run failing. A
+	// configuration that cannot be read is a different matter and is reported.
+	broker, err := inframb.BrokerConfig()
+	if err != nil {
+		return nil, err
+	}
 	protocol := ""
 	brokerServers := []string(nil)
 	if broker != nil {

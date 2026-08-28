@@ -80,7 +80,9 @@ func RegisterGRPCServerLifecycle(lc dikit.LC, shutdowner dikit.Shutdowner, grpcS
 				loggear.Info("gRPC server starting", "addr", ":50051")
 				if err := grpcSrv.Serve(listen); err != nil {
 					loggear.Error("gRPC server stopped unexpectedly", "error", err)
-					_ = shutdowner.Shutdown()
+					// See the HTTP server: a shutdown without an exit code would
+					// end the process with 0 and read as a clean stop.
+					_ = shutdowner.Shutdown(dikit.ExitCode(1))
 				}
 			}()
 			return nil

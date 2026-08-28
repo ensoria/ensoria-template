@@ -248,6 +248,16 @@ func (e *ExitError) Error() string {
 	return fmt.Sprintf("application requested exit code %d", e.Code)
 }
 
+// ExitCode is the shutdown option carrying the process exit code for
+// Shutdowner.Shutdown. It re-exports fx.ExitCode so that app code keeps
+// reaching fx only through dikit.
+//
+// A shutdown asked for with a non-zero code comes back out of ProvideAndRun as
+// an *ExitError, and main() exits with it.
+func ExitCode(code int) fx.ShutdownOption {
+	return fx.ExitCode(code)
+}
+
 // ProvideAndRun builds the fx application, starts it, waits for a shutdown
 // signal and stops it, reporting every failure to the caller.
 //

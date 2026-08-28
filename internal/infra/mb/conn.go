@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/ensoria/config/pkg/appconfig"
 	"github.com/ensoria/config/pkg/registry"
 	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
 	"github.com/ensoria/loggear/pkg/loggear"
@@ -34,11 +35,25 @@ func (h *SubscriberPanicHandler) OnPanic(panicValue interface{}, stackTrace []by
 // 設定はここ1箇所だけで組み立てる。接続だけが知っていてドキュメントが知らない
 // ブローカーがあると、生成物は実際の接続先とずれる。
 //
-// ブローカーが設定されていない（BROKER_TYPEが空）場合はnilを返す。発行も購読も
-// しないアプリは存在するので、未設定はエラーではない。
-func BrokerConfig() *enmb.Config {
+// A missing broker configuration (an empty BROKER_TYPE) is not an error and
+// yields (nil, nil): an application that neither publishes nor subscribes is a
+// normal thing to run. A configuration that cannot be read at all is an error,
+// and a separate one: starting without it would silently produce an application
+// that subscribes to nothing and publishes nothing.
+func BrokerConfig() (*enmb.Config, error) {
 	params, err := registry.ModuleParams("default")
-	if err != nil || !params.Broker.Configured() {
+	if err != nil {
+		return nil, fmt.Errorf("broker configuration unavailable: %w", err)
+	}
+	return brokerConfigFromParams(params), nil
+}
+
+// brokerConfigFromParams builds the broker configuration from parameters that
+// are already resolved. It is split from BrokerConfig so that the assembly
+// rules — unconfigured yields nil, credentials are carried only when present —
+// can be tested without any registry state.
+func brokerConfigFromParams(params *appconfig.Parameters) *enmb.Config {
+	if !params.Broker.Configured() {
 		return nil
 	}
 
@@ -67,7 +82,10 @@ var errNoBroker = errors.New("message broker is not configured: set BROKER_TYPE 
 
 func NewSubscriberConnection(envVal *string) func(lc dikit.LC) (enmb.Subscriber, error) {
 	return func(lc dikit.LC) (enmb.Subscriber, error) {
-		config := BrokerConfig()
+		config, err := BrokerConfig()
+		if err != nil {
+			return nil, err
+		}
 		if config == nil {
 			return nil, errNoBroker
 		}
@@ -105,7 +123,10 @@ func NewSubscriberConnection(envVal *string) func(lc dikit.LC) (enmb.Subscriber,
 
 func NewPublisherConnection(envVal *string) func(lc dikit.LC) (enmb.Publisher, error) {
 	return func(lc dikit.LC) (enmb.Publisher, error) {
-		config := BrokerConfig()
+		config, err := BrokerConfig()
+		if err != nil {
+			return nil, err
+		}
 		if config == nil {
 			return nil, errNoBroker
 		}
