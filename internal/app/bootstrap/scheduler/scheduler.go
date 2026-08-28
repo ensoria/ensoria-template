@@ -72,9 +72,7 @@ func Start(envVal *string) error {
 	}
 	outputFxLog := params.Log.Level == "debug"
 
-	dikit.ProvideAndRun(dikit.Constructors(), dikit.Invocations(), outputFxLog)
-
-	return nil
+	return dikit.ProvideAndRun(dikit.Constructors(), dikit.Invocations(), outputFxLog)
 }
 
 // schedulerではwsrouterは使わないが、HTTPパイプラインの初期化で必要になるため、空のrouterを提供する

@@ -72,7 +72,5 @@ func Run(envVal *string) error {
 	}
 	outputFxLog := params.Log.Level == "debug"
 
-	dikit.ProvideAndRun(dikit.Constructors(), dikit.Invocations(), outputFxLog)
-
-	return nil
+	return dikit.ProvideAndRun(dikit.Constructors(), dikit.Invocations(), outputFxLog)
 }
