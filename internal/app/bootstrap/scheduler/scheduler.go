@@ -78,7 +78,7 @@ func Start(envVal *string) error {
 	// order. Settling it before fx is built also means anything logged while the
 	// graph is constructed already obeys it.
 	loggear.SetLogLevel(params.Log.Level)
-	outputFxLog := params.Log.Level == "debug"
+	outputFxLog := params.Log.Level == loggear.LogLevelDebug
 
 	return dikit.ProvideAndRun(dikit.Constructors(), dikit.Invocations(), outputFxLog)
 }

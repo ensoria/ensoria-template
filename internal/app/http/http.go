@@ -3,7 +3,6 @@ package http
 import (
 	"context"
 	"fmt"
-	"log"
 	"log/slog"
 	"net/http"
 
@@ -22,12 +21,17 @@ import (
 )
 
 // HTTPサーバーの初期化
-func NewHTTPApp(envVal *string) func(lc dikit.LC, shutdowner dikit.Shutdowner, httpPipeline *pipeline.HTTP, wsRouter *wsrouter.Router) *http.Server {
-	return func(lc dikit.LC, shutdowner dikit.Shutdowner, httpPipeline *pipeline.HTTP, wsRouter *wsrouter.Router) *http.Server {
+//
+// A failure is returned rather than written with log.Fatal: fx reports it
+// through the one path every other startup failure takes, and the lifecycle
+// still gets to stop what had already started — os.Exit would leave the
+// connections opened before this point unclosed.
+func NewHTTPApp(envVal *string) func(lc dikit.LC, shutdowner dikit.Shutdowner, httpPipeline *pipeline.HTTP, wsRouter *wsrouter.Router) (*http.Server, error) {
+	return func(lc dikit.LC, shutdowner dikit.Shutdowner, httpPipeline *pipeline.HTTP, wsRouter *wsrouter.Router) (*http.Server, error) {
 		// TODO: envValを使うこと
 		params, err := registry.ModuleParams("default")
 		if err != nil {
-			log.Fatalf("default config parameters not found: %s", err)
+			return nil, fmt.Errorf("default config parameters not found: %w", err)
 		}
 
 		// HTTPパイプラインとWebSocketルータを同一のmuxに登録する。
@@ -51,11 +55,11 @@ func NewHTTPApp(envVal *string) func(lc dikit.LC, shutdowner dikit.Shutdowner, h
 		}
 
 		RegisterHTTPServerLifecycle(lc, shutdowner, httpSrv, wsRouter)
-		return httpSrv
+		return httpSrv, nil
 	}
 }
 
-func CreateHTTPPipeline(modules []*rest.Module, verifier authkit.Verifier) *pipeline.HTTP {
+func CreateHTTPPipeline(modules []*rest.Module, verifier authkit.Verifier) (*pipeline.HTTP, error) {
 	// TODO: 別のファイルに分ける
 	panicResponse := &rest.Response{
 		Code: http.StatusInternalServerError,
@@ -64,13 +68,13 @@ func CreateHTTPPipeline(modules []*rest.Module, verifier authkit.Verifier) *pipe
 
 	configParams, err := registry.ModuleParams("default")
 	if err != nil {
-		log.Fatalf("default config parameters not found: %s", err)
+		return nil, fmt.Errorf("default config parameters not found: %w", err)
 	}
 
 	// 宣言と設定の食い違いを起動時に潰す。放っておくと全リクエストが拒否されるだけで、
 	// 原因が見えない。
 	if err := checkAuthConfiguration(modules, verifier); err != nil {
-		log.Fatalf("%s", err)
+		return nil, err
 	}
 
 	cors := &mw.CORSSettings{
@@ -95,7 +99,7 @@ func CreateHTTPPipeline(modules []*rest.Module, verifier authkit.Verifier) *pipe
 		// 0で無効。ストリーミング/ファイル/WebSocketは対象外。
 		Timeout:         configParams.Server.HandlerTimeout,
 		TimeoutResponse: timeoutResponse,
-	}
+	}, nil
 }
 
 // HTTP/WebSocket controllers lifecycle registration
