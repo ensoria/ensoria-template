@@ -29,8 +29,6 @@ func NewHTTPApp(envVal *string) func(lc dikit.LC, shutdowner dikit.Shutdowner, h
 		if err != nil {
 			log.Fatalf("default config parameters not found: %s", err)
 		}
-		// FIXME: 別の場所に移す
-		loggear.SetLogLevel(params.Log.Level)
 
 		// HTTPパイプラインとWebSocketルータを同一のmuxに登録する。
 		// グローバルなhttp.DefaultServeMuxを使わないことで、ハンドラを分離でき、
