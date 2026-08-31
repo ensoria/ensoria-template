@@ -16,6 +16,7 @@ import (
 	"os"
 
 	"github.com/ensoria/ensoria-template/internal/app/bootstrap/describe"
+	"github.com/ensoria/loggear/pkg/loggear"
 	"github.com/spf13/pflag"
 )
 
@@ -24,6 +25,16 @@ func main() {
 	// OS 環境変数(direnv)無しで describe を実行できる。encli は --env で上書き可。
 	envVal := pflag.StringP("env", "e", "local", "config environment: [local], [development], [staging], [production] or [test].")
 	pflag.Parse()
+
+	// This command's stdout is a JSON contract, so nothing else may be written
+	// there. Building the specification resolves the constructors the project
+	// wrote, and one loggear call in any of them would land in the middle of the
+	// document — which reaches encli as a parse error, a long way from its cause.
+	//
+	// The destination is fixed here rather than left to loggear's default, so
+	// that the constraint sits where the contract is and this command does not
+	// depend on a default it does not own.
+	loggear.Configure(loggear.WithOutput(os.Stderr))
 
 	spec, err := describe.BuildMessaging(envVal)
 	if err != nil {

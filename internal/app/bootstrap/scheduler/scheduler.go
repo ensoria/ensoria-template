@@ -12,6 +12,7 @@ import (
 	"github.com/ensoria/websocket/pkg/wsrouter"
 
 	authApp "github.com/ensoria/ensoria-template/internal/app/auth"
+	"github.com/ensoria/ensoria-template/internal/app/bootstrap"
 	httpApp "github.com/ensoria/ensoria-template/internal/app/http"
 	mbApp "github.com/ensoria/ensoria-template/internal/app/mb"
 	schedulerApp "github.com/ensoria/ensoria-template/internal/app/scheduler"
@@ -19,12 +20,20 @@ import (
 	_ "github.com/ensoria/ensoria-template/internal/module"
 	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
 	_ "github.com/ensoria/ensoria-template/internal/query"
-	"github.com/ensoria/loggear/pkg/loggear"
 )
 
 func Start(envVal *string) error {
 	if err := registry.InitializeConfiguration(*envVal, assets.ConfigFS(*envVal), "internal", "config"); err != nil {
 		return fmt.Errorf("app initialization error: %w", err)
+	}
+
+	// The global settings — log level, strict declaration mode — are applied
+	// here so that server and scheduler cannot drift apart on them. The
+	// scheduler serves HTTP endpoints of its own, so strict mode is as
+	// load-bearing here as it is in the server.
+	outputFxLog, err := bootstrap.ApplyGlobalSettings(envVal, registry.DefaultRegistry())
+	if err != nil {
+		return err
 	}
 
 	dikit.AppendConstructors([]any{
@@ -72,19 +81,6 @@ func Start(envVal *string) error {
 		schedulerApp.InjectScheduledTasks(schedulerApp.NewSchedulerApp),
 		httpApp.NewHTTPApp(envVal),
 	})
-
-	params, err := registry.ModuleParams("default")
-	if err != nil {
-		return fmt.Errorf("app initialization error: %w", err)
-	}
-	// The global log level is applied here rather than from inside the graph.
-	// An application that drops the HTTP app — the template exists to be
-	// modified — would otherwise lose its log level without a word, and server
-	// and scheduler would apply it at different points of their invocation
-	// order. Settling it before fx is built also means anything logged while the
-	// graph is constructed already obeys it.
-	loggear.SetLogLevel(params.Log.Level)
-	outputFxLog := params.Log.Level == loggear.LogLevelDebug
 
 	return dikit.ProvideAndRun(dikit.Constructors(), dikit.Invocations(), outputFxLog)
 }

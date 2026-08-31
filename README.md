@@ -67,6 +67,29 @@ return rest.NewResult(&user, rest.WithStatus(http.StatusAccepted)), nil
 これは「ドキュメント専用の宣言は書き忘れる」という問題への対策です。書き忘れが静かな
 ドキュメント乖離ではなく、テストで落ちる欠陥になります。
 
+#### Alert on the drift record in production
+
+In staging and production nothing fails, so that one error record is the only
+sign the generated documentation no longer matches the implementation. **Make it
+an alert.** It carries a stable field to match on, next to the method, path and
+status it drifted with:
+
+```json
+{"level":"ERROR","msg":"undeclared success status 201: ...","method":"POST",
+ "path":"/order","status":201,"type":"declaration_drift_log"}
+```
+
+Alert on `type = "declaration_drift_log"` — matching the message text instead
+would break the next time the wording changes. The same field naming is used by
+the access log (`access_log`) and the panic log (`panic_log`).
+
+To fix one when it fires: take the `method` and `path` from the record, find that
+endpoint, and declare the status the record names — as `Success` if it is the
+endpoint's ordinary answer, or as an entry in `Responses` if it is one of
+several. Then regenerate the documentation. Nothing else has to change: the
+handler was already returning that status, and callers were already receiving
+it. What was missing was the declaration the documentation is generated from.
+
 ### 誰が呼べるか: `Security`
 
 **宣言しないエンドポイントは「要認証」になります。** 検証済みの呼び出し元が無ければ

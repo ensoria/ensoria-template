@@ -2,10 +2,12 @@ package restkit
 
 import (
 	"fmt"
+	"log/slog"
 	"net/http"
 	"sync/atomic"
 
 	"github.com/ensoria/loggear/pkg/loggear"
+	"github.com/ensoria/rest/pkg/rest"
 )
 
 // strictDeclarations は「宣言と実挙動の不一致」を即座に失敗させるかどうか。
@@ -43,9 +45,24 @@ func StrictForEnv(env string) bool {
 	}
 }
 
+// LogTypeDeclarationDrift labels the record written when an endpoint answers
+// with a status it never declared. The template's other records carry a stable
+// "type" as well ("access_log", "panic_log"), so that a log platform can be
+// given a search and an alert condition that survives a change of wording.
+//
+// Outside strict mode this record is the only sign that the generated
+// documentation has drifted from the implementation, so a production-like
+// environment should alert on it. See the README for what to do when it fires.
+const LogTypeDeclarationDrift = "declaration_drift_log"
+
 // checkDeclaredStatus は返そうとしている成功ステータスが宣言済みかを確かめる。
 // 宣言漏れは実装のバグなので、厳格モードでは panic、そうでなければエラーログを出す。
-func checkDeclaredStatus(status int, success int, responses []ResponseSpec) {
+//
+// The request is taken so that the record outside strict mode names the
+// endpoint it came from. Without it the record says only that something,
+// somewhere, has drifted — which is not enough to act on in production, where
+// this record is all anyone gets.
+func checkDeclaredStatus(r *rest.Request, status int, success int, responses []ResponseSpec) {
 	if isDeclaredStatus(status, success, responses) {
 		return
 	}
@@ -53,9 +70,17 @@ func checkDeclaredStatus(status int, success int, responses []ResponseSpec) {
 		"undeclared success status %d: declare it in Endpoint.Success or Endpoint.Responses "+
 			"so the generated documentation matches the implementation", status)
 	if strictDeclarations.Load() {
+		// The panic is recovered by the pipeline's recovery middleware, whose
+		// record already carries the method and path — so the message alone is
+		// enough here.
 		panic(msg)
 	}
-	loggear.Error(msg, "status", status)
+	loggear.Error(msg,
+		slog.String("method", r.Method()),
+		slog.String("path", r.Path()),
+		slog.Int("status", status),
+		slog.String("type", LogTypeDeclarationDrift),
+	)
 }
 
 // isDeclaredStatus は status が Success か Responses のいずれかで宣言されているかを返す。

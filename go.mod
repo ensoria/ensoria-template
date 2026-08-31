@@ -13,7 +13,7 @@ require (
 	github.com/ensoria/file v0.0.1
 	github.com/ensoria/gofake v0.0.8
 	github.com/ensoria/grpcgear v0.0.4
-	github.com/ensoria/loggear v0.0.1
+	github.com/ensoria/loggear v0.0.2
 	github.com/ensoria/mb v0.0.7
 	github.com/ensoria/rest v0.0.23
 	github.com/ensoria/testutil v0.0.4

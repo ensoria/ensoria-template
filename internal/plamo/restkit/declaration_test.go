@@ -1,6 +1,8 @@
 package restkit_test
 
 import (
+	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 
@@ -8,12 +10,43 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/ensoria/ensoria-template/internal/plamo/restkit"
+	"github.com/ensoria/loggear/pkg/loggear"
 	"github.com/ensoria/rest/pkg/rest"
 )
 
+// requestPath is the path the specs' requests are made against, so that a
+// record naming the endpoint can be recognised by it.
+const requestPath = "/things"
+
 // getRequest builds a bodyless request for the controllers under test.
 func getRequest() *rest.Request {
-	return rest.NewRequest(httptest.NewRequest(http.MethodGet, "/things", nil))
+	return rest.NewRequest(httptest.NewRequest(http.MethodGet, requestPath, nil))
+}
+
+// captureLogRecords redirects the global logger into a buffer for the duration
+// of write, and returns the records it wrote, decoded.
+//
+// The logger is global, so the previous one is put back afterwards.
+func captureLogRecords(write func()) []map[string]any {
+	GinkgoHelper()
+
+	var buf bytes.Buffer
+	previous := loggear.GetLogger()
+	loggear.SetLogger(loggear.NewSlogLogger(loggear.WithOutput(&buf)))
+	defer loggear.SetLogger(previous)
+
+	write()
+
+	var records []map[string]any
+	for _, line := range bytes.Split(bytes.TrimSpace(buf.Bytes()), []byte("\n")) {
+		if len(line) == 0 {
+			continue
+		}
+		var record map[string]any
+		Expect(json.Unmarshal(line, &record)).To(Succeed())
+		records = append(records, record)
+	}
+	return records
 }
 
 // returning builds a controller whose handler answers with the given status.
@@ -93,6 +126,36 @@ var _ = Describe("undeclared success status", func() {
 			var res *rest.Response
 			Expect(func() { res = ctrl.Handle(getRequest()) }).NotTo(Panic())
 			Expect(res.Code).To(Equal(http.StatusCreated))
+		})
+
+		// Here the record is the only sign that the documentation has drifted,
+		// so it has to say which endpoint drifted and be findable by a condition
+		// that does not depend on its wording.
+		It("names the endpoint the drift came from", func() {
+			ctrl := returning(http.StatusCreated)
+
+			records := captureLogRecords(func() { ctrl.Handle(getRequest()) })
+
+			Expect(records).To(HaveLen(1))
+			Expect(records[0]).To(HaveKeyWithValue("method", http.MethodGet))
+			Expect(records[0]).To(HaveKeyWithValue("path", requestPath))
+			Expect(records[0]).To(HaveKeyWithValue("status", float64(http.StatusCreated)))
+			Expect(records[0]).To(HaveKeyWithValue("level", "ERROR"))
+		})
+
+		It("carries the stable type the template's other records carry", func() {
+			ctrl := returning(http.StatusCreated)
+
+			records := captureLogRecords(func() { ctrl.Handle(getRequest()) })
+
+			Expect(records).To(HaveLen(1))
+			Expect(records[0]).To(HaveKeyWithValue("type", restkit.LogTypeDeclarationDrift))
+		})
+
+		It("writes nothing when the status was declared", func() {
+			ctrl := returning(http.StatusOK)
+
+			Expect(captureLogRecords(func() { ctrl.Handle(getRequest()) })).To(BeEmpty())
 		})
 	})
 })

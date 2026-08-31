@@ -31,8 +31,8 @@ func main() {
 		// record that must not fall outside the log setup.
 		//
 		// There is no chicken-and-egg problem in depending on it: loggear lazy-
-		// inits the global logger to a default JSON logger on stdout when nothing
-		// has configured one, which is exactly the state a failed startup is in.
+		// inits the global logger to a default JSON logger when nothing has
+		// configured one, which is exactly the state a failed startup is in.
 
 		// An exit code the application asked for (Shutdowner.Shutdown(ExitCode(n)))
 		// is not a failure of this process's own making, so it is not an error
