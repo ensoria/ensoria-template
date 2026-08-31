@@ -4,12 +4,23 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/ensoria/config/pkg/appconfig"
 	"github.com/ensoria/grpcgear/pkg/interceptor/logging/logsrv"
 	"github.com/ensoria/loggear/pkg/loggear"
 	"google.golang.org/grpc/codes"
 )
 
-func LogConfig() *logsrv.ServerConfig {
+// LogConfig builds the gRPC logging settings.
+//
+// The split between what is written here and what comes from config is "does a
+// deployment change it": how much of the successful traffic is logged and how
+// far a header value is truncated differ between a service taking a handful of
+// calls and the same service taking thousands, so they are settings. Which
+// headers are read, which are masked, what they are masked with and which
+// methods are skipped are this application's policy — they are edited here, in
+// code that is type-checked and reviewed next to the services it describes, and
+// they do not change because a deployment moved.
+func LogConfig(config *appconfig.GRPC) *logsrv.ServerConfig {
 	cfg := &logsrv.ServerConfig{
 		RequestIDKey:    "x-request-id",
 		TraceIDKey:      "x-trace-id",
@@ -26,8 +37,8 @@ func LogConfig() *logsrv.ServerConfig {
 	}
 
 	cfg.AutoLevel = true
-	cfg.SuccessSampleRate = 0.3
-	cfg.MaxHeaderValueLen = 64
+	cfg.SuccessSampleRate = config.LogSuccessSampleRate
+	cfg.MaxHeaderValueLen = config.LogMaxHeaderValueLen
 	cfg.SkipMethodPrefixes = []string{"/grpc.health.v1."}
 
 	return cfg

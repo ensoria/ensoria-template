@@ -15,6 +15,9 @@ import (
 
 // message brokerに関する接続
 
+// defaultModule is the configuration module the broker settings are read from.
+const defaultModule = "default"
+
 type SubscriberPanicHandler struct{}
 
 func (h *SubscriberPanicHandler) OnPanic(panicValue interface{}, stackTrace []byte, metadata enmb.PanicMetadata) {
@@ -40,8 +43,16 @@ func (h *SubscriberPanicHandler) OnPanic(panicValue interface{}, stackTrace []by
 // normal thing to run. A configuration that cannot be read at all is an error,
 // and a separate one: starting without it would silently produce an application
 // that subscribes to nothing and publishes nothing.
-func BrokerConfig() (*enmb.Config, error) {
-	params, err := registry.ModuleParams("default")
+//
+// The registry is taken as an argument rather than read from the package-level
+// functions, so that a caller can point this at a configuration of its own.
+// That is what lets the specs below build the states this function has to
+// answer for — a registry with no default module, say — without arranging
+// anything with the rest of the process. The application passes the one
+// registry it initialized at startup, which the constructors receive by
+// injection.
+func BrokerConfig(reg *registry.Registry) (*enmb.Config, error) {
+	params, err := reg.ModuleParams(defaultModule)
 	if err != nil {
 		return nil, fmt.Errorf("broker configuration unavailable: %w", err)
 	}
@@ -80,9 +91,9 @@ func brokerConfigFromParams(params *appconfig.Parameters) *enmb.Config {
 // チャンネルを黙って購読しないアプリになる。
 var errNoBroker = errors.New("message broker is not configured: set BROKER_TYPE (and BROKER_URL) in the environment configuration")
 
-func NewSubscriberConnection(envVal *string) func(lc dikit.LC) (enmb.Subscriber, error) {
-	return func(lc dikit.LC) (enmb.Subscriber, error) {
-		config, err := BrokerConfig()
+func NewSubscriberConnection(envVal *string) func(lc dikit.LC, reg *registry.Registry) (enmb.Subscriber, error) {
+	return func(lc dikit.LC, reg *registry.Registry) (enmb.Subscriber, error) {
+		config, err := BrokerConfig(reg)
 		if err != nil {
 			return nil, err
 		}
@@ -121,9 +132,9 @@ func NewSubscriberConnection(envVal *string) func(lc dikit.LC) (enmb.Subscriber,
 	}
 }
 
-func NewPublisherConnection(envVal *string) func(lc dikit.LC) (enmb.Publisher, error) {
-	return func(lc dikit.LC) (enmb.Publisher, error) {
-		config, err := BrokerConfig()
+func NewPublisherConnection(envVal *string) func(lc dikit.LC, reg *registry.Registry) (enmb.Publisher, error) {
+	return func(lc dikit.LC, reg *registry.Registry) (enmb.Publisher, error) {
+		config, err := BrokerConfig(reg)
 		if err != nil {
 			return nil, err
 		}

@@ -5,6 +5,7 @@ import (
 	"reflect"
 
 	enscache "github.com/ensoria/cache/pkg/cache"
+	"github.com/ensoria/config/pkg/registry"
 	"github.com/ensoria/ensoria-template/internal/plamo/authkit"
 	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
 	"github.com/ensoria/file/pkg/file"
@@ -28,6 +29,7 @@ import (
 // list against stubs(), so the two cannot drift apart.
 func requireEveryStub(
 	_ dikit.RootContext,
+	_ *registry.Registry,
 	_ enscache.Cache,
 	_ file.Storage,
 	_ file.FileSystem,

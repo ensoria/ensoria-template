@@ -41,20 +41,21 @@ func paramsWith(broker *appconfig.Broker) *appconfig.Parameters {
 }
 
 var _ = Describe("BrokerConfig", func() {
-	// These specs replace the registry's process-wide configuration. They are
-	// marked Serial and set up the state they need in BeforeEach, so that they
-	// depend on no other spec's leftovers whatever order the suite runs in.
-	Context("when the configuration cannot be read", Serial, func() {
+	// The registry these specs read is their own, built here and seen by
+	// nothing else. What they need — a registry that is loaded but holds no
+	// default module, so that reading "default" fails with an error rather than
+	// raising the panic an untouched registry answers with — is therefore just
+	// a value they construct, not a process-wide state they take a turn at.
+	Context("when the configuration cannot be read", func() {
+		var reg *registry.Registry
+
 		BeforeEach(func() {
-			// A container that is loaded but holds no default module: reading
-			// "default" then fails with an error rather than the panic an
-			// entirely uninitialized registry raises.
-			_, _, err := registry.LoadConfigurationFiles(os.DirFS("."), testEnv, map[string]string{}, true)
-			Expect(err).NotTo(HaveOccurred())
+			reg = registry.New()
+			Expect(reg.LoadConfigurationFiles(os.DirFS("."), testEnv, map[string]string{}, true)).To(Succeed())
 		})
 
 		It("reports the failure instead of passing for an unconfigured broker", func() {
-			config, err := mb.BrokerConfig()
+			config, err := mb.BrokerConfig(reg)
 
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("broker configuration unavailable"))
@@ -62,14 +63,14 @@ var _ = Describe("BrokerConfig", func() {
 		})
 
 		It("stops the subscriber from being built", func() {
-			_, err := mb.NewSubscriberConnection(nil)(&fakeLifecycle{})
+			_, err := mb.NewSubscriberConnection(nil)(&fakeLifecycle{}, reg)
 
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("broker configuration unavailable"))
 		})
 
 		It("stops the publisher from being built", func() {
-			_, err := mb.NewPublisherConnection(nil)(&fakeLifecycle{})
+			_, err := mb.NewPublisherConnection(nil)(&fakeLifecycle{}, reg)
 
 			Expect(err).To(HaveOccurred())
 			Expect(err.Error()).To(ContainSubstring("broker configuration unavailable"))

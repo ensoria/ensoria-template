@@ -37,6 +37,12 @@ func Run(envVal *string) error {
 		// アプリのルートコンテキスト（常駐処理の生存期間 = アプリの生存期間）
 		dikit.ProvideRootContext,
 
+		// The configuration this application resolved above. Most code reads it
+		// through the registry package's own functions, which answer from this
+		// same instance; it is put in the graph for the constructors that take
+		// it as an argument so their tests can hand them another one.
+		registry.DefaultRegistry,
+
 		// infra
 		cache.NewDefaultWorkerCacheClient(envVal),
 		cache.NewDefaultCache(envVal),

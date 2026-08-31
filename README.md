@@ -604,6 +604,71 @@ HTTPサーバのタイムアウトは **2層** で構成されています。値
 - **ストリーミング・WebSocket は対象外**です。ストリーミング/ファイルレスポンスは「計算」の後に書き込まれるため上限の対象外、WebSocket は別ルータ（`wsrouter`）のため影響を受けません。
 - **重要**: タイムアウトでクライアントにはレスポンスが返りますが、打ち切られたコントローラの処理自体を中断させるには、コントローラが `r.Context()` を下流（DB クエリ・外部 HTTP 呼び出し等）へ伝播させる必要があります。詳細は `rest` の README「Request Timeout」を参照してください。
 
+## The gRPC server
+
+The gRPC server is built in [internal/app/grpc/grpc.go](internal/app/grpc/grpc.go)
+and reads its settings from config, the same way the HTTP server does.
+
+**There is no `GRPC_ENABLED`.** Whether this application serves gRPC is decided
+by whether `server.Run` registers the gRPC app in its invocations — the same
+switch the worker, the scheduler and the message broker have. A flag would be a
+second answer to the same question, and the pair would eventually disagree:
+`GRPC_ENABLED=true` with the invocation deleted is a setting that says the
+server is on while nothing is listening. An application that does not serve gRPC
+deletes the invocation, and then no port is opened either.
+
+| Key | Default | What it does |
+|---|---|---|
+| `GRPC_PORT` | `50051` | The port the server listens on |
+| `GRPC_REFLECTION` | unset | Three-state; see below |
+| `GRPC_GRACEFUL_STOP_TIMEOUT` | unset | A gRPC-specific grace period for in-flight calls |
+| `GRPC_MAX_RECV_MSG_SIZE` / `GRPC_MAX_SEND_MSG_SIZE` | unset | Message size caps, in bytes |
+| `GRPC_KEEPALIVE_TIME` / `GRPC_KEEPALIVE_TIMEOUT` | unset | Server-side keepalive pings |
+| `GRPC_KEEPALIVE_MIN_TIME` / `GRPC_KEEPALIVE_PERMIT_WITHOUT_STREAM` | unset / `false` | The client-side limits that go with them |
+| `GRPC_LOG_SUCCESS_SAMPLE_RATE` | `0.3` | The share of *successful* calls that are logged, `0`–`1` |
+| `GRPC_LOG_MAX_HEADER_VALUE_LEN` | `64` | The length a logged header value is truncated to |
+
+An unset limit or keepalive duration leaves grpc-go's own default in place —
+this template does not pick a message size for every application built from it.
+`GRPC_GRACEFUL_STOP_TIMEOUT` unset means the shutdown is bounded by the
+application's stop deadline, as it was before the setting existed; set it to
+give gRPC a *shorter* grace period, so that a long-running stream cannot spend
+the whole shutdown budget.
+
+### `GRPC_REFLECTION` has three states
+
+Reflection lets `grpcurl` and IDE clients discover the services this server
+exposes without a `.proto` file, which makes it a development convenience and a
+production exposure at once.
+
+| Value | Meaning |
+|---|---|
+| unset | `local` and `development` serve it; everything else does not |
+| `true` | Served, whatever the environment |
+| `false` | Not served, whatever the environment |
+
+The environment default is the safe one, and the setting overrules it in both
+directions: on, to debug a staging deployment; off, for a development
+deployment that is reachable from outside.
+
+### What stays in code
+
+`LogConfig` in [internal/app/grpc/log_config.go](internal/app/grpc/log_config.go)
+keeps the header policy — which headers are logged, which are masked, what they
+are masked with, which method prefixes are skipped. Those are this
+application's rules: they are reviewed next to the services they describe, and
+they do not change because a deployment moved. Only the two values a deployment
+genuinely changes — how much successful traffic is logged, and how far a header
+value is truncated — come from config.
+
+`GRPC_LOG_SUCCESS_SAMPLE_RATE=0` means no successful call is logged; failures
+still are. The interceptor reads a zero sample rate as "not configured" and
+would log everything, so `NewGRPCServer` honors the setting by handing it
+success loggers that write nothing.
+
+TLS is not configured here. The server serves plaintext behind whatever
+terminates TLS in front of it.
+
 ## Caching a read (`enscache.Cache`)
 
 The application cache is a tiered store: a bounded in-process L1 (otter) over a

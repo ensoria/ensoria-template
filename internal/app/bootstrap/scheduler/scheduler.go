@@ -32,6 +32,12 @@ func Start(envVal *string) error {
 		// mbApp.NewSubscribe が dikit.RootContext に依存するため、購読を行うこのappでも必須
 		dikit.ProvideRootContext,
 
+		// The configuration this application resolved above. Most code reads it
+		// through the registry package's own functions, which answer from this
+		// same instance; it is put in the graph for the constructors that take
+		// it as an argument so their tests can hand them another one.
+		registry.DefaultRegistry,
+
 		// infra
 		// workerとinjectするインスタンスを分けるため、タグ名を付ける
 		dikit.ProvideNamed(cache.NewDefaultSchedulerCacheClient(envVal), "schedulerCache"),

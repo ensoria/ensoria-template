@@ -9,6 +9,7 @@ import (
 
 	enscache "github.com/ensoria/cache/pkg/cache"
 	"github.com/ensoria/cache/pkg/cachememory"
+	"github.com/ensoria/config/pkg/registry"
 	infrastorage "github.com/ensoria/ensoria-template/internal/infra/storage"
 	"github.com/ensoria/ensoria-template/internal/plamo/authkit"
 	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
@@ -107,6 +108,19 @@ func stubs() []any {
 		// describe does not start the lifecycle, so the real constructor is
 		// registered instead of a stub.
 		dikit.ProvideRootContext,
+
+		// The resolved configuration. Modules read it through the registry
+		// package's own functions rather than by injection, so nothing asks for
+		// this today — but server.Run and scheduler.Start both provide it, so a
+		// module can, and the rule above does not ask whether one currently
+		// does.
+		//
+		// It is the real registry rather than a stub, for the same reason
+		// RootContext is: BuildHTTP and BuildMessaging fill it with
+		// InitializeConfiguration before resolving anything, and what a
+		// declaration says can depend on what was configured. A fake here would
+		// describe an application nobody is running.
+		registry.DefaultRegistry,
 
 		// Application cache. The library's own in-memory implementation, so
 		// there is no fake to keep in step with the interface.

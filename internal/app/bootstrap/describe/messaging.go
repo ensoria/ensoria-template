@@ -45,7 +45,11 @@ func BuildMessaging(envVal *string) (*msgdoc.MessagingSpec, error) {
 	// An application may run without a broker at all, in which case only the
 	// WebSocket side is described rather than the whole run failing. A
 	// configuration that cannot be read is a different matter and is reported.
-	broker, err := inframb.BrokerConfig()
+	//
+	// The registry is named explicitly because this call is outside the graph:
+	// the one the constructors are handed is provided in stubs.go, and both have
+	// to be the registry InitializeConfiguration filled above.
+	broker, err := inframb.BrokerConfig(registry.DefaultRegistry())
 	if err != nil {
 		return nil, err
 	}
