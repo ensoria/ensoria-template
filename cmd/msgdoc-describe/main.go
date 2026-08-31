@@ -34,7 +34,7 @@ func main() {
 	// The destination is fixed here rather than left to loggear's default, so
 	// that the constraint sits where the contract is and this command does not
 	// depend on a default it does not own.
-	loggear.Configure(loggear.WithOutput(os.Stderr))
+	loggear.ConfigureSlog(loggear.WithOutput(os.Stderr))
 
 	spec, err := describe.BuildMessaging(envVal)
 	if err != nil {
