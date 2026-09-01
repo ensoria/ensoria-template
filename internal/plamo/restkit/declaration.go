@@ -5,22 +5,67 @@ import (
 	"log/slog"
 	"net/http"
 	"sync/atomic"
+	"testing"
 
 	"github.com/ensoria/loggear/pkg/loggear"
 	"github.com/ensoria/rest/pkg/rest"
 )
 
-// strictDeclarations は「宣言と実挙動の不一致」を即座に失敗させるかどうか。
+// strictDeclarations decides whether a mismatch between what an endpoint
+// declares and what it answers with fails immediately.
 //
-// ドキュメントは Endpoint の宣言から生成されるため、Handle が宣言していない
-// ステータスを返すと、生成物が黙って実装から乖離する。宣言を守っているかを
-// 実行時に確かめることで、**宣言を動作に関係させる**(= 書き忘れが検出できる)。
+// The documentation is generated from the Endpoint declaration, so a Handle
+// that answers with a status nobody declared makes the generated document drift
+// from the implementation without a word. Checking the declaration while the
+// request is served is what makes the declaration load-bearing: forgetting one
+// becomes a defect that fails somewhere, instead of a silent drift.
 //
-// 開発環境では即座に失敗させて宣言漏れをテストで見つけ、本番ではリクエストを
-// 落とさずログに残す。既定は false(安全側)で、bootstrap が環境に応じて設定する。
+// Two things decide its value, and the last one to speak wins:
+//
+//   - init, below, makes it true inside a test binary and false everywhere else
+//   - bootstrap.ApplyGlobalSettings sets it from ENV when an application starts
+//
+// So a process that serves real requests is governed by its environment, and a
+// test — which starts no process and therefore never reaches bootstrap — is
+// strict by default.
 var strictDeclarations atomic.Bool
 
-// SetStrictDeclarations は厳格モードを切り替える。アプリ起動時に一度だけ呼ぶ。
+// initialStrictDeclarations is the default init gives the flag.
+//
+// It is kept in a variable of its own because the flag itself cannot stand in
+// for the default once the specs that exercise both modes have written to it.
+// export_test.go exposes this to the suite, so that the default can be asserted
+// on directly.
+var initialStrictDeclarations = testing.Testing()
+
+// init makes strict mode the default inside a test binary.
+//
+// The intent behind strict mode has always been "be strict wherever a developer
+// is working", and ENV is only a proxy for that intent — one that missed the
+// place that matters most. bootstrap.ApplyGlobalSettings is reached only by
+// server.Run and scheduler.Start, while endpoint tests call Controller.Handle
+// directly. They therefore ran with the flag at its zero value, and an
+// undeclared status went uncaught in the very place the README promises it is
+// caught. Asking every suite to switch the mode on would only move the same
+// problem: a suite that forgot would be back where it started.
+//
+// testing.Testing (Go 1.21+) reports whether the program is a test binary, so
+// this keeps the production default false — an application that never calls
+// bootstrap cannot begin failing requests over a missing declaration — while a
+// test binary is strict without anyone asking for it.
+//
+// That is also why this production package imports "testing": telling a library
+// that it is running under test is precisely what testing.Testing was added
+// for, and it is what lets the safe production default and the automatic test
+// default hold at the same time. The import registers no flags, cmd/server
+// already links the package transitively, and the measured effect on the server
+// binary was -0.03%. Please do not remove the import as unwanted weight.
+func init() { strictDeclarations.Store(initialStrictDeclarations) }
+
+// SetStrictDeclarations switches strict mode. Applications call it once at
+// startup, through bootstrap.ApplyGlobalSettings, and it overrides the default
+// above: a test that boots an application with ENV=production deliberately gets
+// production behaviour, because it asked for it.
 func SetStrictDeclarations(strict bool) { strictDeclarations.Store(strict) }
 
 // StrictDeclarations は現在の厳格モードを返す。

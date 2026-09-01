@@ -70,7 +70,14 @@ type okBody struct {
 // documentation silently drifts from the implementation. The declaration is
 // therefore load-bearing: the adapter checks it on every response.
 var _ = Describe("undeclared success status", func() {
-	AfterEach(func() { restkit.SetStrictDeclarations(false) })
+	// The mode is process-wide, so every spec puts it back where it found it,
+	// and every Describe states the mode it needs itself. Leaning on another
+	// Describe's cleanup for that would make the outcome depend on the order
+	// the specs happen to run in, and --randomize-all would break it.
+	var strictBefore bool
+
+	BeforeEach(func() { strictBefore = restkit.StrictDeclarations() })
+	AfterEach(func() { restkit.SetStrictDeclarations(strictBefore) })
 
 	Describe("in strict mode (local / test / development)", func() {
 		BeforeEach(func() { restkit.SetStrictDeclarations(true) })
@@ -120,6 +127,8 @@ var _ = Describe("undeclared success status", func() {
 	})
 
 	Describe("outside strict mode (staging / production)", func() {
+		BeforeEach(func() { restkit.SetStrictDeclarations(false) })
+
 		It("still answers with the undeclared status instead of failing the request", func() {
 			ctrl := returning(http.StatusCreated)
 
@@ -157,5 +166,17 @@ var _ = Describe("undeclared success status", func() {
 
 			Expect(captureLogRecords(func() { ctrl.Handle(getRequest()) })).To(BeEmpty())
 		})
+	})
+})
+
+// The check above is only worth what it reaches, and what it reaches is decided
+// by the default: nothing in a test asks for strict mode, so a suite added
+// tomorrow inherits the check only if the package turns it on by itself.
+//
+// This asserts on the default the package chose at initialisation rather than
+// on the current value of the flag, which the specs above overwrite.
+var _ = Describe("the default strict declaration mode", func() {
+	It("is on inside a test binary, without any suite asking for it", func() {
+		Expect(restkit.InitialStrictDeclarations()).To(BeTrue())
 	})
 })

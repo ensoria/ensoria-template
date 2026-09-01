@@ -61,11 +61,47 @@ Responses: []restkit.ResponseSpec{
 return rest.NewResult(&user, rest.WithStatus(http.StatusAccepted)), nil
 ```
 
-宣言していないステータスを返すと、**local / test / development ではアダプタが即座に失敗させます**
-（staging / production ではエラーログを出しつつ、そのステータスを返します）。
+宣言していないステータスを返すと、**`go test` のバイナリでは `ENV` に関係なく必ず失敗します**
+（アプリのプロセスでは local / test / development で失敗し、staging / production では
+エラーログを出しつつそのステータスを返します）。
 
 これは「ドキュメント専用の宣言は書き忘れる」という問題への対策です。書き忘れが静かな
 ドキュメント乖離ではなく、テストで落ちる欠陥になります。
+
+#### Where the check fails, and why the tests come first
+
+The check has two storeys:
+
+| Where | When an undeclared status fails |
+|---|---|
+| A `go test` binary | **Always**, whatever `ENV` says |
+| A server or scheduler process | When `ENV` is `local`, `test` or `development` |
+
+The first storey is what makes the promise above hold. `restkit` reads
+`testing.Testing()` when it initialises, so **a test binary checks declarations
+by default**: an endpoint suite inherits the check without switching anything
+on, including one that calls `ctrl.Handle(r)` directly and starts no process,
+and including a suite written long after this was decided. A forgotten
+declaration therefore fails in the place a defect is supposed to surface, with a
+message that names the missing status:
+
+```
+[PANICKED] undeclared success status 202: declare it in Endpoint.Success or
+Endpoint.Responses so the generated documentation matches the implementation
+```
+
+That message matters as much as the failure. Without the check, a test that
+asserts on the status fails with `Expected 202 to equal 200` — which reads as
+"the handler returns the wrong status" and sends you to fix the handler, while
+the actual defect is the missing declaration. A test that does not assert on the
+status does not fail at all.
+
+The second storey is the same check reaching a developer running the server by
+hand, and there `ENV` governs it: a production process must keep serving the
+request and leave a record, rather than fail it over a documentation defect. The
+process setting is applied at startup, after the default, so a test that
+deliberately boots an application with `ENV=production` gets production
+behaviour — it asked for it.
 
 #### Alert on the drift record in production
 

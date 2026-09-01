@@ -75,6 +75,14 @@ var _ = Describe("endpoint controller", func() {
 			ep := newEndpoint(func(r *rest.Request, body *createReq) (*rest.Result[createRes], error) {
 				return rest.NewResult(&createRes{ID: "usr_01"}, rest.WithStatus(http.StatusAccepted)), nil
 			})
+			// A status the handler chooses still has to be declared. The point
+			// here is that Result decides the status, not that the declaration
+			// can be skipped — so the fixture follows the same rule an endpoint
+			// does rather than turning the check off to get past it.
+			ep.Responses = []restkit.ResponseSpec{
+				{Status: http.StatusAccepted, When: "The user was queued for asynchronous creation"},
+			}
+
 			res := restkit.NewController(ep).Handle(jsonRequest(`{"name":"Taro"}`))
 
 			Expect(res.Code).To(Equal(http.StatusAccepted))
