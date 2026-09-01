@@ -100,32 +100,64 @@ func StrictForEnv(env string) bool {
 // environment should alert on it. See the README for what to do when it fires.
 const LogTypeDeclarationDrift = "declaration_drift_log"
 
+// DeclarationDrift is the contract violation an endpoint commits by answering
+// with a status that appears in neither Endpoint.Success nor Endpoint.Responses.
+//
+// It is the one value both branches of checkDeclaredStatus are built from, so
+// that the endpoint is named the same way whether the drift is panicked or
+// logged. See ContractViolation for why that matters.
+type DeclarationDrift struct {
+	// Method and Path name the endpoint that drifted. They come from the
+	// request rather than the declaration because a route is only a route once
+	// a method is attached to it.
+	Method string
+	Path   string
+	// Status is what the handler answered with — the status that has to be
+	// declared for the generated documentation to be true again.
+	Status int
+}
+
+// Compile-time proof that the drift can name its own fields. A violation that
+// cannot is of no use to whoever has to act on the record.
+var _ ContractViolation = (*DeclarationDrift)(nil)
+
+// Error is read at the top of a failing test, so it says what to do about the
+// drift rather than only what happened.
+func (d *DeclarationDrift) Error() string {
+	return fmt.Sprintf(
+		"undeclared success status %d: declare it in Endpoint.Success or Endpoint.Responses "+
+			"so the generated documentation matches the implementation", d.Status)
+}
+
+// LogAttrs returns the fields that identify the drift. It carries no "type" of
+// its own — see ContractViolation.LogAttrs for why.
+func (d *DeclarationDrift) LogAttrs() []slog.Attr {
+	return []slog.Attr{
+		slog.String("method", d.Method),
+		slog.String("path", d.Path),
+		slog.Int("status", d.Status),
+	}
+}
+
 // checkDeclaredStatus は返そうとしている成功ステータスが宣言済みかを確かめる。
 // 宣言漏れは実装のバグなので、厳格モードでは panic、そうでなければエラーログを出す。
 //
-// The request is taken so that the record outside strict mode names the
-// endpoint it came from. Without it the record says only that something,
-// somewhere, has drifted — which is not enough to act on in production, where
-// this record is all anyone gets.
+// The request is taken so that both outcomes name the endpoint the drift came
+// from. Outside strict mode the record is all anyone gets, and a record saying
+// only that something, somewhere, has drifted is not enough to act on.
 func checkDeclaredStatus(r *rest.Request, status int, success int, responses []ResponseSpec) {
 	if isDeclaredStatus(status, success, responses) {
 		return
 	}
-	msg := fmt.Sprintf(
-		"undeclared success status %d: declare it in Endpoint.Success or Endpoint.Responses "+
-			"so the generated documentation matches the implementation", status)
+	// One value, both branches. Strict mode panics with it and the recovery
+	// middleware expands its fields into the panic record; outside strict mode
+	// the same fields become the drift record here.
+	drift := &DeclarationDrift{Method: r.Method(), Path: r.Path(), Status: status}
 	if strictDeclarations.Load() {
-		// The panic is recovered by the pipeline's recovery middleware, whose
-		// record already carries the method and path — so the message alone is
-		// enough here.
-		panic(msg)
+		panic(drift)
 	}
-	loggear.Error(msg,
-		slog.String("method", r.Method()),
-		slog.String("path", r.Path()),
-		slog.Int("status", status),
-		slog.String("type", LogTypeDeclarationDrift),
-	)
+	loggear.Error(drift.Error(),
+		append(LogArgs(drift), slog.String("type", LogTypeDeclarationDrift))...)
 }
 
 // isDeclaredStatus は status が Success か Responses のいずれかで宣言されているかを返す。

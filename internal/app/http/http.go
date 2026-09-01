@@ -11,6 +11,7 @@ import (
 	"github.com/ensoria/ensoria-template/internal/middleware"
 	"github.com/ensoria/ensoria-template/internal/plamo/authkit"
 	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
+	"github.com/ensoria/ensoria-template/internal/plamo/restkit"
 	"github.com/ensoria/loggear/pkg/loggear"
 	"github.com/ensoria/rest/pkg/mw"
 	"github.com/ensoria/rest/pkg/pipeline"
@@ -168,8 +169,18 @@ func logIncomingRequest(req *rest.Request, res *rest.Response) {
 	)
 }
 
+// panicViolationGroup is the key a contract violation's fields are nested under
+// in a panic record.
+//
+// They are grouped rather than written flat beside the record's own fields
+// because a violation names the endpoint as well: expanded flat, "method" would
+// appear in one JSON object twice and neither occurrence could be relied on.
+// Grouping also leaves "type" saying panic_log and nothing else, which is what a
+// panic alert matches on.
+const panicViolationGroup = "contract_violation"
+
 func logPanicDetails(r *rest.Request, panicValue interface{}, stackTrace []byte) {
-	loggear.Error("Panic Recovered",
+	args := []any{
 		slog.String("method", r.Method()),
 		slog.String("url", r.URLStr()),
 		slog.String("remote_addr", r.RemoteAddr()),
@@ -178,5 +189,13 @@ func logPanicDetails(r *rest.Request, panicValue interface{}, stackTrace []byte)
 		slog.String("panic_type", fmt.Sprintf("%T", panicValue)),
 		slog.String("stack_trace", string(stackTrace)),
 		slog.String("type", "panic_log"),
-	)
+	}
+	// A panic carrying a contract violation can say which promise the
+	// implementation broke, which a stack trace of generic frames cannot. The
+	// assertion is on the interface rather than on any one kind of violation, so
+	// a kind added later is expanded here without this file being touched.
+	if violation, ok := panicValue.(restkit.ContractViolation); ok {
+		args = append(args, slog.Group(panicViolationGroup, restkit.LogArgs(violation)...))
+	}
+	loggear.Error("Panic Recovered", args...)
 }

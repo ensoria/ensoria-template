@@ -66,6 +66,40 @@ type okBody struct {
 	OK bool `json:"ok"`
 }
 
+// violationFromPanic runs call, which is expected to panic with a contract
+// violation, and returns that violation.
+func violationFromPanic(call func()) restkit.ContractViolation {
+	GinkgoHelper()
+
+	var recovered any
+	func() {
+		defer func() { recovered = recover() }()
+		call()
+	}()
+
+	violation, ok := recovered.(restkit.ContractViolation)
+	Expect(ok).To(BeTrue(), "expected a contract violation, got %T: %v", recovered, recovered)
+	return violation
+}
+
+// attrsOf indexes a violation's fields by key. It goes through LogArgs because
+// that is how the fields reach a record in the end; asAttrs lives beside the
+// interface it belongs to.
+func attrsOf(v restkit.ContractViolation) map[string]any {
+	GinkgoHelper()
+
+	return asAttrs(restkit.LogArgs(v))
+}
+
+// jsonValue is what a field's value looks like after a round trip through the
+// JSON handler, where every number arrives as a float64.
+func jsonValue(v any) any {
+	if n, ok := v.(int64); ok {
+		return float64(n)
+	}
+	return v
+}
+
 // A status the handler returns must be declared, otherwise the generated
 // documentation silently drifts from the implementation. The declaration is
 // therefore load-bearing: the adapter checks it on every response.
@@ -86,7 +120,48 @@ var _ = Describe("undeclared success status", func() {
 			ctrl := returning(http.StatusCreated)
 
 			Expect(func() { ctrl.Handle(getRequest()) }).
-				To(PanicWith(ContainSubstring("201")))
+				To(PanicWith(MatchError(ContainSubstring("undeclared success status 201"))))
+		})
+
+		// The panic reaches a log record through middleware that knows nothing
+		// about declarations, so the value has to name the endpoint itself. A
+		// stack trace cannot stand in for that: the frames of a generic
+		// controller say endpointController[...] and never the route.
+		It("panics with a violation that names the endpoint and the status", func() {
+			ctrl := returning(http.StatusCreated)
+
+			violation := violationFromPanic(func() { ctrl.Handle(getRequest()) })
+
+			Expect(attrsOf(violation)).To(Equal(map[string]any{
+				"method": http.MethodGet,
+				"path":   requestPath,
+				"status": int64(http.StatusCreated),
+			}))
+		})
+
+		// The record's type belongs to whoever writes the record. A violation
+		// that named one too would put the same key in one JSON object twice,
+		// and an alert matching on it could not say which occurrence it meant.
+		It("panics with a violation that claims no record type of its own", func() {
+			ctrl := returning(http.StatusCreated)
+
+			violation := violationFromPanic(func() { ctrl.Handle(getRequest()) })
+
+			Expect(attrsOf(violation)).NotTo(HaveKey("type"))
+		})
+
+		// Both branches are built from one value, so the drift is described the
+		// same way whether it was panicked or logged.
+		It("panics with the same fields the drift record carries", func() {
+			strictViolation := violationFromPanic(func() { returning(http.StatusCreated).Handle(getRequest()) })
+
+			restkit.SetStrictDeclarations(false)
+			records := captureLogRecords(func() { returning(http.StatusCreated).Handle(getRequest()) })
+
+			Expect(records).To(HaveLen(1))
+			for key, value := range attrsOf(strictViolation) {
+				Expect(records[0]).To(HaveKeyWithValue(key, jsonValue(value)), "field %s", key)
+			}
 		})
 
 		It("accepts the declared primary success status", func() {
