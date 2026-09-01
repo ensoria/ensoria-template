@@ -179,12 +179,21 @@ func logIncomingRequest(req *rest.Request, res *rest.Response) {
 // panic alert matches on.
 const panicViolationGroup = "contract_violation"
 
+// logPanicDetails records a panic the recovery middleware caught. It is the
+// only account of a request that failed for a reason nobody anticipated, so it
+// carries what identifies the defect — the value, its type, the stack — and the
+// least that identifies where it came from: the endpoint and the caller's
+// address, which is what makes it possible to see what else that caller sent.
+//
+// It deliberately leaves out the client's user agent. A panic is a defect in
+// this server, and which browser asked does not help say which defect it is;
+// the access log written for the same request carries it for the cases where
+// the client population is the question.
 func logPanicDetails(r *rest.Request, panicValue interface{}, stackTrace []byte) {
 	args := []any{
 		slog.String("method", r.Method()),
 		slog.String("url", r.URLStr()),
 		slog.String("remote_addr", r.RemoteAddr()),
-		slog.String("user_agent", r.UserAgent()),
 		slog.Any("panic_value", panicValue),
 		slog.String("panic_type", fmt.Sprintf("%T", panicValue)),
 		slog.String("stack_trace", string(stackTrace)),
