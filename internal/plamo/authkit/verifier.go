@@ -21,10 +21,30 @@ import (
 // ErrInvalidCredential means a credential was presented and could not be
 // trusted. That always ends the request with 401, even on a public endpoint,
 // because silently ignoring a broken credential hides bugs from the caller.
+//
+// ErrCredentialUnavailable means the credential could not be judged at all,
+// because whatever holds the answer could not be reached.
+//
+// ⚠ The third is not a variety of the second, and the difference is the whole
+// reason it exists. A credential store that is down says nothing about the
+// credential: answering 401 would tell every caller in the system that their
+// perfectly good credential is bad, at the exact moment nothing can verify
+// anything. That is a 5xx — the request failed on this side and retrying it
+// later is the right thing to do.
 var (
-	ErrNoCredential      = errors.New("no credential presented")
-	ErrInvalidCredential = errors.New("credential could not be verified")
+	ErrNoCredential          = errors.New("no credential presented")
+	ErrInvalidCredential     = errors.New("credential could not be verified")
+	ErrCredentialUnavailable = errors.New("the credential could not be checked")
 )
+
+// ErrKeyNotFound is how a KeyStore reports that a key is not one it knows.
+//
+// ⚠ It is the only benign outcome a KeyStore may report; every other error is
+// taken to mean the store could not be asked, and produces a 5xx rather than a
+// 401. A store must therefore never report an outage as this error. The reverse
+// mistake is safe: an unrecognized error is read as "could not ask", which is
+// the cautious answer.
+var ErrKeyNotFound = errors.New("authkit: no such API key")
 
 // authorizationHeader and bearerPrefix locate a JWT on the request.
 const (
@@ -59,14 +79,23 @@ type Verifier interface {
 // KeyStore resolves an API key into the caller it belongs to.
 // Applications keeping keys in a database implement this and inject it, which
 // is why key lookup is an interface rather than a fixed table.
+//
+// A key that is not known is reported as ErrKeyNotFound, and anything else as
+// an error meaning the store could not be reached. See ErrKeyNotFound for why
+// the difference decides between a 401 and a 5xx.
+//
+// It takes a context because a store worth having is usually across a network,
+// and a lookup that cannot be cancelled outlives the request that wanted it.
 type KeyStore interface {
-	Lookup(key string) (*Principal, error)
+	Lookup(ctx context.Context, key string) (*Principal, error)
 }
 
 // KeyStoreFunc adapts a plain function to KeyStore.
-type KeyStoreFunc func(key string) (*Principal, error)
+type KeyStoreFunc func(ctx context.Context, key string) (*Principal, error)
 
-func (f KeyStoreFunc) Lookup(key string) (*Principal, error) { return f(key) }
+func (f KeyStoreFunc) Lookup(ctx context.Context, key string) (*Principal, error) {
+	return f(ctx, key)
+}
 
 // verifier verifies a JWT, an API key, or both, depending on what is configured.
 type verifier struct {
@@ -177,7 +206,7 @@ func (v *verifier) Verify(r *rest.Request) (*Principal, error) {
 		return v.verifyJWT(token)
 	}
 	if key, ok := r.Header(v.apiKeyHeader); ok && key != "" {
-		return v.verifyAPIKey(key)
+		return v.verifyAPIKey(r.Context(), key)
 	}
 	return nil, ErrNoCredential
 }
@@ -245,15 +274,22 @@ func (v *verifier) Schemes() []string {
 	return schemes
 }
 
-func (v *verifier) verifyAPIKey(key string) (*Principal, error) {
+func (v *verifier) verifyAPIKey(ctx context.Context, key string) (*Principal, error) {
 	if v.keys == nil {
 		return nil, fmt.Errorf("%w: this application does not accept API keys", ErrInvalidCredential)
 	}
-	principal, err := v.keys.Lookup(key)
-	if err != nil {
+	principal, err := v.keys.Lookup(ctx, key)
+	switch {
+	case err == nil:
+		return principal, nil
+	case errors.Is(err, ErrKeyNotFound):
+		// The store answered, and the answer is no.
 		return nil, fmt.Errorf("%w: %w", ErrInvalidCredential, err)
+	default:
+		// The store did not answer. Nothing is known about this key, so
+		// nothing may be concluded about it.
+		return nil, fmt.Errorf("%w: %w", ErrCredentialUnavailable, err)
 	}
-	return principal, nil
 }
 
 // staticKeyStore accepts the keys listed in the configuration. It is the default
@@ -265,9 +301,9 @@ func staticKeyStore(keys []string) KeyStore {
 		accepted[key] = struct{}{}
 	}
 
-	return KeyStoreFunc(func(key string) (*Principal, error) {
+	return KeyStoreFunc(func(_ context.Context, key string) (*Principal, error) {
 		if _, ok := accepted[key]; !ok {
-			return nil, errors.New("unknown API key")
+			return nil, ErrKeyNotFound
 		}
 		// The configured keys carry no owner or permissions of their own.
 		return &Principal{Subject: apiKeySubjectPrefix, Scheme: SchemeAPIKey}, nil

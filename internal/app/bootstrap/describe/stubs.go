@@ -139,6 +139,12 @@ func stubs() []any {
 		// Request authentication.
 		func() authkit.Verifier { return &stubVerifier{} },
 
+		// Where API keys are looked up. The application provides it as a
+		// possibly-nil interface — nil means no built-in store is configured —
+		// and nil is what describe wants: it reads declarations and never
+		// resolves a key.
+		func() authkit.KeyStore { return nil },
+
 		// The raw queue handle. server.Run provides it unnamed, so a module can
 		// inject it; go-redis connects lazily, so this client never dials.
 		func() *goredis.Client { return goredis.NewClient(&goredis.Options{}) },

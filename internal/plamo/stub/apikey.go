@@ -13,6 +13,7 @@
 package stub
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"maps"
@@ -81,12 +82,12 @@ func NewAPIKeyStore(envVal string, keys map[string]*authkit.Principal) (*APIKeyS
 //
 // The returned caller is a copy, so application code that adds a scope to the
 // principal it was handed does not widen what the next request may do.
-func (s *APIKeyStore) Lookup(key string) (*authkit.Principal, error) {
+func (s *APIKeyStore) Lookup(_ context.Context, key string) (*authkit.Principal, error) {
 	principal, ok := s.principals[key]
 	if !ok {
 		// The key itself is never quoted back: it would end up in a log, and an
 		// unknown key is as likely to be a real one sent to the wrong place.
-		return nil, errors.New("unknown API key")
+		return nil, authkit.ErrKeyNotFound
 	}
 	return &authkit.Principal{
 		Subject: principal.Subject,

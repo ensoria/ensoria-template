@@ -73,8 +73,21 @@ func devScopes() []string {
 // Applications that keep API keys outside the configuration replace this
 // constructor with one that passes their own authkit.KeyStore. The development
 // store below is where that argument goes; swapping it is a one-line change.
-func NewVerifier(envVal *string) func() (authkit.Verifier, error) {
-	return func() (authkit.Verifier, error) {
+//
+// # Where API keys are verified
+//
+// keys is the built-in store, and it is nil unless AUTH_KEYSTORE names a
+// backend (see infra/keystore). The order below is the precedence:
+//
+//  1. The built-in store, when one is configured. Naming a backend is an
+//     explicit choice, so it wins — including over the development keys, which
+//     stop working the moment a real store is configured. That is the intended
+//     reading of "these keys now live in Redis".
+//  2. The development store, in local and test, which gives the keys listed in
+//     the configuration the permissions they cannot carry on their own.
+//  3. Nothing, which leaves authkit with the configured keys as they are.
+func NewVerifier(envVal *string) func(keys authkit.KeyStore) (authkit.Verifier, error) {
+	return func(keys authkit.KeyStore) (authkit.Verifier, error) {
 		params, err := registry.ModuleParams(defaultModule)
 		if err != nil {
 			return nil, fmt.Errorf("auth: reading the %s configuration: %w", defaultModule, err)
@@ -82,9 +95,10 @@ func NewVerifier(envVal *string) func() (authkit.Verifier, error) {
 		if err := checkDevCredentials(*envVal, params.Auth); err != nil {
 			return nil, err
 		}
-		keys, err := devKeyStore(*envVal, params.Auth)
-		if err != nil {
-			return nil, err
+		if keys == nil {
+			if keys, err = devKeyStore(*envVal, params.Auth); err != nil {
+				return nil, err
+			}
 		}
 		return authkit.NewVerifier(params.Auth, keys)
 	}

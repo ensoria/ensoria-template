@@ -60,6 +60,16 @@ func authenticate(verifier authkit.Verifier, r *rest.Request) *rest.Response {
 		// No credential is not a failure here. Public endpoints are served
 		// without one; endpoints that need a caller answer 401 themselves.
 		return nil
+	case errors.Is(err, authkit.ErrCredentialUnavailable):
+		// Nothing was decided about the credential, because whatever holds the
+		// answer did not respond. Answering 401 here would tell every caller in
+		// the system that their credential is bad at the moment nothing can
+		// check any of them — and a browser would act on that by signing out.
+		//
+		// The request is refused rather than served anonymously: the caller
+		// asked to be identified, and serving them as nobody would quietly
+		// downgrade what they can do instead of failing.
+		return restkit.UnavailableResponse()
 	default:
 		// A credential was presented and cannot be trusted. Refuse it even for a
 		// public endpoint: accepting it silently would hide the caller's bug.

@@ -2,6 +2,7 @@ package middleware_test
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 
@@ -104,6 +105,48 @@ var _ = Describe("authentication middleware", func() {
 
 			Expect(res.AddHeaders).To(HaveKeyWithValue("WWW-Authenticate", "Bearer"))
 		})
+
+		// The failure that must not look like a bad credential. A key store or a
+		// session store that is down says nothing about the credential, and 401
+		// would tell every caller in the system that theirs is bad at the moment
+		// nothing can check any of them — which a browser acts on by signing out.
+		Describe("when the credential could not be checked at all", func() {
+			unavailable := func() rest.Middleware {
+				return middleware.Auth(verifierStub{
+					err: fmt.Errorf("%w: connection refused", authkit.ErrCredentialUnavailable),
+				})
+			}
+
+			It("answers 503 rather than 401", func() {
+				res := unavailable()(okHandler(&authkit.Principal{}))(authRequest())
+
+				Expect(res.Code).To(Equal(http.StatusServiceUnavailable))
+			})
+
+			// Serving the request as nobody would quietly narrow what the caller
+			// can do, instead of saying that nothing could be decided.
+			It("does not serve the request anonymously", func() {
+				reached := false
+
+				res := unavailable()(func(*rest.Request) *rest.Response {
+					reached = true
+					return &rest.Response{Code: http.StatusOK}
+				})(authRequest())
+
+				Expect(reached).To(BeFalse())
+				Expect(res.Code).To(Equal(http.StatusServiceUnavailable))
+			})
+
+			// Naming the dependency that is down tells a prober what to attack.
+			It("says nothing about what failed", func() {
+				res := unavailable()(okHandler(&authkit.Principal{}))(authRequest())
+
+				envelope, ok := res.Body.(*restkit.ErrorEnvelope)
+				Expect(ok).To(BeTrue())
+				Expect(envelope.Error.Code).To(Equal(restkit.UnavailableCode))
+				Expect(envelope.Error.Message).NotTo(ContainSubstring("connection refused"))
+			})
+		})
 	})
 
 	Describe("in front of a WebSocket upgrade", func() {
@@ -135,6 +178,19 @@ var _ = Describe("authentication middleware", func() {
 
 			Expect(res).NotTo(BeNil())
 			Expect(res.Code).To(Equal(http.StatusUnauthorized))
+		})
+
+		// A connection is long-lived, so opening one on an unverified credential
+		// would keep the doubt around for as long as it lasts.
+		It("stops the upgrade when the credential could not be checked", func() {
+			guard := middleware.AuthUpgrade(verifierStub{
+				err: fmt.Errorf("%w: connection refused", authkit.ErrCredentialUnavailable),
+			})
+
+			res := guard(authRequest())
+
+			Expect(res).NotTo(BeNil())
+			Expect(res.Code).To(Equal(http.StatusServiceUnavailable))
 		})
 	})
 })

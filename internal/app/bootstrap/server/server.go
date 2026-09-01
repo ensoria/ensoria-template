@@ -15,6 +15,7 @@ import (
 	"github.com/ensoria/ensoria-template/internal/infra/cache"
 	"github.com/ensoria/ensoria-template/internal/infra/db"
 	_ "github.com/ensoria/ensoria-template/internal/infra/grpcclt"
+	"github.com/ensoria/ensoria-template/internal/infra/keystore"
 	"github.com/ensoria/ensoria-template/internal/infra/mb"
 	_ "github.com/ensoria/ensoria-template/internal/infra/mb"
 	"github.com/ensoria/ensoria-template/internal/infra/storage"
@@ -48,6 +49,7 @@ func Run(envVal *string) error {
 		// infra
 		cache.NewDefaultWorkerCacheClient(envVal),
 		cache.NewDefaultCache(envVal),
+		keystore.NewAPIKeyStore(envVal),
 		db.NewDefaultWorkerDBClient(envVal),
 		mb.NewSubscriberConnection(envVal),
 		mb.NewPublisherConnection(envVal),

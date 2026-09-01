@@ -1,6 +1,8 @@
 package auth
 
 import (
+	"context"
+
 	"github.com/ensoria/config/pkg/appconfig"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -143,7 +145,7 @@ var _ = Describe("the development key store", func() {
 		keys, err := devKeyStore("local", withAPIKey(DevAPIKey))
 		Expect(err).NotTo(HaveOccurred())
 
-		principal, err := keys.Lookup(DevAPIKey)
+		principal, err := keys.Lookup(context.Background(), DevAPIKey)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(principal.Subject).To(Equal(DevSubject))
@@ -156,7 +158,7 @@ var _ = Describe("the development key store", func() {
 		keys, err := devKeyStore("local", withAPIKey(DevAPIKey, "a-key-of-my-own"))
 		Expect(err).NotTo(HaveOccurred())
 
-		principal, err := keys.Lookup("a-key-of-my-own")
+		principal, err := keys.Lookup(context.Background(), "a-key-of-my-own")
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(principal.HasScopes(devScopes())).To(BeTrue())
@@ -167,7 +169,7 @@ var _ = Describe("the development key store", func() {
 			keys, err := devKeyStore("local", withAPIKey(DevAPIKey))
 			Expect(err).NotTo(HaveOccurred())
 
-			principal, err := keys.Lookup(DevPaymentAPIKey)
+			principal, err := keys.Lookup(context.Background(), DevPaymentAPIKey)
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(principal.Subject).To(Equal(DevPaymentSubject))
@@ -181,8 +183,8 @@ var _ = Describe("the development key store", func() {
 			keys, err := devKeyStore("local", withAPIKey(DevAPIKey))
 			Expect(err).NotTo(HaveOccurred())
 
-			payment, _ := keys.Lookup(DevPaymentAPIKey)
-			configured, _ := keys.Lookup(DevAPIKey)
+			payment, _ := keys.Lookup(context.Background(), DevPaymentAPIKey)
+			configured, _ := keys.Lookup(context.Background(), DevAPIKey)
 
 			Expect(payment.HasScopes(devScopes())).To(BeFalse())
 			Expect(configured.HasScopes(devScopes())).To(BeTrue())

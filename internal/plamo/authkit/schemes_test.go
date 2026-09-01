@@ -1,6 +1,8 @@
 package authkit_test
 
 import (
+	"context"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -68,7 +70,7 @@ var _ = Describe("what a verifier reports it can check", func() {
 	// This is the case the configuration cannot see: the keys live in a store
 	// the application handed over, and no key appears in the configuration.
 	It("reports API keys for an injected key store with nothing in the configuration", func() {
-		store := authkit.KeyStoreFunc(func(string) (*authkit.Principal, error) {
+		store := authkit.KeyStoreFunc(func(context.Context, string) (*authkit.Principal, error) {
 			return &authkit.Principal{Subject: "svc_1", Scheme: authkit.SchemeAPIKey}, nil
 		})
 

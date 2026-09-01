@@ -32,7 +32,15 @@ const (
 	appCachePurpose  = "cache"
 	workerPurpose    = "worker cache"
 	schedulerPurpose = "scheduler cache"
+	keyStorePurpose  = "API key store"
 )
+
+// keyStoreKeyPrefix namespaces the built-in API key store's keys.
+//
+// ⚠ It is part of what an operator has to know to add a key by hand: a record
+// is written at "<prefix>:apikey:<fingerprint>". Changing it invalidates every
+// key already stored, without anything saying so.
+const keyStoreKeyPrefix = "auth"
 
 // redisOptions converts a configured Redis connection into go-redis options.
 //
@@ -151,6 +159,21 @@ func NewDefaultCache(envVal *string) func(lc dikit.LC) (enscache.Cache, error) {
 
 		return c, nil
 	}
+}
+
+// NewKeyStoreCache builds the store the built-in API key store reads keys from.
+//
+// It is a plain cacheredis rather than the tiered cache the application uses for
+// its own data, and deliberately so: withdrawing a key has to take effect
+// everywhere at once, and an in-process copy would keep answering with a key
+// that was deleted until that copy expired.
+//
+// The connection is its own — its own Redis database, dialed and closed with the
+// application — because the keys are neither the application's cache nor its job
+// queue, and sharing a keyspace with the cache would put credentials behind an
+// eviction policy.
+func NewKeyStoreCache(lc dikit.LC, cfg *appconfig.Redis) enscache.Cache {
+	return cacheredis.New(newRedisClient(lc, cfg, keyStorePurpose), keyStoreKeyPrefix)
 }
 
 // NewDefaultWorkerCacheClient builds the Redis client the job queue runs on.

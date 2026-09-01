@@ -1,6 +1,8 @@
 package stub_test
 
 import (
+	"context"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -28,7 +30,7 @@ var _ = Describe("APIKeyStore", func() {
 			store, err := stub.NewAPIKeyStore(testEnv, oneKey())
 			Expect(err).NotTo(HaveOccurred())
 
-			principal, err := store.Lookup(testKey)
+			principal, err := store.Lookup(context.Background(), testKey)
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(principal.Subject).To(Equal(testCaller))
@@ -41,7 +43,7 @@ var _ = Describe("APIKeyStore", func() {
 			store, err := stub.NewAPIKeyStore(testEnv, oneKey())
 			Expect(err).NotTo(HaveOccurred())
 
-			principal, _ := store.Lookup(testKey)
+			principal, _ := store.Lookup(context.Background(), testKey)
 
 			Expect(principal.HasScopes([]string{"orders:write"})).To(BeTrue())
 			Expect(principal.HasScopes([]string{"orders:read"})).To(BeFalse())
@@ -53,7 +55,7 @@ var _ = Describe("APIKeyStore", func() {
 			store, err := stub.NewAPIKeyStore(testEnv, oneKey())
 			Expect(err).NotTo(HaveOccurred())
 
-			principal, _ := store.Lookup(testKey)
+			principal, _ := store.Lookup(context.Background(), testKey)
 
 			Expect(principal.Scheme).To(Equal(authkit.SchemeAPIKey))
 			Expect(principal.HasScheme([]string{authkit.SchemeAPIKey})).To(BeTrue())
@@ -67,7 +69,7 @@ var _ = Describe("APIKeyStore", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			principal, _ := store.Lookup(testKey)
+			principal, _ := store.Lookup(context.Background(), testKey)
 
 			Expect(principal.Scheme).To(Equal(authkit.SchemeAPIKey))
 		})
@@ -76,7 +78,7 @@ var _ = Describe("APIKeyStore", func() {
 			store, err := stub.NewAPIKeyStore(testEnv, oneKey())
 			Expect(err).NotTo(HaveOccurred())
 
-			_, err = store.Lookup("another-key")
+			_, err = store.Lookup(context.Background(), "another-key")
 
 			Expect(err).To(HaveOccurred())
 		})
@@ -87,7 +89,7 @@ var _ = Describe("APIKeyStore", func() {
 			store, err := stub.NewAPIKeyStore(testEnv, oneKey())
 			Expect(err).NotTo(HaveOccurred())
 
-			_, err = store.Lookup("secret-key-of-someone-else")
+			_, err = store.Lookup(context.Background(), "secret-key-of-someone-else")
 
 			Expect(err.Error()).NotTo(ContainSubstring("secret-key-of-someone-else"))
 		})
@@ -99,8 +101,8 @@ var _ = Describe("APIKeyStore", func() {
 			})
 			Expect(err).NotTo(HaveOccurred())
 
-			a, _ := store.Lookup("key-a")
-			b, _ := store.Lookup("key-b")
+			a, _ := store.Lookup(context.Background(), "key-a")
+			b, _ := store.Lookup(context.Background(), "key-b")
 
 			Expect(a.Subject).To(Equal("a"))
 			Expect(b.Subject).To(Equal("b"))
@@ -119,9 +121,9 @@ var _ = Describe("APIKeyStore", func() {
 			keys[testKey].Scopes = append(keys[testKey].Scopes, "orders:read")
 			keys["added-later"] = &authkit.Principal{Subject: "intruder"}
 
-			principal, _ := store.Lookup(testKey)
+			principal, _ := store.Lookup(context.Background(), testKey)
 			Expect(principal.HasScopes([]string{"orders:read"})).To(BeFalse())
-			_, err = store.Lookup("added-later")
+			_, err = store.Lookup(context.Background(), "added-later")
 			Expect(err).To(HaveOccurred())
 		})
 
@@ -131,11 +133,11 @@ var _ = Describe("APIKeyStore", func() {
 			store, err := stub.NewAPIKeyStore(testEnv, oneKey())
 			Expect(err).NotTo(HaveOccurred())
 
-			first, _ := store.Lookup(testKey)
+			first, _ := store.Lookup(context.Background(), testKey)
 			first.Scopes = append(first.Scopes, "orders:read")
 			first.Subject = "somebody-else"
 
-			second, _ := store.Lookup(testKey)
+			second, _ := store.Lookup(context.Background(), testKey)
 			Expect(second.HasScopes([]string{"orders:read"})).To(BeFalse())
 			Expect(second.Subject).To(Equal(testCaller))
 		})
@@ -224,7 +226,7 @@ var _ = Describe("APIKeyStore", func() {
 			})
 
 			Expect(err).NotTo(HaveOccurred())
-			principal, err := store.Lookup(testKey)
+			principal, err := store.Lookup(context.Background(), testKey)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(principal.Scopes).To(BeEmpty())
 		})

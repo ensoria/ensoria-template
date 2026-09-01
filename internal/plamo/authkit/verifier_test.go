@@ -1,6 +1,8 @@
 package authkit_test
 
 import (
+	"context"
+
 	"crypto/rand"
 	"crypto/rsa"
 	"encoding/base64"
@@ -262,12 +264,56 @@ var _ = Describe("Verifier", func() {
 			Expect(errors.Is(err, authkit.ErrNoCredential)).To(BeFalse())
 		})
 
+		// The distinction the whole error vocabulary exists for. A key store
+		// that is down says nothing about the key it was asked about, and
+		// answering 401 would tell every caller in the system that their
+		// perfectly good key is bad at the moment nothing can check any of them.
+		Describe("a key store that cannot answer", func() {
+			// storeReturning builds a verifier whose key store always fails the
+			// same way.
+			storeReturning := func(failure error) authkit.Verifier {
+				GinkgoHelper()
+
+				v, err := authkit.NewVerifier(
+					&appconfig.Auth{APIKeyHeader: appconfig.DefaultAPIKeyHeader},
+					authkit.KeyStoreFunc(func(context.Context, string) (*authkit.Principal, error) {
+						return nil, failure
+					}),
+				)
+				Expect(err).NotTo(HaveOccurred())
+				return v
+			}
+
+			It("is not treated as a bad credential", func() {
+				v := storeReturning(errors.New("connection refused"))
+
+				_, err := v.Verify(requestWith(map[string]string{
+					appconfig.DefaultAPIKeyHeader: "a-key",
+				}))
+
+				Expect(errors.Is(err, authkit.ErrCredentialUnavailable)).To(BeTrue())
+				Expect(errors.Is(err, authkit.ErrInvalidCredential)).To(BeFalse())
+			})
+
+			// The other half: a store that answered, and the answer is no.
+			It("is a bad credential when the store says the key is unknown", func() {
+				v := storeReturning(authkit.ErrKeyNotFound)
+
+				_, err := v.Verify(requestWith(map[string]string{
+					appconfig.DefaultAPIKeyHeader: "a-key",
+				}))
+
+				Expect(errors.Is(err, authkit.ErrInvalidCredential)).To(BeTrue())
+				Expect(errors.Is(err, authkit.ErrCredentialUnavailable)).To(BeFalse())
+			})
+		})
+
 		It("uses a key store the application supplies instead of the configured keys", func() {
 			custom, err := authkit.NewVerifier(
 				&appconfig.Auth{APIKeyHeader: appconfig.DefaultAPIKeyHeader, APIKeys: []string{"ignored"}},
-				authkit.KeyStoreFunc(func(key string) (*authkit.Principal, error) {
+				authkit.KeyStoreFunc(func(_ context.Context, key string) (*authkit.Principal, error) {
 					if key != "from-store" {
-						return nil, authkit.ErrInvalidCredential
+						return nil, authkit.ErrKeyNotFound
 					}
 					return &authkit.Principal{Subject: "svc_1", Scopes: []string{"jobs:run"}}, nil
 				}),

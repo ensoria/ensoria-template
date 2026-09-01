@@ -36,6 +36,7 @@ func requireEveryStub(
 	_ workerDB.DatabaseClient,
 	_ schedulerDB.DatabaseClient,
 	_ authkit.Verifier,
+	_ authkit.KeyStore,
 	_ *goredis.Client,
 	_ mb.Publish,
 	_ worker.Enqueuer,

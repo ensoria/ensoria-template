@@ -7,6 +7,7 @@ import (
 	assets "github.com/ensoria/ensoria-template"
 	"github.com/ensoria/ensoria-template/internal/infra/cache"
 	"github.com/ensoria/ensoria-template/internal/infra/db"
+	"github.com/ensoria/ensoria-template/internal/infra/keystore"
 	"github.com/ensoria/ensoria-template/internal/infra/mb"
 	"github.com/ensoria/ensoria-template/internal/infra/storage"
 	"github.com/ensoria/websocket/pkg/wsrouter"
@@ -53,6 +54,7 @@ func Start(envVal *string) error {
 		// アプリ用キャッシュ（enscache.Cache）。自前のL2クライアントを持つため named 不要
 		cache.NewDefaultCache(envVal),
 		db.NewDefaultSchedulerDBClient(envVal),
+		keystore.NewAPIKeyStore(envVal),
 
 		// TODO: 無くてもいいようにする?
 		dikit.ProvideNamed(cache.NewDefaultWorkerCacheClient(envVal), "workerCache"),
