@@ -14,6 +14,7 @@ import (
 	"github.com/ensoria/cache/pkg/cachetiered"
 	"github.com/ensoria/config/pkg/appconfig"
 	"github.com/ensoria/config/pkg/registry"
+	enclikeystore "github.com/ensoria/encli/pkg/keystore"
 	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
 	"github.com/ensoria/loggear/pkg/loggear"
 	goredis "github.com/redis/go-redis/v9"
@@ -34,13 +35,6 @@ const (
 	schedulerPurpose = "scheduler cache"
 	keyStorePurpose  = "API key store"
 )
-
-// keyStoreKeyPrefix namespaces the built-in API key store's keys.
-//
-// ⚠ It is part of what an operator has to know to add a key by hand: a record
-// is written at "<prefix>:apikey:<fingerprint>". Changing it invalidates every
-// key already stored, without anything saying so.
-const keyStoreKeyPrefix = "auth"
 
 // redisOptions converts a configured Redis connection into go-redis options.
 //
@@ -172,8 +166,11 @@ func NewDefaultCache(envVal *string) func(lc dikit.LC) (enscache.Cache, error) {
 // application — because the keys are neither the application's cache nor its job
 // queue, and sharing a keyspace with the cache would put credentials behind an
 // eviction policy.
+//
+// The key prefix comes from the shared format package rather than from a
+// constant here, so that the records this reads are the ones encli writes.
 func NewKeyStoreCache(lc dikit.LC, cfg *appconfig.Redis) enscache.Cache {
-	return cacheredis.New(newRedisClient(lc, cfg, keyStorePurpose), keyStoreKeyPrefix)
+	return cacheredis.New(newRedisClient(lc, cfg, keyStorePurpose), enclikeystore.RedisNamespace)
 }
 
 // NewDefaultWorkerCacheClient builds the Redis client the job queue runs on.

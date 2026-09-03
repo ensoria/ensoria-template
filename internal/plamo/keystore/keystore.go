@@ -6,87 +6,63 @@
 // package has never heard of implements authkit.KeyStore instead and hands it
 // to the verifier, which is what AUTH_API_KEYS_EXTERNAL declares.
 //
+// # Where the format lives, and why it is not here
+//
+// The storage format — how a key is written down, which table and columns,
+// which Redis keys, how permissions are encoded — is
+// [github.com/ensoria/encli/pkg/keystore]. It has to be, because two programs
+// meet over it: encli creates the storage and issues keys into it, and this
+// package reads it on every request that presents one. Writing the names out
+// here as well would mean a rename on one side producing an application that
+// starts cleanly and fails every lookup, on new installations only.
+//
+// So this package holds no names and no statements. What it holds is what the
+// two programs do not share: turning a record into a caller, and deciding what
+// a refusal means.
+//
 // # Keys are stored by fingerprint, never as themselves
 //
-// An API key is a bearer credential: whoever reads it can use it. So the store
-// holds Fingerprint(key) rather than the key, and a lookup fingerprints what
-// arrived and compares that. A copy of the store — a database dump, a Redis
-// snapshot, a backup on somebody's laptop — then contains nothing anyone can
-// authenticate with.
-//
-// The cost lands on whoever issues a key: the value goes into the store as a
-// fingerprint, and the key itself is shown to its owner once and never again,
-// because nothing here can recover it. That is the same bargain a password
-// hash makes, and it is worth the same.
-//
-// A plain SHA-256 is the right hash for this and would be the wrong one for a
-// password. What makes a password need bcrypt or argon2 is that people choose
-// passwords a machine can guess; the work factor buys time against that
-// guessing. An API key issued by NewKey is 256 bits of randomness, so there is
-// no guessing to slow down — and a fast hash is what lets the fingerprint be
-// computed on every request without a thought.
+// A lookup fingerprints the key that arrived and asks for that. A copy of the
+// store — a database dump, a Redis snapshot, a backup on somebody's laptop —
+// therefore contains nothing anyone can authenticate with, and nothing can
+// recover a key that was lost. Issuing one is `encli auth keystore issue`; it
+// cannot be done by writing the storage by hand.
 package keystore
 
 import (
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/base64"
-	"encoding/hex"
+	"errors"
 	"fmt"
 )
 
-// keyBytes is how much randomness an issued API key carries. The key is the
-// whole credential, so this is the same 256 bits a session id gets.
-const keyBytes = 32
-
-// Record is what the store holds for one key: who the key belongs to and what
-// it may do.
+// errUnusableRecord marks a record that was read but says nothing usable.
 //
-// ⚠ The JSON tags are the format an operator writes when adding a key by hand,
-// and records outlive a deployment, so renaming one invalidates every key
-// already stored.
-type Record struct {
-	// Subject identifies the caller. It appears in logs and in every
-	// authorization decision, so a key without one is refused: "some API key"
-	// is not an answer to who did this.
-	Subject string `json:"sub"`
-	// Scopes are the permissions the key carries. Empty means the key
-	// authenticates and is permitted nothing that a scope is declared for,
-	// which is a legitimate answer for a caller that only reaches public
-	// endpoints.
-	Scopes []string `json:"scopes,omitempty"`
-}
+// It is deliberately not authkit.ErrKeyNotFound: the key exists, and answering
+// 401 would send its owner off to check a key that is perfectly correct. It is
+// a fault in the stored data, which is this side's problem — so it becomes a
+// 5xx and lands in the logs, where somebody can fix the record.
+var errUnusableRecord = errors.New("keystore: the stored record is unusable")
 
-// Fingerprint is how a key is written down: the SHA-256 of the key, in
-// lowercase hex.
+// validateSubject reports a record that cannot identify its caller.
 //
-// It is exported because issuing a key happens outside this application —
-// a migration, an administration tool, a one-off command — and whatever does it
-// has to compute the same value the lookup will.
-func Fingerprint(key string) string {
-	sum := sha256.Sum256([]byte(key))
-	return hex.EncodeToString(sum[:])
-}
-
-// NewKey returns a fresh API key to hand to a caller, and the fingerprint to
-// store for it.
-//
-// The key is returned once. Nothing can recover it from the fingerprint
-// afterwards, which is the property that makes storing the fingerprint worth
-// doing — so whatever issues a key has to show it to its owner there and then.
-func NewKey() (key, fingerprint string, err error) {
-	buf := make([]byte, keyBytes)
-	if _, err := rand.Read(buf); err != nil {
-		return "", "", fmt.Errorf("keystore: generating an API key: %w", err)
-	}
-	key = base64.RawURLEncoding.EncodeToString(buf)
-	return key, Fingerprint(key), nil
-}
-
-// validate reports a record that cannot identify its caller.
-func (r *Record) validate() error {
-	if r == nil || r.Subject == "" {
-		return fmt.Errorf("keystore: the stored key has no subject: %w", errUnusableRecord)
+// A key with no subject would authenticate somebody the logs and every
+// authorization decision could only call "some API key", which is not an answer
+// to who did this.
+func validateSubject(subject, fingerprint string) error {
+	if subject == "" {
+		return fmt.Errorf("%w: the stored key has no subject (fingerprint %s)",
+			errUnusableRecord, short(fingerprint))
 	}
 	return nil
+}
+
+// fingerprintPrefix is how much of a fingerprint an error message carries:
+// enough to find the record, and it is not a credential in any case.
+const fingerprintPrefix = 12
+
+// short trims a fingerprint for a message.
+func short(fingerprint string) string {
+	if len(fingerprint) <= fingerprintPrefix {
+		return fingerprint
+	}
+	return fingerprint[:fingerprintPrefix] + "…"
 }

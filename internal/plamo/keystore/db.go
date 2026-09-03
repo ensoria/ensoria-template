@@ -5,33 +5,10 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
+	enclikeystore "github.com/ensoria/encli/pkg/keystore"
 	"github.com/ensoria/ensoria-template/internal/plamo/authkit"
-)
-
-// The table the built-in key store reads, and the columns it reads from it.
-//
-// ⚠ These names are a contract with `encli auth keystore init`, which creates
-// the table, and they live in a different repository. Renaming one here without
-// renaming it there produces a store that connects successfully and then fails
-// every lookup with a SQL error. There is no compiler between the two, so a
-// change to either side has to be made to both.
-const (
-	apiKeysTable      = "ensoria_api_keys"
-	columnFingerprint = "key_fingerprint"
-	columnSubject     = "subject"
-	columnScopes      = "scopes"
-	columnExpiresAt   = "expires_at"
-)
-
-// The driver names, as the configuration spells them (appconfig normalizes
-// "sqlite3" to "sqlite" before they reach here).
-const (
-	DriverPostgres = "postgres"
-	DriverMySQL    = "mysql"
-	DriverSQLite   = "sqlite"
 )
 
 // dbStore answers key lookups from a SQL database.
@@ -44,6 +21,18 @@ type dbStore struct {
 	db    *sql.DB
 	query string
 	now   func() time.Time
+}
+
+// DBStore is a key store backed by a database: everything a verifier needs,
+// plus the readiness check the startup sequence runs.
+//
+// The check is on this type rather than on authkit.KeyStore because only a
+// database has storage that can be absent. Returning it here is also what stops
+// the check from being forgotten — whoever builds a database store is handed
+// something that has it.
+type DBStore interface {
+	authkit.KeyStore
+	Ready(ctx context.Context) error
 }
 
 // DBOption adjusts a database-backed store. There is one, and it exists so that
@@ -62,40 +51,51 @@ func WithDBClock(now func() time.Time) DBOption {
 
 // NewDB reads keys from the table `encli auth keystore init` creates.
 //
-// driver decides the placeholder syntax and nothing else; the statement is
-// built once here rather than at every lookup.
-func NewDB(db *sql.DB, driver string, opts ...DBOption) (authkit.KeyStore, error) {
+// The statement comes from the shared format package, built once here rather
+// than at every lookup. Taking it from there rather than writing it out is what
+// makes a renamed column reach this query too, instead of leaving an
+// application that starts cleanly and fails every lookup.
+func NewDB(db *sql.DB, driver string, opts ...DBOption) (DBStore, error) {
 	if db == nil {
 		return nil, errors.New("keystore: no database to read keys from")
 	}
-	placeholder, err := placeholderFor(driver)
+	query, err := enclikeystore.SelectByFingerprintSQL(driver)
 	if err != nil {
 		return nil, err
 	}
 
-	store := &dbStore{
-		db: db,
-		query: fmt.Sprintf("SELECT %s, %s, %s FROM %s WHERE %s = %s",
-			columnSubject, columnScopes, columnExpiresAt, apiKeysTable, columnFingerprint, placeholder),
-		now: time.Now,
-	}
+	store := &dbStore{db: db, query: query, now: time.Now}
 	for _, opt := range opts {
 		opt(store)
 	}
 	return store, nil
 }
 
-// placeholderFor returns how the driver spells the first bind parameter.
-func placeholderFor(driver string) (string, error) {
-	switch driver {
-	case DriverPostgres:
-		return "$1", nil
-	case DriverMySQL, DriverSQLite:
-		return "?", nil
-	default:
-		return "", fmt.Errorf("keystore: cannot read keys from a %q database: expected %q, %q or %q",
-			driver, DriverPostgres, DriverMySQL, DriverSQLite)
+// readinessFingerprint is the value the probe looks up. It is not a fingerprint
+// — Fingerprint only ever produces 64 hex characters — so it can never collide
+// with a real key, and a row coming back would be someone else's doing.
+const readinessFingerprint = "readiness-probe"
+
+// Ready reports whether the table this store reads is actually there, by
+// running the lookup itself against a fingerprint no key can have.
+//
+// A missing table, a renamed column, the wrong database, a role without SELECT:
+// all of them come back here rather than on the first request that presents an
+// API key. That timing is the whole point. Without it the application starts
+// cleanly and then answers 503 to a caller, in production, possibly days after
+// the deploy — and the most likely cause is not exotic, it is that
+// `encli auth keystore init` was never run on this environment.
+//
+// It uses the same statement a lookup uses, so it checks the real contract
+// rather than an approximation of it, and needs no dialect-specific
+// introspection query. No row comes back, which is the expected answer.
+func (s *dbStore) Ready(ctx context.Context) error {
+	if _, err := s.read(ctx, readinessFingerprint); err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("keystore: the %s table cannot be read: %w. "+
+			"Create it with `encli auth keystore init` for this environment, "+
+			"or point AUTH_KEYSTORE_DB_* at the database that has it", enclikeystore.TableName, err)
 	}
+	return nil
 }
 
 // Lookup returns the caller a key belongs to.
@@ -110,13 +110,8 @@ func (s *dbStore) Lookup(ctx context.Context, key string) (*authkit.Principal, e
 		return nil, authkit.ErrKeyNotFound
 	}
 
-	fingerprint := Fingerprint(key)
-	var (
-		subject   string
-		scopes    string
-		expiresAt sql.NullTime
-	)
-	err := s.db.QueryRowContext(ctx, s.query, fingerprint).Scan(&subject, &scopes, &expiresAt)
+	fingerprint := enclikeystore.Fingerprint(key)
+	row, err := s.read(ctx, fingerprint)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
 		return nil, authkit.ErrKeyNotFound
@@ -128,26 +123,41 @@ func (s *dbStore) Lookup(ctx context.Context, key string) (*authkit.Principal, e
 	// asked and said no. It is kept apart from "no such key" only in the error
 	// text, because the two mean the same thing to the caller and very
 	// different things to whoever has to explain the refusal.
-	if expiresAt.Valid && !expiresAt.Time.After(s.now().UTC()) {
+	if row.expiresAt.Valid && !row.expiresAt.Time.After(s.now().UTC()) {
 		return nil, fmt.Errorf("%w: the key expired at %s",
-			authkit.ErrKeyNotFound, expiresAt.Time.UTC().Format(time.RFC3339))
+			authkit.ErrKeyNotFound, row.expiresAt.Time.UTC().Format(time.RFC3339))
 	}
-	if subject == "" {
-		return nil, fmt.Errorf("%w (fingerprint %s)", errUnusableRecord, short(fingerprint))
+	if err := validateSubject(row.subject, fingerprint); err != nil {
+		return nil, err
 	}
 
 	return &authkit.Principal{
-		Subject: subject,
-		Scopes:  parseScopes(scopes),
+		Subject: row.subject,
+		Scopes:  enclikeystore.DecodeScopes(row.scopes),
 		Scheme:  authkit.SchemeAPIKey,
 	}, nil
 }
 
-// parseScopes reads the stored permissions.
+// keyRow is one record as the table holds it.
 //
-// They are space-separated, the same way a JWT writes its scope claim (RFC
-// 8693), so that one convention covers both kinds of credential and a reader
-// familiar with one is not surprised by the other.
-func parseScopes(scopes string) []string {
-	return strings.Fields(scopes)
+// ⚠ The scan order is the column order of the shared statement — subject,
+// scopes, expires_at. Reordering it here without reordering it there mixes the
+// values up silently, since two of the three are strings.
+type keyRow struct {
+	subject   string
+	scopes    string
+	expiresAt sql.NullTime
+}
+
+// read runs the lookup for one fingerprint. sql.ErrNoRows reaches the caller
+// unwrapped, because the two callers read it as different things: a key that
+// does not exist, and a table that does.
+func (s *dbStore) read(ctx context.Context, fingerprint string) (*keyRow, error) {
+	var row keyRow
+	err := s.db.QueryRowContext(ctx, s.query, fingerprint).
+		Scan(&row.subject, &row.scopes, &row.expiresAt)
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
 }

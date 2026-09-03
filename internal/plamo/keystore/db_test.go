@@ -9,26 +9,27 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	enclikeystore "github.com/ensoria/encli/pkg/keystore"
 	"github.com/ensoria/ensoria-template/internal/plamo/authkit"
 	"github.com/ensoria/ensoria-template/internal/plamo/keystore"
 	_ "modernc.org/sqlite"
 )
 
-// createTableSQLite mirrors what `encli auth keystore init` creates on SQLite.
+// createTable is the table `encli auth keystore init` creates, taken from the
+// same place the command takes it.
 //
-// ⚠ It is written out rather than imported: encli is a separate repository, so
-// the table definition and the query that reads it cannot be checked against
-// each other by a compiler. Copying it here is what makes these specs fail if
-// the two drift — which is the only mechanism available.
-const createTableSQLite = `
-CREATE TABLE IF NOT EXISTS ensoria_api_keys (
-    key_fingerprint TEXT NOT NULL PRIMARY KEY,
-    subject TEXT NOT NULL,
-    scopes TEXT NOT NULL,
-    expires_at DATETIME,
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-`
+// It used to be a copy written out here, which pinned nothing: a rename in encli
+// left this copy and the query agreeing with each other and with nothing else.
+// Now both come from the shared format package, so these specs run against the
+// real table definition.
+func createTable(db *sql.DB) {
+	GinkgoHelper()
+
+	statement, err := enclikeystore.CreateTableSQL(enclikeystore.DriverSQLite)
+	Expect(err).NotTo(HaveOccurred())
+	_, err = db.Exec(statement)
+	Expect(err).NotTo(HaveOccurred())
+}
 
 // sqliteDB opens a database of its own for one spec, on the real engine rather
 // than an imitation of it: what this store does is issue SQL, so a fake would
@@ -40,8 +41,7 @@ func sqliteDB() *sql.DB {
 	Expect(err).NotTo(HaveOccurred())
 	DeferCleanup(db.Close)
 
-	_, err = db.Exec(createTableSQLite)
-	Expect(err).NotTo(HaveOccurred())
+	createTable(db)
 	return db
 }
 
@@ -49,9 +49,9 @@ func sqliteDB() *sql.DB {
 func insertKey(db *sql.DB, key, subject, scopes string, expiresAt any) {
 	GinkgoHelper()
 
-	_, err := db.Exec(
-		`INSERT INTO ensoria_api_keys (key_fingerprint, subject, scopes, expires_at) VALUES (?, ?, ?, ?)`,
-		keystore.Fingerprint(key), subject, scopes, expiresAt)
+	statement, err := enclikeystore.InsertSQL(enclikeystore.DriverSQLite)
+	Expect(err).NotTo(HaveOccurred())
+	_, err = db.Exec(statement, enclikeystore.Fingerprint(key), subject, scopes, expiresAt)
 	Expect(err).NotTo(HaveOccurred())
 }
 
@@ -66,7 +66,7 @@ var _ = Describe("the database-backed key store", func() {
 	store := func(now time.Time) authkit.KeyStore {
 		GinkgoHelper()
 
-		s, err := keystore.NewDB(db, keystore.DriverSQLite,
+		s, err := keystore.NewDB(db, enclikeystore.DriverSQLite,
 			keystore.WithDBClock(func() time.Time { return now }))
 		Expect(err).NotTo(HaveOccurred())
 		return s
@@ -124,9 +124,9 @@ var _ = Describe("the database-backed key store", func() {
 		insertKey(db, "a-key", "svc", "", nil)
 
 		var stored string
-		Expect(db.QueryRow(`SELECT key_fingerprint FROM ensoria_api_keys`).Scan(&stored)).To(Succeed())
+		Expect(db.QueryRow("SELECT " + enclikeystore.ColumnFingerprint + " FROM " + enclikeystore.TableName).Scan(&stored)).To(Succeed())
 		Expect(stored).NotTo(Equal("a-key"))
-		Expect(stored).To(Equal(keystore.Fingerprint("a-key")))
+		Expect(stored).To(Equal(enclikeystore.Fingerprint("a-key")))
 	})
 
 	Describe("expiry", func() {
@@ -203,6 +203,82 @@ var _ = Describe("the database-backed key store", func() {
 		})
 	})
 
+	// The step that gets forgotten on a new environment is running
+	// `encli auth keystore init`. Without this check the application starts
+	// cleanly and answers 503 to the first caller presenting an API key, in
+	// production, possibly days later.
+	Describe("Ready", func() {
+		It("passes when the table is there", func() {
+			s, err := keystore.NewDB(db, enclikeystore.DriverSQLite)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(s.Ready(ctx)).To(Succeed())
+		})
+
+		It("fails when the table was never created", func() {
+			_, err := db.Exec("DROP TABLE " + enclikeystore.TableName)
+			Expect(err).NotTo(HaveOccurred())
+			s, err := keystore.NewDB(db, enclikeystore.DriverSQLite)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(s.Ready(ctx)).To(HaveOccurred())
+		})
+
+		// The message has to name the step that was missed. Whoever sees it is
+		// looking at a deployment that will not start, not at this package.
+		It("names the command that creates the table", func() {
+			_, err := db.Exec("DROP TABLE " + enclikeystore.TableName)
+			Expect(err).NotTo(HaveOccurred())
+			s, err := keystore.NewDB(db, enclikeystore.DriverSQLite)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(s.Ready(ctx)).To(MatchError(ContainSubstring("encli auth keystore init")))
+		})
+
+		// This is what the probe is for beyond a missing table: the two sides of
+		// the format are in different repositories, and a column renamed on one
+		// of them has to stop the application rather than a request.
+		It("fails when a column the lookup reads is missing", func() {
+			_, err := db.Exec("DROP TABLE " + enclikeystore.TableName)
+			Expect(err).NotTo(HaveOccurred())
+			_, err = db.Exec(`CREATE TABLE ` + enclikeystore.TableName + ` (
+				key_fingerprint TEXT NOT NULL PRIMARY KEY,
+				subject TEXT NOT NULL,
+				scope TEXT NOT NULL,
+				expires_at DATETIME,
+				created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)`)
+			Expect(err).NotTo(HaveOccurred())
+			s, err := keystore.NewDB(db, enclikeystore.DriverSQLite)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(s.Ready(ctx)).To(HaveOccurred())
+		})
+
+		It("fails when the database cannot be reached", func() {
+			s, err := keystore.NewDB(db, enclikeystore.DriverSQLite)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(db.Close()).To(Succeed())
+
+			Expect(s.Ready(ctx)).To(HaveOccurred())
+		})
+
+		// The probe must never match a key somebody holds.
+		It("looks up a value no key can fingerprint to", func() {
+			_, err := db.Exec(
+				"INSERT INTO " + enclikeystore.TableName +
+					" (" + enclikeystore.ColumnFingerprint + ", " + enclikeystore.ColumnSubject + ", " +
+					enclikeystore.ColumnScopes + ") VALUES ('readiness-probe','svc','')")
+			Expect(err).NotTo(HaveOccurred())
+			s, err := keystore.NewDB(db, enclikeystore.DriverSQLite)
+			Expect(err).NotTo(HaveOccurred())
+
+			// A row under that value is somebody else's doing, and the probe
+			// still reports the table as readable.
+			Expect(s.Ready(ctx)).To(Succeed())
+			Expect(enclikeystore.Fingerprint("readiness-probe")).NotTo(Equal("readiness-probe"))
+		})
+	})
+
 	Describe("NewDB", func() {
 		// The placeholder syntax is the only thing the driver decides here, and
 		// getting it wrong makes every lookup a syntax error at run time.
@@ -212,9 +288,9 @@ var _ = Describe("the database-backed key store", func() {
 
 				Expect(err).NotTo(HaveOccurred())
 			},
-			Entry("PostgreSQL", keystore.DriverPostgres),
-			Entry("MySQL", keystore.DriverMySQL),
-			Entry("SQLite", keystore.DriverSQLite),
+			Entry("PostgreSQL", enclikeystore.DriverPostgres),
+			Entry("MySQL", enclikeystore.DriverMySQL),
+			Entry("SQLite", enclikeystore.DriverSQLite),
 		)
 
 		It("refuses a driver it cannot write a statement for", func() {
@@ -224,7 +300,7 @@ var _ = Describe("the database-backed key store", func() {
 		})
 
 		It("refuses to read keys from nowhere", func() {
-			_, err := keystore.NewDB(nil, keystore.DriverSQLite)
+			_, err := keystore.NewDB(nil, enclikeystore.DriverSQLite)
 
 			Expect(err).To(HaveOccurred())
 		})

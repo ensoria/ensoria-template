@@ -53,16 +53,24 @@ func build(lc dikit.LC, cfg *appconfig.Auth) (authkit.KeyStore, error) {
 
 	case cfg.KeyStore.DB != nil:
 		// The table is not part of the application's schema and no migration
-		// carries it, so it is created by `encli auth keystore init`. Starting
-		// without it fails on the first lookup rather than here: the connection
-		// is verified at startup, but asking whether a table exists would mean
-		// a second dialect-specific query for a condition the first refused key
-		// already reports.
+		// carries it, so it is created by `encli auth keystore init` — which is
+		// a step that can be forgotten on a new environment. The readiness hook
+		// below is what turns that into a startup failure instead of a 503 to
+		// the first caller who presents an API key.
 		conn, err := infradb.NewKeyStoreDB(lc, cfg.KeyStore.DB)
 		if err != nil {
 			return nil, err
 		}
-		return keystore.NewDB(conn, cfg.KeyStore.DB.Driver)
+		store, err := keystore.NewDB(conn, cfg.KeyStore.DB.Driver)
+		if err != nil {
+			return nil, err
+		}
+		// Only this branch has storage that can be absent, so only this branch
+		// checks. It runs after the connection hook above — hooks start in the
+		// order they were appended — so an unreachable database is reported as
+		// such rather than as a table that cannot be read.
+		lc.Append(dikit.Hook{OnStart: store.Ready})
+		return store, nil
 
 	default:
 		// AuthKeyStore is built by the configuration package, which only ever

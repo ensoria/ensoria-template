@@ -11,6 +11,7 @@ import (
 
 	enscache "github.com/ensoria/cache/pkg/cache"
 	"github.com/ensoria/cache/pkg/cachememory"
+	enclikeystore "github.com/ensoria/encli/pkg/keystore"
 	"github.com/ensoria/ensoria-template/internal/plamo/authkit"
 	"github.com/ensoria/ensoria-template/internal/plamo/keystore"
 )
@@ -42,11 +43,11 @@ func store() (authkit.KeyStore, enscache.Cache) {
 }
 
 // issue writes a record for a key, the way whatever issues keys would.
-func issue(cache enscache.Cache, key string, record *keystore.Record) {
+func issue(cache enscache.Cache, key string, record *enclikeystore.Record) {
 	GinkgoHelper()
 
 	Expect(cache.Set(context.Background(),
-		"apikey:"+keystore.Fingerprint(key), record, recordTTL)).To(Succeed())
+		enclikeystore.RedisKeyPrefix+enclikeystore.Fingerprint(key), record, recordTTL)).To(Succeed())
 }
 
 var _ = Describe("the Redis-backed key store", func() {
@@ -56,7 +57,7 @@ var _ = Describe("the Redis-backed key store", func() {
 
 	It("returns the caller a key belongs to", func() {
 		keys, cache := store()
-		issue(cache, "a-key", &keystore.Record{
+		issue(cache, "a-key", &enclikeystore.Record{
 			Subject: "payment-provider", Scopes: []string{"orders:write"},
 		})
 
@@ -71,7 +72,7 @@ var _ = Describe("the Redis-backed key store", func() {
 	// arrived with an API key authenticated with an API key.
 	It("marks the caller as having used an API key", func() {
 		keys, cache := store()
-		issue(cache, "a-key", &keystore.Record{Subject: "payment-provider"})
+		issue(cache, "a-key", &enclikeystore.Record{Subject: "payment-provider"})
 
 		principal, err := keys.Lookup(ctx, "a-key")
 
@@ -98,9 +99,9 @@ var _ = Describe("the Redis-backed key store", func() {
 	// The whole point of the fingerprint: what is stored is not usable as a key.
 	It("stores the key under its fingerprint, not as itself", func() {
 		keys, cache := store()
-		issue(cache, "a-key", &keystore.Record{Subject: "payment-provider"})
+		issue(cache, "a-key", &enclikeystore.Record{Subject: "payment-provider"})
 
-		_, err := cache.Get(ctx, "apikey:a-key")
+		_, err := cache.Get(ctx, enclikeystore.RedisKeyPrefix+"a-key")
 		Expect(err).To(MatchError(enscache.ErrCacheMiss))
 
 		_, err = keys.Lookup(ctx, "a-key")
@@ -112,7 +113,7 @@ var _ = Describe("the Redis-backed key store", func() {
 	// key that is perfectly correct.
 	It("does not blame the caller for a record with no subject", func() {
 		keys, cache := store()
-		issue(cache, "a-key", &keystore.Record{Scopes: []string{"orders:write"}})
+		issue(cache, "a-key", &enclikeystore.Record{Scopes: []string{"orders:write"}})
 
 		_, err := keys.Lookup(ctx, "a-key")
 
@@ -152,7 +153,7 @@ var _ = Describe("the Redis-backed key store", func() {
 
 			_, err = keys.Lookup(ctx, "a-secret-key")
 
-			fingerprint := keystore.Fingerprint("a-secret-key")
+			fingerprint := enclikeystore.Fingerprint("a-secret-key")
 			Expect(err.Error()).To(ContainSubstring(fingerprint[:12]))
 			Expect(err.Error()).NotTo(ContainSubstring(fingerprint))
 		})
