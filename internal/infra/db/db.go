@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 
 	"github.com/ensoria/config/pkg/appconfig"
@@ -10,6 +11,13 @@ import (
 	"github.com/ensoria/loggear/pkg/loggear"
 	schedulerDB "github.com/ensoria/scheduler/pkg/database"
 	workerDB "github.com/ensoria/worker/pkg/database"
+
+	// The drivers register themselves under the names the configuration uses,
+	// so a configured DB_DRIVER reaches sql.Open unchanged. modernc's SQLite is
+	// pure Go, so a build needs no C toolchain.
+	_ "github.com/go-sql-driver/mysql"
+	_ "github.com/lib/pq"
+	_ "modernc.org/sqlite"
 )
 
 // The purpose names that appear in connection log lines and error messages.
@@ -18,6 +26,7 @@ import (
 const (
 	workerDBPurpose    = "worker history"
 	schedulerDBPurpose = "scheduler history"
+	keyStoreDBPurpose  = "API key store"
 )
 
 // sqliteDriver is the name appconfig normalizes both "sqlite" and "sqlite3" to.
@@ -118,6 +127,93 @@ func appendDBHooks(lc dikit.LC, client DatabaseClient, purpose string, cfg *appc
 			return client.Close()
 		},
 	})
+}
+
+// The driver names the configuration resolves to, which are also the names each
+// driver registers itself under, so a configured value reaches sql.Open
+// unchanged. appconfig normalizes "sqlite3" to "sqlite" before it gets here.
+const (
+	postgresDriver = "postgres"
+	mysqlDriver    = "mysql"
+)
+
+// mysqlParams is what a MySQL connection needs beyond the address.
+//
+// parseTime turns DATETIME and TIMESTAMP columns into time.Time instead of
+// []byte, which is what lets a nullable expiry be scanned at all. loc pins the
+// session to UTC so that a stored deadline means the same thing here as it did
+// where it was written — the alternative is a key that expires an offset early
+// or late depending on where the writer was.
+const mysqlParams = "parseTime=true&loc=UTC"
+
+// NewKeyStoreDB opens the connection the built-in API key store reads from.
+//
+// This is the application's own SQL connection, as opposed to the two below,
+// which belong to the worker and scheduler libraries and are built by them. The
+// key store's database is configured by AUTH_KEYSTORE_DB_*, falling back to the
+// resolved DB_* values, so an application keeping its keys alongside the rest of
+// its data configures nothing but the selector.
+//
+// The table it reads is created by `encli auth keystore init`; it is not part of
+// the application's own schema and no migration carries it.
+func NewKeyStoreDB(lc dikit.LC, cfg *appconfig.DB) (*sql.DB, error) {
+	dsn, err := dataSourceName(cfg)
+	if err != nil {
+		return nil, err
+	}
+
+	// sql.Open validates the arguments and no more; nothing is dialed until the
+	// lifecycle hook below asks for it.
+	conn, err := sql.Open(cfg.Driver, dsn)
+	if err != nil {
+		return nil, fmt.Errorf("%s DB connection could not be opened: %w", keyStoreDBPurpose, err)
+	}
+	conn.SetMaxOpenConns(cfg.MaxOpenConns)
+	conn.SetMaxIdleConns(cfg.MaxIdleConns)
+	conn.SetConnMaxLifetime(cfg.ConnMaxLifetime)
+	conn.SetConnMaxIdleTime(cfg.ConnMaxIdleTime)
+
+	lc.Append(dikit.Hook{
+		OnStart: func(ctx context.Context) error {
+			if err := conn.PingContext(ctx); err != nil {
+				return fmt.Errorf("%s DB connection check failed: %w", keyStoreDBPurpose, err)
+			}
+			loggear.Info("DB connection verified",
+				"purpose", keyStoreDBPurpose, "driver", cfg.Driver,
+				"host", cfg.Host, "database", databaseFor(cfg))
+			return nil
+		},
+		OnStop: func(ctx context.Context) error {
+			loggear.Info("Shutting down DB connection", "purpose", keyStoreDBPurpose)
+			return conn.Close()
+		},
+	})
+
+	return conn, nil
+}
+
+// dataSourceName renders a configured database as the string its driver expects.
+//
+// ⚠ SSLMode is passed through rather than translated. Its vocabulary is the
+// driver's own (see appconfig.DB.SSLMode), and the two are deliberately not
+// unified — a translation table would have a hole in exactly the modes that
+// matter most.
+func dataSourceName(cfg *appconfig.DB) (string, error) {
+	switch cfg.Driver {
+	case postgresDriver:
+		return fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+			cfg.Host, cfg.Port, cfg.User, cfg.Password, cfg.DBName, cfg.SSLMode), nil
+	case mysqlDriver:
+		return fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?%s&tls=%s",
+			cfg.User, cfg.Password, cfg.Host, cfg.Port, cfg.DBName, mysqlParams, cfg.SSLMode), nil
+	case sqliteDriver:
+		// SQLite has no server: the "database" is a file, which the
+		// configuration may name under either key (see databaseFor).
+		return databaseFor(cfg), nil
+	default:
+		return "", fmt.Errorf("cannot open a %q database: expected %q, %q or %q",
+			cfg.Driver, postgresDriver, mysqlDriver, sqliteDriver)
+	}
 }
 
 // NewDefaultWorkerDBClient creates the client the worker writes job history with.

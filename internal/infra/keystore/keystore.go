@@ -11,6 +11,7 @@ import (
 	"github.com/ensoria/config/pkg/appconfig"
 	"github.com/ensoria/config/pkg/registry"
 	infracache "github.com/ensoria/ensoria-template/internal/infra/cache"
+	infradb "github.com/ensoria/ensoria-template/internal/infra/db"
 	"github.com/ensoria/ensoria-template/internal/plamo/authkit"
 	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
 	"github.com/ensoria/ensoria-template/internal/plamo/keystore"
@@ -51,14 +52,17 @@ func build(lc dikit.LC, cfg *appconfig.Auth) (authkit.KeyStore, error) {
 		return keystore.NewRedis(infracache.NewKeyStoreCache(lc, cfg.KeyStore.Redis))
 
 	case cfg.KeyStore.DB != nil:
-		// The selector resolved, so the application asked for a key store and
-		// would otherwise start with none — refusing every API key at run time,
-		// which is exactly the silence this whole store was added to end.
-		return nil, fmt.Errorf(
-			"keystore: AUTH_KEYSTORE=%s is not implemented yet: the built-in store reads keys "+
-				"from Redis only. Set AUTH_KEYSTORE=%s, or set AUTH_API_KEYS_EXTERNAL=true and "+
-				"hand the verifier an authkit.KeyStore backed by your database",
-			appconfig.AuthKeyStoreDB, appconfig.AuthKeyStoreRedis)
+		// The table is not part of the application's schema and no migration
+		// carries it, so it is created by `encli auth keystore init`. Starting
+		// without it fails on the first lookup rather than here: the connection
+		// is verified at startup, but asking whether a table exists would mean
+		// a second dialect-specific query for a condition the first refused key
+		// already reports.
+		conn, err := infradb.NewKeyStoreDB(lc, cfg.KeyStore.DB)
+		if err != nil {
+			return nil, err
+		}
+		return keystore.NewDB(conn, cfg.KeyStore.DB.Driver)
 
 	default:
 		// AuthKeyStore is built by the configuration package, which only ever
