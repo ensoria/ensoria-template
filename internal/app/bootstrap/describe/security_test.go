@@ -7,7 +7,12 @@ import (
 	"github.com/ensoria/config/pkg/appconfig"
 	"github.com/ensoria/ensoria-template/internal/plamo/apidoc"
 	"github.com/ensoria/ensoria-template/internal/plamo/authkit"
+	"github.com/ensoria/ensoria-template/internal/plamo/sessionkit"
 )
+
+// stubSessionStore stands in for a configured session store. The agreement spec
+// only asks the verifier what it can check, never to check anything.
+type stubSessionStore struct{ sessionkit.Store }
 
 // schemeNames lists the descriptors by name, which is the form the other two
 // derivations answer in.
@@ -28,6 +33,19 @@ func everyCredential() *appconfig.Auth {
 		Mode:    appconfig.AuthModeHS256,
 		Secret:  "local-development-secret",
 		APIKeys: []string{"local-development-key"},
+		Session: configuredSession(),
+	}
+}
+
+// configuredSession is the session settings a deployment resolves to.
+func configuredSession() *appconfig.AuthSession {
+	return &appconfig.AuthSession{
+		Store:                 appconfig.AuthSessionStoreRedis,
+		CookieName:            appconfig.DefaultSessionCookieName,
+		CookieSameSite:        appconfig.AuthSessionSameSiteLax,
+		AbsoluteTTL:           appconfig.DefaultSessionAbsoluteTTL,
+		PersistentAbsoluteTTL: appconfig.DefaultSessionPersistentAbsoluteTTL,
+		IdleTTL:               appconfig.DefaultSessionIdleTTL,
 	}
 }
 
@@ -71,6 +89,30 @@ var _ = Describe("securitySchemes", func() {
 		Expect(schemeNames(schemes)).To(Equal([]string{authkit.SchemeAPIKey}))
 	})
 
+	// A cookie is the only credential a browser can hold safely, and the document
+	// has to say which cookie and how to get one.
+	It("publishes the session scheme as the cookie it is carried in", func() {
+		schemes := securitySchemes(&appconfig.Auth{Session: configuredSession()})
+
+		Expect(schemes).To(HaveLen(1))
+		Expect(schemes[0].Name).To(Equal(authkit.SchemeSession))
+		Expect(schemes[0].Type).To(Equal(apidoc.SecuritySchemeTypeAPIKey))
+		Expect(schemes[0].In).To(Equal(apidoc.SecuritySchemeInCookie))
+		Expect(schemes[0].HeaderName).To(Equal(appconfig.DefaultSessionCookieName))
+		Expect(schemes[0].Description).NotTo(BeEmpty())
+	})
+
+	// The document names whatever this deployment configured, which is why it is
+	// generated with the settings of the environment it describes.
+	It("publishes the cookie name this deployment configured", func() {
+		session := configuredSession()
+		session.CookieName = "app_session"
+
+		schemes := securitySchemes(&appconfig.Auth{Session: session})
+
+		Expect(schemes[0].HeaderName).To(Equal("app_session"))
+	})
+
 	Describe("agreement with the other derivations of the same question", func() {
 		// Three places answer "which credentials does this application take":
 		// authkit.ConfiguredSchemes (configuration only), this file (the
@@ -79,7 +121,7 @@ var _ = Describe("securitySchemes", func() {
 		// under adding a fourth credential kind and remembering only two of them.
 		It("names the same schemes as ConfiguredSchemes and as the verifier", func() {
 			cfg := everyCredential()
-			verifier, err := authkit.NewVerifier(cfg, nil)
+			verifier, err := authkit.NewVerifier(cfg, nil, stubSessionStore{})
 			Expect(err).NotTo(HaveOccurred())
 
 			configured := authkit.ConfiguredSchemes(cfg)
@@ -96,7 +138,7 @@ var _ = Describe("securitySchemes", func() {
 		// stop documenting a credential callers really can present.
 		It("still documents a key scheme the verifier cannot check yet", func() {
 			cfg := &appconfig.Auth{APIKeysExternal: true}
-			verifier, err := authkit.NewVerifier(cfg, nil)
+			verifier, err := authkit.NewVerifier(cfg, nil, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			Expect(schemeNames(securitySchemes(cfg))).To(Equal([]string{authkit.SchemeAPIKey}))

@@ -70,7 +70,7 @@ func token(scopes string) string {
 func serve() *httptest.Server {
 	GinkgoHelper()
 
-	verifier, err := authkit.NewVerifier(e2eAuth(), nil)
+	verifier, err := authkit.NewVerifier(e2eAuth(), nil, nil)
 	Expect(err).NotTo(HaveOccurred())
 
 	ok := func(r *rest.Request, _ *restkit.NoBody) (*rest.Result[e2eBody], error) {

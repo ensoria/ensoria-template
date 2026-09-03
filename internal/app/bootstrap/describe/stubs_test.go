@@ -8,6 +8,7 @@ import (
 	"github.com/ensoria/config/pkg/registry"
 	"github.com/ensoria/ensoria-template/internal/plamo/authkit"
 	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
+	"github.com/ensoria/ensoria-template/internal/plamo/sessionkit"
 	"github.com/ensoria/file/pkg/file"
 	"github.com/ensoria/mb/pkg/mb"
 	schedulerDB "github.com/ensoria/scheduler/pkg/database"
@@ -37,6 +38,7 @@ func requireEveryStub(
 	_ schedulerDB.DatabaseClient,
 	_ authkit.Verifier,
 	_ authkit.KeyStore,
+	_ sessionkit.Store,
 	_ *goredis.Client,
 	_ mb.Publish,
 	_ worker.Enqueuer,

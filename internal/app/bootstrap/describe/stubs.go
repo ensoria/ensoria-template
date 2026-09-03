@@ -13,6 +13,7 @@ import (
 	infrastorage "github.com/ensoria/ensoria-template/internal/infra/storage"
 	"github.com/ensoria/ensoria-template/internal/plamo/authkit"
 	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
+	"github.com/ensoria/ensoria-template/internal/plamo/sessionkit"
 	"github.com/ensoria/file/pkg/file"
 	"github.com/ensoria/file/pkg/filememory"
 	"github.com/ensoria/mb/pkg/mb"
@@ -139,11 +140,12 @@ func stubs() []any {
 		// Request authentication.
 		func() authkit.Verifier { return &stubVerifier{} },
 
-		// Where API keys are looked up. The application provides it as a
-		// possibly-nil interface — nil means no built-in store is configured —
-		// and nil is what describe wants: it reads declarations and never
-		// resolves a key.
+		// Where API keys are looked up, and where browser sessions are kept.
+		// The application provides both as possibly-nil interfaces — nil means
+		// the store is not configured — and nil is what describe wants: it reads
+		// declarations and never resolves a credential.
 		func() authkit.KeyStore { return nil },
+		func() sessionkit.Store { return nil },
 
 		// The raw queue handle. server.Run provides it unnamed, so a module can
 		// inject it; go-redis connects lazily, so this client never dials.
@@ -231,14 +233,15 @@ func (*stubSchedulerDBClient) Type() schedulerDB.DBType       { return "" }
 
 // stubVerifier authenticates nobody.
 //
-// Verify answers as it would for a request that carried no credential, which is
-// the one outcome that needs no configuration. Schemes returns none, so nothing
+// Verify answers as it would for a request that carried no credential — a
+// verdict with no caller and nothing to discard — which is the one outcome that
+// needs no configuration. Schemes returns none, so nothing
 // reads a security scheme off the verifier; the schemes in the generated
 // document come from the configuration (see securitySchemes).
 type stubVerifier struct{}
 
-func (*stubVerifier) Verify(r *rest.Request) (*authkit.Principal, error) {
-	return nil, authkit.ErrNoCredential
+func (*stubVerifier) Verify(r *rest.Request) (*authkit.VerifyResult, error) {
+	return &authkit.VerifyResult{}, nil
 }
 
 func (*stubVerifier) Schemes() []string { return nil }

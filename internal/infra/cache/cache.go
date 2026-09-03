@@ -34,6 +34,7 @@ const (
 	workerPurpose    = "worker cache"
 	schedulerPurpose = "scheduler cache"
 	keyStorePurpose  = "API key store"
+	sessionPurpose   = "session store"
 )
 
 // redisOptions converts a configured Redis connection into go-redis options.
@@ -172,6 +173,26 @@ func NewDefaultCache(envVal *string) func(lc dikit.LC) (enscache.Cache, error) {
 func NewKeyStoreCache(lc dikit.LC, cfg *appconfig.Redis) enscache.Cache {
 	return cacheredis.New(newRedisClient(lc, cfg, keyStorePurpose), enclikeystore.RedisNamespace)
 }
+
+// NewSessionCache builds the store browser sessions are kept in.
+//
+// Like the key store it is a plain cacheredis rather than the tiered cache, and
+// for a stronger reason: a session read from a process-local copy outlives its
+// own revocation on the node holding it. Signing out returns, the next request
+// goes to that node, and the caller is still signed in — which is exactly the
+// guarantee a server-side session store is chosen for.
+//
+// ⚠ Its Redis database is its own (DefaultSessionRedisDB). Sharing a keyspace
+// with the cache would put sessions behind an eviction policy, and an evicted
+// session is a signed-out user.
+func NewSessionCache(lc dikit.LC, cfg *appconfig.Redis) enscache.Cache {
+	return cacheredis.New(newRedisClient(lc, cfg, sessionPurpose), sessionCacheKeyPrefix)
+}
+
+// sessionCacheKeyPrefix namespaces the session records. Unlike the API key
+// store's, this prefix is not shared with anything outside the application:
+// nothing but the application itself reads or writes a session.
+const sessionCacheKeyPrefix = "session"
 
 // NewDefaultWorkerCacheClient builds the Redis client the job queue runs on.
 func NewDefaultWorkerCacheClient(envVal *string) func(lc dikit.LC) (*goredis.Client, error) {

@@ -247,7 +247,7 @@ var _ = Describe("the development key store", func() {
 		keys, err := devKeyStore("local", cfg)
 		Expect(err).NotTo(HaveOccurred())
 
-		verifier, err := authkit.NewVerifier(cfg, keys)
+		verifier, err := authkit.NewVerifier(cfg, keys, nil)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(verifier.Schemes()).To(ContainElement(authkit.SchemeAPIKey))

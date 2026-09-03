@@ -71,13 +71,16 @@ var hs256Config = &appconfig.Auth{
 var _ = Describe("Verifier", func() {
 	Describe("no credential at all", func() {
 		It("reports that the request carried none, which is not an error yet", func() {
-			verifier, err := authkit.NewVerifier(hs256Config, nil)
+			verifier, err := authkit.NewVerifier(hs256Config, nil, nil)
 			Expect(err).NotTo(HaveOccurred())
 
-			principal, err := verifier.Verify(requestWith(nil))
+			result, err := verifier.Verify(requestWith(nil))
 
-			Expect(principal).To(BeNil())
-			Expect(err).To(MatchError(authkit.ErrNoCredential))
+			// Carrying no credential is an ordinary verdict, not an error: a
+			// public endpoint is served without one.
+			Expect(err).NotTo(HaveOccurred())
+			Expect(result.Principal).To(BeNil())
+			Expect(result.Discard).To(BeEmpty())
 		})
 	})
 
@@ -86,18 +89,18 @@ var _ = Describe("Verifier", func() {
 
 		BeforeEach(func() {
 			var err error
-			verifier, err = authkit.NewVerifier(hs256Config, nil)
+			verifier, err = authkit.NewVerifier(hs256Config, nil, nil)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
 		It("accepts a valid token and reads the caller out of it", func() {
-			principal, err := verifier.Verify(requestWith(bearer(signHS(claims()))))
+			result, err := verifier.Verify(requestWith(bearer(signHS(claims()))))
 
 			Expect(err).NotTo(HaveOccurred())
-			Expect(principal.Subject).To(Equal("usr_1"))
-			Expect(principal.Scheme).To(Equal(authkit.SchemeJWT))
-			Expect(principal.Scopes).To(Equal([]string{"users:read", "users:write"}))
-			Expect(principal.Claims).To(HaveKeyWithValue("iss", testIssuer))
+			Expect(result.Principal.Subject).To(Equal("usr_1"))
+			Expect(result.Principal.Scheme).To(Equal(authkit.SchemeJWT))
+			Expect(result.Principal.Scopes).To(Equal([]string{"users:read", "users:write"}))
+			Expect(result.Principal.Claims).To(HaveKeyWithValue("iss", testIssuer))
 		})
 
 		DescribeTable("rejects a token it cannot trust",
@@ -108,8 +111,8 @@ var _ = Describe("Verifier", func() {
 				_, err := verifier.Verify(requestWith(bearer(signHS(c))))
 
 				Expect(err).To(HaveOccurred())
-				Expect(errors.Is(err, authkit.ErrNoCredential)).To(BeFalse(),
-					"an unusable credential is not the same as a missing one")
+				Expect(errors.Is(err, authkit.ErrInvalidCredential)).To(BeTrue(),
+					"an unusable credential ends the request, unlike a missing one")
 			},
 			Entry("expired", func(c jwt.MapClaims) { c["exp"] = time.Now().Add(-time.Hour).Unix() }),
 			Entry("not yet valid", func(c jwt.MapClaims) { c["nbf"] = time.Now().Add(time.Hour).Unix() }),
@@ -155,23 +158,23 @@ var _ = Describe("Verifier", func() {
 			_, err := verifier.Verify(requestWith(map[string]string{"Authorization": "Basic dXNlcjpwYXNz"}))
 
 			Expect(err).To(HaveOccurred())
-			Expect(errors.Is(err, authkit.ErrNoCredential)).To(BeFalse())
+			Expect(errors.Is(err, authkit.ErrInvalidCredential)).To(BeTrue())
 		})
 
 		It("skips the issuer and audience checks when they are not configured", func() {
 			open, err := authkit.NewVerifier(&appconfig.Auth{
 				Mode: appconfig.AuthModeHS256, Secret: testSecret,
-			}, nil)
+			}, nil, nil)
 			Expect(err).NotTo(HaveOccurred())
 
 			c := claims()
 			c["iss"] = "https://anywhere.example.com"
 			c["aud"] = "anything"
 
-			principal, err := open.Verify(requestWith(bearer(signHS(c))))
+			result, err := open.Verify(requestWith(bearer(signHS(c))))
 
 			Expect(err).NotTo(HaveOccurred())
-			Expect(principal.Subject).To(Equal("usr_1"))
+			Expect(result.Principal.Subject).To(Equal("usr_1"))
 		})
 	})
 
@@ -196,7 +199,7 @@ var _ = Describe("Verifier", func() {
 				Issuer:       testIssuer,
 				Audience:     testAudience,
 				JWKSCacheTTL: time.Hour,
-			}, nil)
+			}, nil, nil)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
@@ -210,11 +213,11 @@ var _ = Describe("Verifier", func() {
 		}
 
 		It("accepts a token signed by a published key", func() {
-			principal, err := verifier.Verify(requestWith(bearer(signRS(signingKey, "key-1"))))
+			result, err := verifier.Verify(requestWith(bearer(signRS(signingKey, "key-1"))))
 
 			Expect(err).NotTo(HaveOccurred())
-			Expect(principal.Subject).To(Equal("usr_1"))
-			Expect(principal.Scheme).To(Equal(authkit.SchemeJWT))
+			Expect(result.Principal.Subject).To(Equal("usr_1"))
+			Expect(result.Principal.Scheme).To(Equal(authkit.SchemeJWT))
 		})
 
 		It("rejects a token signed by a key the issuer never published", func() {
@@ -241,18 +244,18 @@ var _ = Describe("Verifier", func() {
 			verifier, err = authkit.NewVerifier(&appconfig.Auth{
 				APIKeyHeader: appconfig.DefaultAPIKeyHeader,
 				APIKeys:      []string{"key-one", "key-two"},
-			}, nil)
+			}, nil, nil)
 			Expect(err).NotTo(HaveOccurred())
 		})
 
 		It("accepts a configured key", func() {
-			principal, err := verifier.Verify(requestWith(map[string]string{
+			result, err := verifier.Verify(requestWith(map[string]string{
 				appconfig.DefaultAPIKeyHeader: "key-two",
 			}))
 
 			Expect(err).NotTo(HaveOccurred())
-			Expect(principal.Scheme).To(Equal(authkit.SchemeAPIKey))
-			Expect(principal.Subject).NotTo(BeEmpty())
+			Expect(result.Principal.Scheme).To(Equal(authkit.SchemeAPIKey))
+			Expect(result.Principal.Subject).NotTo(BeEmpty())
 		})
 
 		It("rejects a key nobody configured", func() {
@@ -261,7 +264,7 @@ var _ = Describe("Verifier", func() {
 			}))
 
 			Expect(err).To(HaveOccurred())
-			Expect(errors.Is(err, authkit.ErrNoCredential)).To(BeFalse())
+			Expect(errors.Is(err, authkit.ErrInvalidCredential)).To(BeTrue())
 		})
 
 		// The distinction the whole error vocabulary exists for. A key store
@@ -279,6 +282,7 @@ var _ = Describe("Verifier", func() {
 					authkit.KeyStoreFunc(func(context.Context, string) (*authkit.Principal, error) {
 						return nil, failure
 					}),
+					nil,
 				)
 				Expect(err).NotTo(HaveOccurred())
 				return v
@@ -317,34 +321,35 @@ var _ = Describe("Verifier", func() {
 					}
 					return &authkit.Principal{Subject: "svc_1", Scopes: []string{"jobs:run"}}, nil
 				}),
+				nil,
 			)
 			Expect(err).NotTo(HaveOccurred())
 
-			principal, err := custom.Verify(requestWith(map[string]string{
+			result, err := custom.Verify(requestWith(map[string]string{
 				appconfig.DefaultAPIKeyHeader: "from-store",
 			}))
 
 			Expect(err).NotTo(HaveOccurred())
-			Expect(principal.Subject).To(Equal("svc_1"))
-			Expect(principal.Scopes).To(Equal([]string{"jobs:run"}))
+			Expect(result.Principal.Subject).To(Equal("svc_1"))
+			Expect(result.Principal.Scopes).To(Equal([]string{"jobs:run"}))
 		})
 	})
 
 	Describe("building the verifier", func() {
 		It("refuses a shared-secret setup with no secret", func() {
-			_, err := authkit.NewVerifier(&appconfig.Auth{Mode: appconfig.AuthModeHS256}, nil)
+			_, err := authkit.NewVerifier(&appconfig.Auth{Mode: appconfig.AuthModeHS256}, nil, nil)
 
 			Expect(err).To(HaveOccurred())
 		})
 
 		It("refuses a key-set setup with no URL", func() {
-			_, err := authkit.NewVerifier(&appconfig.Auth{Mode: appconfig.AuthModeJWKS}, nil)
+			_, err := authkit.NewVerifier(&appconfig.Auth{Mode: appconfig.AuthModeJWKS}, nil, nil)
 
 			Expect(err).To(HaveOccurred())
 		})
 
 		It("refuses a mode it does not know", func() {
-			_, err := authkit.NewVerifier(&appconfig.Auth{Mode: "magic", Secret: "s"}, nil)
+			_, err := authkit.NewVerifier(&appconfig.Auth{Mode: "magic", Secret: "s"}, nil, nil)
 
 			Expect(err).To(HaveOccurred())
 		})
@@ -352,7 +357,7 @@ var _ = Describe("Verifier", func() {
 		It("builds an API-key-only verifier when no JWT mode is configured", func() {
 			verifier, err := authkit.NewVerifier(&appconfig.Auth{
 				APIKeyHeader: appconfig.DefaultAPIKeyHeader, APIKeys: []string{"k"},
-			}, nil)
+			}, nil, nil)
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(verifier).NotTo(BeNil())

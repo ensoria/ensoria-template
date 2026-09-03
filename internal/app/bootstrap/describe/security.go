@@ -65,12 +65,32 @@ func describeScheme(name string, auth *appconfig.Auth) apidoc.SecurityScheme {
 			HeaderName:  apiKeyHeader(auth),
 			Description: "Key issued to a machine caller",
 		}
+	case authkit.SchemeSession:
+		return apidoc.SecurityScheme{
+			Name:        authkit.SchemeSession,
+			Type:        apidoc.SecuritySchemeTypeAPIKey,
+			In:          apidoc.SecuritySchemeInCookie,
+			HeaderName:  sessionCookieName(auth),
+			Description: "Session cookie, obtained by trading a token at POST /session",
+		}
 	default:
 		panic(fmt.Sprintf(
 			"describe: no descriptor for the %q credential scheme. "+
 				"authkit.ConfiguredSchemes reports it, so add its descriptor to describeScheme in %s",
 			name, securityFile))
 	}
+}
+
+// sessionCookieName is the cookie the session id is carried in.
+//
+// It reaches the generated document, so what the document names depends on what
+// this deployment configured — which is why documentation is generated with the
+// settings of the environment it describes.
+func sessionCookieName(auth *appconfig.Auth) string {
+	if auth != nil && auth.Session != nil && auth.Session.CookieName != "" {
+		return auth.Session.CookieName
+	}
+	return appconfig.DefaultSessionCookieName
 }
 
 // apiKeyHeader is the header an API key is read from, falling back to the

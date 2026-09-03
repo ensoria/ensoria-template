@@ -18,7 +18,7 @@ import (
 // rejectingVerifier refuses every credential it is shown (test helper).
 type rejectingVerifier struct{}
 
-func (rejectingVerifier) Verify(*rest.Request) (*authkit.Principal, error) {
+func (rejectingVerifier) Verify(*rest.Request) (*authkit.VerifyResult, error) {
 	return nil, errors.New("credential could not be verified")
 }
 

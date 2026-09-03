@@ -18,6 +18,7 @@ import (
 	"github.com/ensoria/ensoria-template/internal/infra/keystore"
 	"github.com/ensoria/ensoria-template/internal/infra/mb"
 	_ "github.com/ensoria/ensoria-template/internal/infra/mb"
+	"github.com/ensoria/ensoria-template/internal/infra/session"
 	"github.com/ensoria/ensoria-template/internal/infra/storage"
 	_ "github.com/ensoria/ensoria-template/internal/module"
 	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
@@ -50,6 +51,7 @@ func Run(envVal *string) error {
 		cache.NewDefaultWorkerCacheClient(envVal),
 		cache.NewDefaultCache(envVal),
 		keystore.NewAPIKeyStore(envVal),
+		session.NewSessionStore(envVal),
 		db.NewDefaultWorkerDBClient(envVal),
 		mb.NewSubscriberConnection(envVal),
 		mb.NewPublisherConnection(envVal),

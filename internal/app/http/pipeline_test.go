@@ -20,7 +20,7 @@ import (
 // rejectingVerifier refuses every credential it is shown (test helper).
 type rejectingVerifier struct{}
 
-func (rejectingVerifier) Verify(*rest.Request) (*authkit.Principal, error) {
+func (rejectingVerifier) Verify(*rest.Request) (*authkit.VerifyResult, error) {
 	return nil, errors.New("credential could not be verified")
 }
 
@@ -29,8 +29,8 @@ func (rejectingVerifier) Schemes() []string { return []string{authkit.SchemeJWT}
 // anonymousVerifier reports that the request carried no credential (test helper).
 type anonymousVerifier struct{}
 
-func (anonymousVerifier) Verify(*rest.Request) (*authkit.Principal, error) {
-	return nil, authkit.ErrNoCredential
+func (anonymousVerifier) Verify(*rest.Request) (*authkit.VerifyResult, error) {
+	return &authkit.VerifyResult{}, nil
 }
 
 func (anonymousVerifier) Schemes() []string { return []string{authkit.SchemeJWT} }

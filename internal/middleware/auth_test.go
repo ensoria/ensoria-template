@@ -19,11 +19,15 @@ import (
 // exercised without minting real tokens.
 type verifierStub struct {
 	principal *authkit.Principal
+	discard   []*http.Cookie
 	err       error
 }
 
-func (v verifierStub) Verify(*rest.Request) (*authkit.Principal, error) {
-	return v.principal, v.err
+func (v verifierStub) Verify(*rest.Request) (*authkit.VerifyResult, error) {
+	if v.err != nil {
+		return nil, v.err
+	}
+	return &authkit.VerifyResult{Principal: v.principal, Discard: v.discard}, nil
 }
 
 func (verifierStub) Schemes() []string { return []string{authkit.SchemeJWT} }
@@ -61,7 +65,7 @@ var _ = Describe("authentication middleware", func() {
 		// served without one, so the endpoint decides (see Endpoint.Security).
 		It("lets a request with no credential through, carrying no caller", func() {
 			var seen authkit.Principal
-			mw := middleware.Auth(verifierStub{err: authkit.ErrNoCredential})
+			mw := middleware.Auth(verifierStub{})
 
 			res := mw(okHandler(&seen))(authRequest())
 
@@ -104,6 +108,57 @@ var _ = Describe("authentication middleware", func() {
 			res := mw(okHandler(&authkit.Principal{}))(authRequest())
 
 			Expect(res.AddHeaders).To(HaveKeyWithValue("WWW-Authenticate", "Bearer"))
+		})
+
+		// A dead cookie has to be taken back, and the only place to put a
+		// Set-Cookie is the response the handler produced — which does not exist
+		// yet when the verdict is reached.
+		Describe("a verdict that asks the browser to drop a cookie", func() {
+			discarding := func() rest.Middleware {
+				return middleware.Auth(verifierStub{
+					discard: []*http.Cookie{{Name: "__Host-session", MaxAge: -1}},
+				})
+			}
+
+			It("puts the instruction on the handler's response", func() {
+				res := discarding()(okHandler(&authkit.Principal{}))(authRequest())
+
+				Expect(res.Code).To(Equal(http.StatusOK))
+				Expect(res.Cookies).To(HaveLen(1))
+				Expect(res.Cookies[0].Name).To(Equal("__Host-session"))
+			})
+
+			// The request still runs: a dead cookie means anonymous, not refused.
+			It("still serves the request", func() {
+				reached := false
+
+				discarding()(func(*rest.Request) *rest.Response {
+					reached = true
+					return &rest.Response{Code: http.StatusOK}
+				})(authRequest())
+
+				Expect(reached).To(BeTrue())
+			})
+
+			It("leaves the handler's own cookies alone", func() {
+				res := discarding()(func(*rest.Request) *rest.Response {
+					return &rest.Response{
+						Code:    http.StatusOK,
+						Cookies: []*http.Cookie{{Name: "theme", Value: "dark"}},
+					}
+				})(authRequest())
+
+				Expect(res.Cookies).To(HaveLen(2))
+			})
+
+			// Some handlers answer with nothing, and there is nowhere to put a
+			// Set-Cookie on that. The instruction is not lost for long: the
+			// browser sends the same cookie with its next request.
+			It("does not invent a response when the handler answered with none", func() {
+				res := discarding()(func(*rest.Request) *rest.Response { return nil })(authRequest())
+
+				Expect(res).To(BeNil())
+			})
 		})
 
 		// The failure that must not look like a bad credential. A key store or a
@@ -165,7 +220,7 @@ var _ = Describe("authentication middleware", func() {
 		})
 
 		It("lets an upgrade with no credential proceed", func() {
-			guard := middleware.AuthUpgrade(verifierStub{err: authkit.ErrNoCredential})
+			guard := middleware.AuthUpgrade(verifierStub{})
 
 			Expect(guard(authRequest())).To(BeNil())
 		})

@@ -14,6 +14,7 @@ import (
 	"github.com/ensoria/config/pkg/env"
 	"github.com/ensoria/config/pkg/registry"
 	"github.com/ensoria/ensoria-template/internal/plamo/authkit"
+	"github.com/ensoria/ensoria-template/internal/plamo/sessionkit"
 	"github.com/ensoria/ensoria-template/internal/plamo/stub"
 )
 
@@ -86,8 +87,13 @@ func devScopes() []string {
 //  2. The development store, in local and test, which gives the keys listed in
 //     the configuration the permissions they cannot carry on their own.
 //  3. Nothing, which leaves authkit with the configured keys as they are.
-func NewVerifier(envVal *string) func(keys authkit.KeyStore) (authkit.Verifier, error) {
-	return func(keys authkit.KeyStore) (authkit.Verifier, error) {
+//
+// sessions is where browser sessions are kept, and is nil unless
+// AUTH_SESSION_STORE names a backend (see infra/session). There is no
+// development fallback for it: a session is traded for a token that was already
+// verified, so there is nothing to stand in for.
+func NewVerifier(envVal *string) func(keys authkit.KeyStore, sessions sessionkit.Store) (authkit.Verifier, error) {
+	return func(keys authkit.KeyStore, sessions sessionkit.Store) (authkit.Verifier, error) {
 		params, err := registry.ModuleParams(defaultModule)
 		if err != nil {
 			return nil, fmt.Errorf("auth: reading the %s configuration: %w", defaultModule, err)
@@ -100,7 +106,7 @@ func NewVerifier(envVal *string) func(keys authkit.KeyStore) (authkit.Verifier, 
 				return nil, err
 			}
 		}
-		return authkit.NewVerifier(params.Auth, keys)
+		return authkit.NewVerifier(params.Auth, keys, sessions)
 	}
 }
 

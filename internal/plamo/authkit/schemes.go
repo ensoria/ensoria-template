@@ -24,5 +24,8 @@ func ConfiguredSchemes(cfg *appconfig.Auth) []string {
 	if cfg.AcceptsAPIKeys() {
 		schemes = append(schemes, SchemeAPIKey)
 	}
+	if cfg.UsesSessions() {
+		schemes = append(schemes, SchemeSession)
+	}
 	return schemes
 }

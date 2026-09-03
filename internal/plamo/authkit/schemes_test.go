@@ -54,14 +54,14 @@ var _ = Describe("what a verifier reports it can check", func() {
 	It("reports tokens for a shared-secret setup", func() {
 		v, err := authkit.NewVerifier(&appconfig.Auth{
 			Mode: appconfig.AuthModeHS256, Secret: "s",
-		}, nil)
+		}, nil, nil)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(v.Schemes()).To(Equal([]string{authkit.SchemeJWT}))
 	})
 
 	It("reports API keys for a key-list setup", func() {
-		v, err := authkit.NewVerifier(&appconfig.Auth{APIKeys: []string{"a-key"}}, nil)
+		v, err := authkit.NewVerifier(&appconfig.Auth{APIKeys: []string{"a-key"}}, nil, nil)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(v.Schemes()).To(Equal([]string{authkit.SchemeAPIKey}))
@@ -74,7 +74,7 @@ var _ = Describe("what a verifier reports it can check", func() {
 			return &authkit.Principal{Subject: "svc_1", Scheme: authkit.SchemeAPIKey}, nil
 		})
 
-		v, err := authkit.NewVerifier(&appconfig.Auth{}, store)
+		v, err := authkit.NewVerifier(&appconfig.Auth{}, store, nil)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(v.Schemes()).To(Equal([]string{authkit.SchemeAPIKey}))
@@ -83,14 +83,14 @@ var _ = Describe("what a verifier reports it can check", func() {
 	It("reports both when both are set up", func() {
 		v, err := authkit.NewVerifier(&appconfig.Auth{
 			Mode: appconfig.AuthModeHS256, Secret: "s", APIKeys: []string{"a-key"},
-		}, nil)
+		}, nil, nil)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(v.Schemes()).To(Equal([]string{authkit.SchemeJWT, authkit.SchemeAPIKey}))
 	})
 
 	It("reports nothing when nothing was set up", func() {
-		v, err := authkit.NewVerifier(&appconfig.Auth{}, nil)
+		v, err := authkit.NewVerifier(&appconfig.Auth{}, nil, nil)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(v.Schemes()).To(BeEmpty())

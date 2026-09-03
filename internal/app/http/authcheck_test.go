@@ -35,8 +35,8 @@ func moduleWith(securities ...*restkit.SecuritySpec) []*rest.Module {
 // with a request does not matter here; the check only asks what it can verify.
 type verifierFor []string
 
-func (verifierFor) Verify(*rest.Request) (*authkit.Principal, error) {
-	return nil, authkit.ErrNoCredential
+func (verifierFor) Verify(*rest.Request) (*authkit.VerifyResult, error) {
+	return &authkit.VerifyResult{}, nil
 }
 
 func (v verifierFor) Schemes() []string { return v }

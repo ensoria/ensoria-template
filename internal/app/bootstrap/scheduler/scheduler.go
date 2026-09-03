@@ -9,6 +9,7 @@ import (
 	"github.com/ensoria/ensoria-template/internal/infra/db"
 	"github.com/ensoria/ensoria-template/internal/infra/keystore"
 	"github.com/ensoria/ensoria-template/internal/infra/mb"
+	"github.com/ensoria/ensoria-template/internal/infra/session"
 	"github.com/ensoria/ensoria-template/internal/infra/storage"
 	"github.com/ensoria/websocket/pkg/wsrouter"
 
@@ -55,6 +56,7 @@ func Start(envVal *string) error {
 		cache.NewDefaultCache(envVal),
 		db.NewDefaultSchedulerDBClient(envVal),
 		keystore.NewAPIKeyStore(envVal),
+		session.NewSessionStore(envVal),
 
 		// TODO: 無くてもいいようにする?
 		dikit.ProvideNamed(cache.NewDefaultWorkerCacheClient(envVal), "workerCache"),

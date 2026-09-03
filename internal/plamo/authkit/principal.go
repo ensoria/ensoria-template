@@ -11,14 +11,18 @@ package authkit
 
 import (
 	"context"
+	"maps"
 	"slices"
+
+	"github.com/ensoria/ensoria-template/internal/plamo/sessionkit"
 )
 
 // The schemes a caller can authenticate with. They double as the names used in
 // the generated OpenAPI security schemes.
 const (
-	SchemeJWT    = "jwt"
-	SchemeAPIKey = "apiKey"
+	SchemeJWT     = "jwt"
+	SchemeAPIKey  = "apiKey"
+	SchemeSession = "session"
 )
 
 // Principal is the verified caller: who they are and what they may do.
@@ -27,7 +31,8 @@ type Principal struct {
 	Subject string
 	// Scopes are the permissions the credential carries.
 	Scopes []string
-	// Scheme is how the caller authenticated: SchemeJWT or SchemeAPIKey.
+	// Scheme is how the caller authenticated: SchemeJWT, SchemeAPIKey or
+	// SchemeSession.
 	Scheme string
 	// Claims are the remaining token claims, for application code that needs
 	// more than the fields above. Nil for API keys.
@@ -61,6 +66,41 @@ func (p *Principal) HasScheme(accepted []string) bool {
 		return true
 	}
 	return slices.Contains(accepted, p.Scheme)
+}
+
+// SnapshotOf records who a caller is, in the form a session keeps.
+//
+// The scheme is deliberately not carried over. A snapshot is taken from a caller
+// who presented a token, and every request that later restores it presents a
+// cookie — so the value would be wrong from the moment it was written. Leaving
+// it out of the stored shape means it cannot be got wrong rather than having to
+// be remembered.
+func SnapshotOf(p *Principal) *sessionkit.Snapshot {
+	if p == nil {
+		return nil
+	}
+	return &sessionkit.Snapshot{
+		Subject: p.Subject,
+		Scopes:  slices.Clone(p.Scopes),
+		Claims:  maps.Clone(p.Claims),
+	}
+}
+
+// PrincipalOf restores the caller a session was created for.
+//
+// The scheme is SchemeSession whatever the caller presented when the session was
+// created: this request presented a cookie, and an endpoint declaring
+// Schemes: [session] is asking about this request.
+func PrincipalOf(snapshot *sessionkit.Snapshot) *Principal {
+	if snapshot == nil {
+		return nil
+	}
+	return &Principal{
+		Subject: snapshot.Subject,
+		Scopes:  slices.Clone(snapshot.Scopes),
+		Scheme:  SchemeSession,
+		Claims:  maps.Clone(snapshot.Claims),
+	}
 }
 
 // principalKey is unexported so that nothing outside this package can replace

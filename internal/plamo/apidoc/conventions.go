@@ -28,6 +28,7 @@ type SecurityScheme struct {
 	// BearerFormat は bearer トークンの形式(例 "JWT")。
 	BearerFormat string `json:"bearer_format,omitempty"`
 	// In と HeaderName は Type=="apiKey" のときの受け取り場所。
+	// In が "cookie" のとき、HeaderName は Cookie 名を指す。
 	In         string `json:"in,omitempty"`
 	HeaderName string `json:"header_name,omitempty"`
 	// Description は呼び出し元向けの補足。
@@ -39,6 +40,7 @@ const (
 	SecuritySchemeTypeHTTP   = "http"
 	SecuritySchemeTypeAPIKey = "apiKey"
 	SecuritySchemeInHeader   = "header"
+	SecuritySchemeInCookie   = "cookie"
 	SecuritySchemeBearer     = "bearer"
 	BearerFormatJWT          = "JWT"
 )
