@@ -23,6 +23,7 @@ import (
 	//
 	// They belong here rather than in http.go or messaging.go because both
 	// surfaces are built out of them.
+	_ "github.com/ensoria/ensoria-template/internal/app/auth/api"
 	_ "github.com/ensoria/ensoria-template/internal/app/scheduler/api"
 	_ "github.com/ensoria/ensoria-template/internal/app/worker/api"
 	_ "github.com/ensoria/ensoria-template/internal/module"

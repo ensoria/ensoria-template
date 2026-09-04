@@ -58,7 +58,7 @@ var _ = Describe("globalMiddlewares", func() {
 	It("refuses a request whose credential cannot be trusted", func() {
 		reached := false
 
-		res := chain(globalMiddlewares(settings, rejectingVerifier{}, panicResponse),
+		res := chain(globalMiddlewares(settings, http.NewCrossOriginProtection(), rejectingVerifier{}, panicResponse),
 			func(*rest.Request) *rest.Response {
 				reached = true
 				return &rest.Response{Code: http.StatusOK}
@@ -69,7 +69,7 @@ var _ = Describe("globalMiddlewares", func() {
 	})
 
 	It("keeps serving a request that presents no credential", func() {
-		res := chain(globalMiddlewares(settings, anonymousVerifier{}, panicResponse),
+		res := chain(globalMiddlewares(settings, http.NewCrossOriginProtection(), anonymousVerifier{}, panicResponse),
 			func(*rest.Request) *rest.Response { return &rest.Response{Code: http.StatusOK} })(request())
 
 		Expect(res.Code).To(Equal(http.StatusOK),

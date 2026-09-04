@@ -103,6 +103,7 @@ func serve() *httptest.Server {
 		Modules: modules,
 		GlobalMiddlewares: globalMiddlewares(
 			&mw.CORSSettings{AllowOrigin: "*"},
+			http.NewCrossOriginProtection(),
 			verifier,
 			&rest.Response{Code: http.StatusInternalServerError},
 		),

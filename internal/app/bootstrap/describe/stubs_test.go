@@ -39,6 +39,7 @@ func requireEveryStub(
 	_ authkit.Verifier,
 	_ authkit.KeyStore,
 	_ sessionkit.Store,
+	_ *sessionkit.Cookies,
 	_ *goredis.Client,
 	_ mb.Publish,
 	_ worker.Enqueuer,

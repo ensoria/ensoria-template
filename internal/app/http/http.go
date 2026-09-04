@@ -60,7 +60,13 @@ func NewHTTPApp(envVal *string) func(lc dikit.LC, shutdowner dikit.Shutdowner, h
 	}
 }
 
-func CreateHTTPPipeline(modules []*rest.Module, verifier authkit.Verifier) (*pipeline.HTTP, error) {
+func CreateHTTPPipeline(envVal *string) func(modules []*rest.Module, verifier authkit.Verifier) (*pipeline.HTTP, error) {
+	return func(modules []*rest.Module, verifier authkit.Verifier) (*pipeline.HTTP, error) {
+		return createHTTPPipeline(*envVal, modules, verifier)
+	}
+}
+
+func createHTTPPipeline(envVal string, modules []*rest.Module, verifier authkit.Verifier) (*pipeline.HTTP, error) {
 	// TODO: 別のファイルに分ける
 	panicResponse := &rest.Response{
 		Code: http.StatusInternalServerError,
@@ -74,7 +80,20 @@ func CreateHTTPPipeline(modules []*rest.Module, verifier authkit.Verifier) (*pip
 
 	// 宣言と設定の食い違いを起動時に潰す。放っておくと全リクエストが拒否されるだけで、
 	// 原因が見えない。
+	//
+	// The session checks run first. They are the specific case of the same
+	// mistake, and their messages name the wiring rather than the symptom.
+	if err := checkSessionConfiguration(envVal, configParams, modules); err != nil {
+		return nil, err
+	}
 	if err := checkAuthConfiguration(modules, verifier); err != nil {
+		return nil, err
+	}
+
+	// Which origins may make a browser send a state-changing request is the
+	// same list CORS answers with, so it is read from the same setting.
+	crossOrigin, err := middleware.NewCrossOriginProtection(configParams.CORS.AllowOrigin())
+	if err != nil {
 		return nil, err
 	}
 
@@ -95,7 +114,7 @@ func CreateHTTPPipeline(modules []*rest.Module, verifier authkit.Verifier) (*pip
 
 	return &pipeline.HTTP{
 		Modules:           modules,
-		GlobalMiddlewares: globalMiddlewares(cors, verifier, panicResponse),
+		GlobalMiddlewares: globalMiddlewares(cors, crossOrigin, verifier, panicResponse),
 		// Layer 2: コントローラ/ミドルウェアチェーンの実行（=レスポンスの計算）の上限時間。
 		// 0で無効。ストリーミング/ファイル/WebSocketは対象外。
 		Timeout:         configParams.Server.HandlerTimeout,
@@ -137,23 +156,34 @@ func RegisterHTTPServerLifecycle(lc dikit.LC, shutdowner dikit.Shutdowner, srv *
 	})
 }
 
-// InjectHTTPModules tags the first parameter as the HTTP module group. The
-// remaining parameters (the credential verifier) are resolved by type.
 // globalMiddlewares builds the chain every request passes through.
 //
 // The list runs outside-in, so authentication sits last: logging, panic recovery
 // and CORS still apply to a request that is refused, and a CORS preflight (which
 // carries no credential) is answered before authentication is considered.
-func globalMiddlewares(cors *mw.CORSSettings, verifier authkit.Verifier, panicResponse *rest.Response) []rest.Middleware {
+//
+// The cross-origin check sits between CORS and authentication. Before
+// authentication, so a forged request is refused without the session store
+// being asked about the cookie it carried; after CORS, so a preflight is still
+// answered by the one middleware that knows how to answer it.
+func globalMiddlewares(
+	cors *mw.CORSSettings,
+	crossOrigin middleware.CrossOriginChecker,
+	verifier authkit.Verifier,
+	panicResponse *rest.Response,
+) []rest.Middleware {
 	return []rest.Middleware{
 		mw.Logging(logIncomingRequest),
 		mw.RecoveryWithLogger(panicResponse, logPanicDetails),
 		mw.VerifyBodyParsable,
 		mw.NewCORS(cors),
+		middleware.CSRF(crossOrigin),
 		middleware.Auth(verifier),
 	}
 }
 
+// InjectHTTPModules tags the first parameter as the HTTP module group. The
+// remaining parameters (the credential verifier) are resolved by type.
 func InjectHTTPModules(f any) any {
 	return fx.Annotate(f, fx.ParamTags(dikit.GroupTagHttpModules, ``))
 }

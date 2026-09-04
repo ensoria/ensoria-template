@@ -33,30 +33,63 @@ const sessionKeyPrefix = "session"
 // configuration says otherwise.
 func NewSessionStore(envVal *string) func(lc dikit.LC) (sessionkit.Store, error) {
 	return func(lc dikit.LC) (sessionkit.Store, error) {
-		params, err := registry.ModuleParams(defaultModule)
+		settings, err := sessionSettings()
 		if err != nil {
-			return nil, fmt.Errorf("session: reading the %s configuration: %w", defaultModule, err)
+			return nil, err
 		}
-		return build(lc, *envVal, params.Auth)
+		if settings == nil {
+			return nil, nil
+		}
+
+		sessionCfg, err := sessionkit.NewConfig(settings)
+		if err != nil {
+			return nil, err
+		}
+		cache, err := backingStore(lc, *envVal, settings)
+		if err != nil {
+			return nil, err
+		}
+		return sessionkit.NewStore(cache, sessionCfg)
 	}
 }
 
-// build selects the backend AUTH_SESSION_STORE named.
-func build(lc dikit.LC, envVal string, cfg *appconfig.Auth) (sessionkit.Store, error) {
-	if cfg == nil || cfg.Session == nil {
+// NewSessionCookies builds the writer for the session cookie, or nothing.
+//
+// Nil means the same as a nil Store: AUTH_SESSION_STORE is unset, so no cookie
+// is ever written. The endpoints that trade a token for a session take both,
+// and the startup checks are what stop an application from serving them with
+// neither.
+//
+// It is a second constructor rather than a field on the store because the two
+// are wanted in different places: the verifier and the exchange endpoints write
+// cookies, and only the endpoints create sessions.
+func NewSessionCookies() (*sessionkit.Cookies, error) {
+	settings, err := sessionSettings()
+	if err != nil {
+		return nil, err
+	}
+	if settings == nil {
 		return nil, nil
 	}
 
-	sessionCfg, err := sessionkit.NewConfig(cfg.Session)
+	sessionCfg, err := sessionkit.NewConfig(settings)
 	if err != nil {
 		return nil, err
 	}
+	return sessionkit.NewCookies(sessionCfg), nil
+}
 
-	cache, err := backingStore(lc, envVal, cfg.Session)
+// sessionSettings reads the session settings, or nil when the application does
+// not authenticate browsers with a cookie.
+func sessionSettings() (*appconfig.AuthSession, error) {
+	params, err := registry.ModuleParams(defaultModule)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("session: reading the %s configuration: %w", defaultModule, err)
 	}
-	return sessionkit.NewStore(cache, sessionCfg)
+	if params.Auth == nil {
+		return nil, nil
+	}
+	return params.Auth.Session, nil
 }
 
 // backingStore opens the storage the selected backend keeps sessions in.

@@ -32,10 +32,15 @@ const (
 // judged, because something this application depends on did not answer.
 const UnavailableCode = "unavailable"
 
-// unavailableMessage says only that the failure is on this side and that trying
+// UnavailableMessage says only that the failure is on this side and that trying
 // again is worthwhile. What exactly is down is not the caller's business, and
 // naming it tells a prober which dependency to attack.
-const unavailableMessage = "the request could not be completed; try again shortly"
+//
+// It is exported because an endpoint can reach the same conclusion the
+// middleware does — a handler whose store did not answer returns this status
+// itself — and a caller should not be able to tell the two apart by their
+// wording.
+const UnavailableMessage = "the request could not be completed; try again shortly"
 
 // ForbiddenResponse is the answer given to a caller the application recognises
 // but that lacks what this operation requires.
@@ -66,7 +71,7 @@ func UnavailableResponse() *rest.Response {
 		Code: http.StatusServiceUnavailable,
 		Body: &ErrorEnvelope{Error: ErrorDetail{
 			Code:    UnavailableCode,
-			Message: unavailableMessage,
+			Message: UnavailableMessage,
 		}},
 	}
 }

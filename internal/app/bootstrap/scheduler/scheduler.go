@@ -77,7 +77,7 @@ func Start(envVal *string) error {
 		// FIXME: schedulerだけでなく、moduleのものも全部うごいてしまっているので修正
 		// scheduler管理用のエンドポイントのみ
 		authApp.NewVerifier(envVal),
-		httpApp.InjectHTTPModules(httpApp.CreateHTTPPipeline),
+		httpApp.InjectHTTPModules(httpApp.CreateHTTPPipeline(envVal)),
 		NewEmptyWSRouter,
 	})
 

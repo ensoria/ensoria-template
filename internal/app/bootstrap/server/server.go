@@ -6,6 +6,10 @@ import (
 	"github.com/ensoria/config/pkg/registry"
 	assets "github.com/ensoria/ensoria-template"
 	authApp "github.com/ensoria/ensoria-template/internal/app/auth"
+	// Imported for its init(), which registers POST /session and DELETE /session.
+	// An application that does not authenticate browsers with a cookie drops
+	// this line and unsets AUTH_SESSION_STORE.
+	_ "github.com/ensoria/ensoria-template/internal/app/auth/api"
 	"github.com/ensoria/ensoria-template/internal/app/bootstrap"
 	grpcApp "github.com/ensoria/ensoria-template/internal/app/grpc"
 	httpApp "github.com/ensoria/ensoria-template/internal/app/http"
@@ -52,6 +56,7 @@ func Run(envVal *string) error {
 		cache.NewDefaultCache(envVal),
 		keystore.NewAPIKeyStore(envVal),
 		session.NewSessionStore(envVal),
+		session.NewSessionCookies,
 		db.NewDefaultWorkerDBClient(envVal),
 		mb.NewSubscriberConnection(envVal),
 		mb.NewPublisherConnection(envVal),
@@ -60,7 +65,7 @@ func Run(envVal *string) error {
 
 		// controllers
 		authApp.NewVerifier(envVal),
-		httpApp.InjectHTTPModules(httpApp.CreateHTTPPipeline),
+		httpApp.InjectHTTPModules(httpApp.CreateHTTPPipeline(envVal)),
 		wsApp.InjectWSModules(wsApp.CreateWSRouter),
 		mbApp.NewSubscribe,
 		mbApp.NewPublish,

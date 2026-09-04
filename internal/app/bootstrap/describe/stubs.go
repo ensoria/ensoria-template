@@ -147,6 +147,11 @@ func stubs() []any {
 		func() authkit.KeyStore { return nil },
 		func() sessionkit.Store { return nil },
 
+		// The writer of the session cookie. Nil for the same reason the store
+		// above is: the session endpoints are built here to be read, never to
+		// be run, so nothing ever writes a cookie.
+		func() *sessionkit.Cookies { return nil },
+
 		// The raw queue handle. server.Run provides it unnamed, so a module can
 		// inject it; go-redis connects lazily, so this client never dials.
 		func() *goredis.Client { return goredis.NewClient(&goredis.Options{}) },
