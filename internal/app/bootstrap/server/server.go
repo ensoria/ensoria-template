@@ -6,9 +6,18 @@ import (
 	"github.com/ensoria/config/pkg/registry"
 	assets "github.com/ensoria/ensoria-template"
 	authApp "github.com/ensoria/ensoria-template/internal/app/auth"
-	// Imported for its init(), which registers POST /session and DELETE /session.
-	// An application that does not authenticate browsers with a cookie drops
-	// this line and unsets AUTH_SESSION_STORE.
+	// Imported for its init(), which registers POST /session and DELETE /session
+	// (the cookie sign-in and sign-out).
+	//
+	// ⚠ This line and AUTH_SESSION_STORE turn cookie authentication off
+	// together, and neither does it alone. Removing only this leaves an
+	// application that accepts session cookies but has no way to create one;
+	// unsetting only AUTH_SESSION_STORE is refused at startup, because these
+	// endpoints would answer 503 to every sign-in.
+	//
+	// Removing it also means removing it from
+	// internal/app/bootstrap/describe/doc.go, or the generated documentation
+	// keeps describing two endpoints this application no longer serves.
 	_ "github.com/ensoria/ensoria-template/internal/app/auth/api"
 	"github.com/ensoria/ensoria-template/internal/app/bootstrap"
 	grpcApp "github.com/ensoria/ensoria-template/internal/app/grpc"
@@ -55,6 +64,17 @@ func Run(envVal *string) error {
 		cache.NewDefaultWorkerCacheClient(envVal),
 		cache.NewDefaultCache(envVal),
 		keystore.NewAPIKeyStore(envVal),
+		// Where browser sessions are kept, and the writer of the cookie that
+		// carries one. Both answer nil when AUTH_SESSION_STORE is unset, which
+		// is what cookie authentication being off looks like — so an
+		// application that does not use it leaves these alone and unsets the
+		// key (together with the blank import above).
+		//
+		// ⚠ NewSessionStore cannot be deleted even then: NewVerifier below
+		// takes a sessionkit.Store, so removing the provider fails the graph
+		// with `missing type: sessionkit.Store` rather than turning anything
+		// off. NewSessionCookies can be, once the blank import above is gone —
+		// the session endpoints are the only thing that asks for it.
 		session.NewSessionStore(envVal),
 		session.NewSessionCookies,
 		db.NewDefaultWorkerDBClient(envVal),

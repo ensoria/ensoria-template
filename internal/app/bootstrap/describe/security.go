@@ -4,6 +4,11 @@ import (
 	"fmt"
 
 	"github.com/ensoria/config/pkg/appconfig"
+	// Imported for SessionPath, so that the description below names the path
+	// this application serves rather than a copy of it. doc.go imports the same
+	// package for its init(); this is the same dependency, used rather than
+	// only registered.
+	authapi "github.com/ensoria/ensoria-template/internal/app/auth/api"
 	"github.com/ensoria/ensoria-template/internal/plamo/apidoc"
 	"github.com/ensoria/ensoria-template/internal/plamo/authkit"
 )
@@ -71,7 +76,7 @@ func describeScheme(name string, auth *appconfig.Auth) apidoc.SecurityScheme {
 			Type:        apidoc.SecuritySchemeTypeAPIKey,
 			In:          apidoc.SecuritySchemeInCookie,
 			HeaderName:  sessionCookieName(auth),
-			Description: "Session cookie, obtained by trading a token at POST /session",
+			Description: "Session cookie, obtained by trading a token at POST " + authapi.SessionPath,
 		}
 	default:
 		panic(fmt.Sprintf(

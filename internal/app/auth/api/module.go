@@ -19,12 +19,17 @@ import (
 	"github.com/ensoria/rest/pkg/rest"
 )
 
-// sessionPath is where a session is created and ended. It is one path with two
+// SessionPath is where a session is created and ended. It is one path with two
 // methods rather than /login and /logout because a session is a resource: POST
 // makes one, DELETE ends it, and there is nothing to name in between.
-const sessionPath = "/session"
+//
+// It is exported so that the generated documentation can name the path this
+// application actually serves rather than a copy of it (see describeScheme in
+// internal/app/bootstrap/describe). A project that needs /session for something
+// of its own changes this constant, and the documentation follows.
+const SessionPath = "/session"
 
-// NewSessionModule serves the session exchange at sessionPath.
+// NewSessionModule serves the session exchange at SessionPath.
 //
 // Both dependencies may be nil, which is what they are when the application
 // does not authenticate browsers with a cookie. The module is still built —
@@ -33,7 +38,7 @@ const sessionPath = "/session"
 // endpoints in that state.
 func NewSessionModule(sessions sessionkit.Store, cookies *sessionkit.Cookies) *rest.Module {
 	return &rest.Module{
-		Path:   sessionPath,
+		Path:   SessionPath,
 		Post:   restkit.NewController(http.NewCreateSession(sessions, cookies)),
 		Delete: restkit.NewController(http.NewDeleteSession(sessions, cookies)),
 	}

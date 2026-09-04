@@ -23,6 +23,12 @@ import (
 	//
 	// They belong here rather than in http.go or messaging.go because both
 	// surfaces are built out of them.
+	//
+	// ⚠ auth/api is the pair of internal/app/bootstrap/server's blank import of
+	// the same package. A project that stops serving the session endpoints has
+	// to remove both, or the generated documents keep describing two endpoints
+	// the application does not serve. (security.go imports it again by name,
+	// for the path the session scheme's description quotes.)
 	_ "github.com/ensoria/ensoria-template/internal/app/auth/api"
 	_ "github.com/ensoria/ensoria-template/internal/app/scheduler/api"
 	_ "github.com/ensoria/ensoria-template/internal/app/worker/api"

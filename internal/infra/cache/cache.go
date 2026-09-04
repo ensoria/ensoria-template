@@ -189,10 +189,15 @@ func NewSessionCache(lc dikit.LC, cfg *appconfig.Redis) enscache.Cache {
 	return cacheredis.New(newRedisClient(lc, cfg, sessionPurpose), sessionCacheKeyPrefix)
 }
 
-// sessionCacheKeyPrefix namespaces the session records. Unlike the API key
-// store's, this prefix is not shared with anything outside the application:
-// nothing but the application itself reads or writes a session.
-const sessionCacheKeyPrefix = "session"
+// sessionCacheKeyPrefix namespaces the session records.
+//
+// It is the same word the API key store uses (enclikeystore.RedisNamespace), so
+// that the two credential stores read alike: auth:apikey:<fingerprint> in one
+// database and auth:session:<id> in another. It is a copy rather than that
+// constant because the two are not the same fact — the key store's namespace is
+// a cross-repository contract with encli, and this one is the application's own
+// business, since nothing outside it reads or writes a session.
+const sessionCacheKeyPrefix = "auth"
 
 // NewDefaultWorkerCacheClient builds the Redis client the job queue runs on.
 func NewDefaultWorkerCacheClient(envVal *string) func(lc dikit.LC) (*goredis.Client, error) {

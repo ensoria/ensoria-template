@@ -22,8 +22,10 @@ import (
 // Sessions belong to the application rather than to one module.
 const defaultModule = "default"
 
-// sessionKeyPrefix namespaces the session records within their Redis database.
-const sessionKeyPrefix = "session"
+// sessionKeyPrefix namespaces the session records held in the process. It
+// mirrors the prefix the Redis store is built with (sessionCacheKeyPrefix in
+// infra/cache) so that a key looks the same whichever backend holds it.
+const sessionKeyPrefix = "auth"
 
 // NewSessionStore builds the browser session store, or nothing.
 //

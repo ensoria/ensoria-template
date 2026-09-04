@@ -371,6 +371,120 @@ curl -i -X POST localhost:8080/order/payment-callback \
 - **エラーの中身は外に漏れません。** アダプタが 401 に丸め、本文は理由を明かしません。
   `Lookup` のエラーに内部情報を書いてもクライアントには出ません（ログには出ます）
 
+#### Cookie authentication (browser sessions)
+
+A browser needs a credential it can hold between requests, and neither of the two
+above will do: a JWT put where JavaScript can read it is readable by anything
+injected into the page, and an API key is a machine's credential. What a browser
+gets instead is an opaque id in an `HttpOnly` cookie, matched against a record on
+the server.
+
+Naming a store turns it on. There is no separate enable switch, because two keys
+expressing one fact can disagree:
+
+```sh
+AUTH_SESSION_STORE=redis   # redis, or memory (local and test only)
+```
+
+The browser presents its token **once**, and is served by cookie from then on.
+Because the record lives on the server, signing out takes effect on the next
+request rather than whenever the token would have expired.
+
+##### The two routes the framework serves
+
+| Route | Accepts | Answers |
+|---|---|---|
+| `POST /session` | `Schemes: [jwt]` — a bearer token | `201` + `Set-Cookie` |
+| `DELETE /session` | `Schemes: [session]` — the cookie | `204` + the instruction to drop it |
+
+**`/session` is where this framework puts the session exchange, and a project
+should treat both methods on that path as taken.** They are registered by
+[internal/app/auth/api](internal/app/auth/api/module.go), which
+[internal/app/bootstrap/server](internal/app/bootstrap/server/server.go) imports
+for its `init()`. If you declare a module of your own on `/session`, both are
+registered on the same path and the collision is yours to discover at runtime.
+
+> `DELETE /session` answers `401`, not `204`, when there is no live session —
+> `Schemes: [session]` means a verified caller is required, and a request with no
+> cookie has none. **The response still carries the instruction to drop the
+> cookie**, so both answers leave the caller signed out; a client can treat them
+> identically. Signing out twice therefore produces one `204` and one `401`.
+
+##### Changing the path
+
+`/session` is **not reserved by machinery**. Nothing in the framework routes,
+dispatches or looks up by that literal — it is a declared route like any other,
+written once:
+
+```go
+// internal/app/auth/api/module.go
+const SessionPath = "/session"
+```
+
+Change that constant and the endpoints move. The generated documentation follows
+on its own: the `session` security scheme's description quotes `SessionPath`
+rather than a copy of it, so `securitySchemes` keeps naming the path you actually
+serve.
+
+**Prefer not to, though.** Every example in this README, the identity-provider
+setup, and anything `encli` adds later assume `/session`, so a project that moves
+it diverges from its own framework's documentation for as long as it lives.
+Change it when `/session` collides with a resource you own — a `Session` model of
+your own, say — and not for taste.
+
+##### Turning cookie authentication off
+
+An application whose callers are all services or mobile clients turns it off in
+**two places, and both are required**:
+
+1. unset `AUTH_SESSION_STORE`
+2. remove the blank import of `internal/app/auth/api` from
+   [internal/app/bootstrap/server](internal/app/bootstrap/server/server.go) —
+   **and from [internal/app/bootstrap/describe/doc.go](internal/app/bootstrap/describe/doc.go)**,
+   or the generated documents keep describing two endpoints you no longer serve
+
+Neither does it alone, and the combinations are not symmetric:
+
+| `AUTH_SESSION_STORE` | Blank import | Result |
+|---|---|---|
+| set | kept | Cookie authentication, the normal setup |
+| set | removed | Boots. Session cookies are still **verified**; nothing can **create** one. Useful when another service issues them |
+| unset | kept | **Refused at startup.** The endpoints would answer `503` to every sign-in |
+| unset | removed | Cookie authentication off |
+
+**Leave the two `session.*` constructors in the dependency graph either way.**
+They answer `nil` when `AUTH_SESSION_STORE` is unset, which is exactly what "off"
+looks like:
+
+```go
+session.NewSessionStore(envVal),   // required: NewVerifier takes a sessionkit.Store
+session.NewSessionCookies,         // may be removed once the blank import is gone
+```
+
+Deleting `NewSessionStore` does not turn anything off — it fails the graph with
+`missing type: sessionkit.Store`, because the verifier asks for one whether or
+not sessions are configured.
+
+##### What a cookie forces you to configure
+
+A cookie is attached by the browser to **every** request to this origin, whoever
+caused it — including a form on another site. That is the one weakness cookies
+have and bearer tokens do not, and it is why two settings stop being optional:
+
+- **`CORS_ALLOW_ORIGIN` may not be `*`.** A wildcard says every site is this
+  application's frontend. The application refuses to start with that combination,
+  and browsers refuse `*` together with credentials in any case. A frontend served
+  from this same origin needs no CORS at all — leave the key unset.
+- **`CORS_ALLOW_CREDENTIALS=true`** when the frontend is on another origin, or the
+  browser drops the cookie and every request arrives anonymous.
+
+The same list feeds the cross-origin check in
+[internal/middleware/csrf.go](internal/middleware/csrf.go), which refuses
+state-changing requests a browser reports as coming from an untrusted origin.
+It reads `CORS_ALLOW_ORIGIN` rather than a setting of its own, so the two cannot
+disagree about which origin is yours.
+
+
 ### 検証は宣言するだけ
 
 `BodyRules` / `PathRules` / `QueryRules` に宣言した検証は、`Handle` が呼ばれる**前**に実行されます。
