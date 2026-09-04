@@ -59,11 +59,25 @@ func withDiscardedCookies(res *rest.Response, result *authkit.VerifyResult) *res
 // The WebSocket layer takes a pre-upgrade handler rather than a wrapping
 // middleware, and treats a non-nil response as "refuse the upgrade". Rejecting
 // here means an unusable credential never opens a connection at all.
+//
+// ⚠ It refuses a credential it cannot trust, not a missing one. A handshake
+// carrying no cookie — or one whose session has expired or been signed out
+// elsewhere — opens an anonymous connection, exactly as an anonymous HTTP
+// request is served. What decides whether that is acceptable is the channel,
+// not this: there is no per-channel security declaration the way restkit has
+// one for endpoints.
+//
 // ⚠ An upgrade that succeeds has nowhere to put a Set-Cookie: the WebSocket
 // library writes that response itself, and this handler is only consulted about
-// whether to refuse. So a browser connecting to a public channel with a dead
-// session cookie keeps it for now — until its next ordinary HTTP request, which
-// carries the instruction back.
+// whether to refuse. So a browser that connected with a dead session cookie
+// keeps it for now — until its next ordinary HTTP request, which carries the
+// instruction back. Measured 2026-09-04: the handshake response for a dead
+// cookie carries no Set-Cookie at all (see internal/app/ws/e2e_test.go).
+//
+// ⚠ This is not the origin check. An upgrade is a GET, so the cross-origin
+// middleware lets every handshake through; middleware.UpgradeOrigin is what
+// refuses one a browser started from somewhere else, and the router runs it
+// before this.
 func AuthUpgrade(verifier authkit.Verifier) rest.Handler {
 	return func(r *rest.Request) *rest.Response {
 		_, refusal := authenticate(verifier, r)

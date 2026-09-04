@@ -11,6 +11,7 @@ import (
 	"github.com/ensoria/cache/pkg/cachememory"
 	"github.com/ensoria/config/pkg/registry"
 	infrastorage "github.com/ensoria/ensoria-template/internal/infra/storage"
+	"github.com/ensoria/ensoria-template/internal/middleware"
 	"github.com/ensoria/ensoria-template/internal/plamo/authkit"
 	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
 	"github.com/ensoria/ensoria-template/internal/plamo/sessionkit"
@@ -151,6 +152,11 @@ func stubs() []any {
 		// above is: the session endpoints are built here to be read, never to
 		// be run, so nothing ever writes a cookie.
 		func() *sessionkit.Cookies { return nil },
+
+		// Which origins the deployment calls its own frontend. Empty, because
+		// nothing describe does consults it: origins decide whether a request
+		// is served, and describe reads declarations without serving one.
+		func() *middleware.Origins { return middleware.ParseOrigins("") },
 
 		// The raw queue handle. server.Run provides it unnamed, so a module can
 		// inject it; go-redis connects lazily, so this client never dials.

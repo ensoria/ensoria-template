@@ -61,13 +61,15 @@ func NewHTTPApp(envVal *string) func(lc dikit.LC, shutdowner dikit.Shutdowner, h
 	}
 }
 
-func CreateHTTPPipeline(envVal *string) func(modules []*rest.Module, verifier authkit.Verifier) (*pipeline.HTTP, error) {
-	return func(modules []*rest.Module, verifier authkit.Verifier) (*pipeline.HTTP, error) {
-		return createHTTPPipeline(*envVal, modules, verifier)
+func CreateHTTPPipeline(envVal *string) func(modules []*rest.Module, verifier authkit.Verifier, origins *middleware.Origins) (*pipeline.HTTP, error) {
+	return func(modules []*rest.Module, verifier authkit.Verifier, origins *middleware.Origins) (*pipeline.HTTP, error) {
+		return createHTTPPipeline(*envVal, modules, verifier, origins)
 	}
 }
 
-func createHTTPPipeline(envVal string, modules []*rest.Module, verifier authkit.Verifier) (*pipeline.HTTP, error) {
+func createHTTPPipeline(
+	envVal string, modules []*rest.Module, verifier authkit.Verifier, origins *middleware.Origins,
+) (*pipeline.HTTP, error) {
 	// TODO: 別のファイルに分ける
 	panicResponse := &rest.Response{
 		Code: http.StatusInternalServerError,
@@ -91,10 +93,9 @@ func createHTTPPipeline(envVal string, modules []*rest.Module, verifier authkit.
 		return nil, err
 	}
 
-	// CORS and the cross-origin check answer the same question — which other
-	// origin is this application's frontend — so they are given the same
-	// reading of CORS_ALLOW_ORIGIN rather than each parsing it themselves.
-	origins := middleware.ParseOrigins(configParams.CORS.AllowOrigin())
+	// CORS, this check and the WebSocket upgrade guard are all handed the same
+	// resolved origins (see ws.NewTrustedOrigins) rather than each reading
+	// CORS_ALLOW_ORIGIN for themselves.
 	crossOrigin, err := middleware.NewCrossOriginProtection(origins)
 	if err != nil {
 		return nil, err

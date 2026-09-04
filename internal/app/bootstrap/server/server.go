@@ -85,6 +85,9 @@ func Run(envVal *string) error {
 
 		// controllers
 		authApp.NewVerifier(envVal),
+		// Which origins are this deployment's own frontend, resolved once and read
+		// by CORS, the cross-origin check and the WebSocket upgrade guard.
+		wsApp.NewTrustedOrigins,
 		httpApp.InjectHTTPModules(httpApp.CreateHTTPPipeline(envVal)),
 		wsApp.InjectWSModules(wsApp.CreateWSRouter),
 		mbApp.NewSubscribe,

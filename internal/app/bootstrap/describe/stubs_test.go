@@ -6,6 +6,7 @@ import (
 
 	enscache "github.com/ensoria/cache/pkg/cache"
 	"github.com/ensoria/config/pkg/registry"
+	"github.com/ensoria/ensoria-template/internal/middleware"
 	"github.com/ensoria/ensoria-template/internal/plamo/authkit"
 	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
 	"github.com/ensoria/ensoria-template/internal/plamo/sessionkit"
@@ -40,6 +41,7 @@ func requireEveryStub(
 	_ authkit.KeyStore,
 	_ sessionkit.Store,
 	_ *sessionkit.Cookies,
+	_ *middleware.Origins,
 	_ *goredis.Client,
 	_ mb.Publish,
 	_ worker.Enqueuer,

@@ -198,6 +198,32 @@ var _ = Describe("CORS", func() {
 		})
 	})
 
+	// ⚠ Vary is a list, not a value. A response that kept only the handler's
+	// own field name would be cacheable across origins, and the cache would
+	// then hand one origin's Access-Control-Allow-Origin to another.
+	Describe("a handler that already varies its response", func() {
+		varying := func(vary string) rest.Handler {
+			return func(*rest.Request) *rest.Response {
+				return &rest.Response{Code: http.StatusOK, AddHeaders: map[string]string{"Vary": vary}}
+			}
+		}
+
+		It("adds Origin to what the handler already listed", func() {
+			res := middleware.CORS(corsConfig())(varying("Accept-Encoding"))(
+				corsRequest(http.MethodGet, "https://app.example.test", nil))
+
+			Expect(res.AddHeaders["Vary"]).To(ContainSubstring("Accept-Encoding"))
+			Expect(res.AddHeaders["Vary"]).To(ContainSubstring("Origin"))
+		})
+
+		It("does not list Origin twice", func() {
+			res := middleware.CORS(corsConfig())(varying("origin"))(
+				corsRequest(http.MethodGet, "https://app.example.test", nil))
+
+			Expect(res.AddHeaders["Vary"]).To(Equal("origin"))
+		})
+	})
+
 	// ⚠ A handler that set ReplaceHeaders asked for the base headers to be
 	// cleared, and the pipeline then ignores AddHeaders entirely — so headers
 	// written there would vanish for exactly the endpoints that customise them.

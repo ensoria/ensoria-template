@@ -19,6 +19,7 @@ import (
 	mbApp "github.com/ensoria/ensoria-template/internal/app/mb"
 	schedulerApp "github.com/ensoria/ensoria-template/internal/app/scheduler"
 	workerApp "github.com/ensoria/ensoria-template/internal/app/worker"
+	wsApp "github.com/ensoria/ensoria-template/internal/app/ws"
 	_ "github.com/ensoria/ensoria-template/internal/module"
 	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
 	_ "github.com/ensoria/ensoria-template/internal/query"
@@ -77,6 +78,9 @@ func Start(envVal *string) error {
 		// FIXME: schedulerだけでなく、moduleのものも全部うごいてしまっているので修正
 		// scheduler管理用のエンドポイントのみ
 		authApp.NewVerifier(envVal),
+		// Which origins are this deployment's own frontend, resolved once and read
+		// by CORS, the cross-origin check and the WebSocket upgrade guard.
+		wsApp.NewTrustedOrigins,
 		httpApp.InjectHTTPModules(httpApp.CreateHTTPPipeline(envVal)),
 		NewEmptyWSRouter,
 	})

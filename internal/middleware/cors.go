@@ -3,6 +3,7 @@ package middleware
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/ensoria/config/pkg/appconfig"
 	"github.com/ensoria/rest/pkg/rest"
@@ -168,10 +169,31 @@ func applyHeaders(res *rest.Response, headers map[string]string) {
 		res.AddHeaders = target
 	}
 	for name, value := range headers {
-		// The handler's own header wins. An endpoint that set
-		// Access-Control-Allow-Origin itself meant something by it.
-		if _, taken := target[name]; !taken {
+		existing, taken := target[name]
+		switch {
+		case !taken:
 			target[name] = value
+		case name == varyHeader:
+			// ⚠ Vary is a list, not a value, so the handler's own must not
+			// simply win. A response that said `Vary: Accept-Encoding` and lost
+			// `Origin` is cacheable across origins — and the cache would then
+			// serve one origin's Access-Control-Allow-Origin to another, which
+			// is the exact failure Vary is written to prevent.
+			target[name] = appendVary(existing, value)
+		default:
+			// Every other header the handler set, it meant. An endpoint that
+			// wrote its own Access-Control-Allow-Origin had a reason.
 		}
 	}
+}
+
+// appendVary adds a field name to a Vary header, leaving one that is already
+// listed alone. The comparison is case-insensitive because header names are.
+func appendVary(existing, name string) string {
+	for _, field := range strings.Split(existing, originSeparator) {
+		if strings.EqualFold(strings.TrimSpace(field), name) {
+			return existing
+		}
+	}
+	return existing + ", " + name
 }
