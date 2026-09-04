@@ -23,7 +23,6 @@ import (
 	"github.com/ensoria/ensoria-template/internal/plamo/authkit"
 	"github.com/ensoria/ensoria-template/internal/plamo/restkit"
 	"github.com/ensoria/ensoria-template/internal/plamo/sessionkit"
-	"github.com/ensoria/rest/pkg/mw"
 	"github.com/ensoria/rest/pkg/pipeline"
 	"github.com/ensoria/rest/pkg/rest"
 )
@@ -93,7 +92,8 @@ func serveSessions(cfg *appconfig.Auth, store sessionkit.Store, allowOrigin stri
 	verifier, err := authkit.NewVerifier(cfg, nil, store)
 	Expect(err).NotTo(HaveOccurred())
 
-	crossOrigin, err := middleware.NewCrossOriginProtection(allowOrigin)
+	origins := middleware.ParseOrigins(allowOrigin)
+	crossOrigin, err := middleware.NewCrossOriginProtection(origins)
 	Expect(err).NotTo(HaveOccurred())
 
 	whoami := func(r *rest.Request, _ *restkit.NoBody) (*rest.Result[e2eBody], error) {
@@ -115,7 +115,7 @@ func serveSessions(cfg *appconfig.Auth, store sessionkit.Store, allowOrigin stri
 			})},
 		},
 		GlobalMiddlewares: globalMiddlewares(
-			&mw.CORSSettings{AllowOrigin: allowOrigin, AllowCredentials: allowOrigin != ""},
+			&appconfig.CORS{AllowOriginVal: allowOrigin, AllowCredentialsVal: allowOrigin != ""},
 			crossOrigin,
 			verifier,
 			&rest.Response{Code: http.StatusInternalServerError},
@@ -421,17 +421,38 @@ var _ = Describe("cookie authentication over HTTP", func() {
 			Expect(res.StatusCode).To(Equal(http.StatusCreated))
 		})
 
-		// CORS answers this one before the cross-origin check is reached. Both
-		// layers refuse it; the status is what a caller sees either way.
+		// ⚠ One layer refuses, not two. CORS tells the browser what it may
+		// read and refuses nothing — a caller that is not a browser ignores it
+		// anyway — so the refusal comes from the cross-origin check, with the
+		// one error shape the rest of the API uses.
 		It("refuses one from an origin nobody trusts", func() {
-			res, _ := send(client, server, http.MethodPost, "/session",
+			res, body := send(client, server, http.MethodPost, "/session",
 				map[string]string{
 					"Authorization": "Bearer " + token(""),
 					"Origin":        "https://evil.example",
 				}, `{}`)
 
 			Expect(res.StatusCode).To(Equal(http.StatusForbidden))
+			Expect(errorCode(body)).To(Equal(restkit.CrossOriginCode))
 			Expect(setCookie(res, e2eSessionCookie)).To(BeNil())
+		})
+
+		// ⚠ The half that used to be missing. A browser needs
+		// Access-Control-Allow-Origin on the response it is going to read, not
+		// only on the preflight — without it the sign-in succeeds on the server
+		// and the frontend still cannot see the answer.
+		It("puts the CORS headers on the sign-in response itself", func() {
+			res, _ := send(client, server, http.MethodPost, "/session",
+				map[string]string{
+					"Authorization": "Bearer " + token(""),
+					"Origin":        e2eTrustedOrigin,
+				}, `{}`)
+
+			Expect(res.StatusCode).To(Equal(http.StatusCreated))
+			Expect(res.Header.Get("Access-Control-Allow-Origin")).To(Equal(e2eTrustedOrigin))
+			// Without this the browser drops the cookie the response just set.
+			Expect(res.Header.Get("Access-Control-Allow-Credentials")).To(Equal("true"))
+			Expect(res.Header.Get("Vary")).To(ContainSubstring("Origin"))
 		})
 	})
 

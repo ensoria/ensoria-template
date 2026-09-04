@@ -15,7 +15,6 @@ import (
 	"github.com/ensoria/ensoria-template/internal/plamo/authkit"
 	"github.com/ensoria/ensoria-template/internal/plamo/restkit"
 	"github.com/ensoria/ensoria-template/internal/plamo/vkit"
-	"github.com/ensoria/rest/pkg/mw"
 	"github.com/ensoria/rest/pkg/pipeline"
 	"github.com/ensoria/rest/pkg/rest"
 	"github.com/ensoria/validator/pkg/rule"
@@ -102,7 +101,7 @@ func serve() *httptest.Server {
 	httpPipeline := &pipeline.HTTP{
 		Modules: modules,
 		GlobalMiddlewares: globalMiddlewares(
-			&mw.CORSSettings{AllowOrigin: "*"},
+			&appconfig.CORS{AllowOriginVal: "*"},
 			http.NewCrossOriginProtection(),
 			verifier,
 			&rest.Response{Code: http.StatusInternalServerError},

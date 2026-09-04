@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/ensoria/config/pkg/appconfig"
 	"github.com/ensoria/config/pkg/registry"
 	"github.com/ensoria/ensoria-template/internal/app/http/dto"
 	"github.com/ensoria/ensoria-template/internal/middleware"
@@ -90,20 +91,13 @@ func createHTTPPipeline(envVal string, modules []*rest.Module, verifier authkit.
 		return nil, err
 	}
 
-	// Which origins may make a browser send a state-changing request is the
-	// same list CORS answers with, so it is read from the same setting.
-	crossOrigin, err := middleware.NewCrossOriginProtection(configParams.CORS.AllowOrigin())
+	// CORS and the cross-origin check answer the same question — which other
+	// origin is this application's frontend — so they are given the same
+	// reading of CORS_ALLOW_ORIGIN rather than each parsing it themselves.
+	origins := middleware.ParseOrigins(configParams.CORS.AllowOrigin())
+	crossOrigin, err := middleware.NewCrossOriginProtection(origins)
 	if err != nil {
 		return nil, err
-	}
-
-	cors := &mw.CORSSettings{
-		AllowOrigin:      configParams.CORS.AllowOrigin(),
-		AllowMethods:     configParams.CORS.AllowMethods(),
-		AllowHeaders:     configParams.CORS.AllowHeaders(),
-		ExposeHeaders:    configParams.CORS.ExposeHeaders(),
-		MaxAge:           configParams.CORS.MaxAge(),
-		AllowCredentials: configParams.CORS.AllowCredentials(),
 	}
 
 	// Layer 2: リクエスト単位（ハンドラ実行）のタイムアウト超過時に返すレスポンス
@@ -114,7 +108,7 @@ func createHTTPPipeline(envVal string, modules []*rest.Module, verifier authkit.
 
 	return &pipeline.HTTP{
 		Modules:           modules,
-		GlobalMiddlewares: globalMiddlewares(cors, crossOrigin, verifier, panicResponse),
+		GlobalMiddlewares: globalMiddlewares(configParams.CORS, crossOrigin, verifier, panicResponse),
 		// Layer 2: コントローラ/ミドルウェアチェーンの実行（=レスポンスの計算）の上限時間。
 		// 0で無効。ストリーミング/ファイル/WebSocketは対象外。
 		Timeout:         configParams.Server.HandlerTimeout,
@@ -166,8 +160,13 @@ func RegisterHTTPServerLifecycle(lc dikit.LC, shutdowner dikit.Shutdowner, srv *
 // authentication, so a forged request is refused without the session store
 // being asked about the cookie it carried; after CORS, so a preflight is still
 // answered by the one middleware that knows how to answer it.
+//
+// ⚠ Only one of those two refuses anything. CORS tells the browser what it may
+// read and refuses nothing; the cross-origin check refuses state-changing
+// requests from origins this deployment does not claim. See middleware.CORS for
+// why the split is that way round.
 func globalMiddlewares(
-	cors *mw.CORSSettings,
+	cors *appconfig.CORS,
 	crossOrigin middleware.CrossOriginChecker,
 	verifier authkit.Verifier,
 	panicResponse *rest.Response,
@@ -176,7 +175,7 @@ func globalMiddlewares(
 		mw.Logging(logIncomingRequest),
 		mw.RecoveryWithLogger(panicResponse, logPanicDetails),
 		mw.VerifyBodyParsable,
-		mw.NewCORS(cors),
+		middleware.CORS(cors),
 		middleware.CSRF(crossOrigin),
 		middleware.Auth(verifier),
 	}

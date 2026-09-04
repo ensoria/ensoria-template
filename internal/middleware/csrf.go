@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
-	"strings"
 
 	"github.com/ensoria/ensoria-template/internal/plamo/restkit"
 	"github.com/ensoria/loggear/pkg/loggear"
@@ -22,16 +21,6 @@ import (
 // added to the configuration produces them until someone does. A sudden stream
 // of them from origins nobody recognises is the thing worth an alert.
 const LogTypeCrossOriginDenied = "cross_origin_denied_log"
-
-// wildcardOrigin is the CORS_ALLOW_ORIGIN value that means "any site".
-//
-// It cannot be a trusted origin here: the whole question this middleware
-// answers is which sites may make a browser send a state-changing request with
-// the user's cookie attached, and "all of them" is not an answer. A deployment
-// that combines it with cookie authentication is refused at startup
-// (checkCookieAuthentication in internal/app/http), so a wildcard reaching this
-// far means sessions are off — and it is skipped rather than rejected.
-const wildcardOrigin = "*"
 
 // CrossOriginChecker judges whether a request may be served, given where the
 // browser says it came from.
@@ -54,17 +43,21 @@ type CrossOriginChecker interface {
 // and two keys holding one fact disagree eventually, in the direction where
 // CORS lets a page make the call and this refuses it, or the reverse.
 //
-// allowOrigin takes CORS_ALLOW_ORIGIN as written: a comma-separated list, or
-// the wildcard, or nothing at all. Nothing at all is the same-origin
-// deployment, and it needs no trusted origins — a request from the origin
-// serving it is not cross-origin in the first place.
-func NewCrossOriginProtection(allowOrigin string) (*http.CrossOriginProtection, error) {
+// The origins come from ParseOrigins, the one reading of CORS_ALLOW_ORIGIN that
+// CORS uses as well. An empty set is the same-origin deployment, and it needs no
+// trusted origins — a request from the origin serving the page is not
+// cross-origin in the first place.
+func NewCrossOriginProtection(origins *Origins) (*http.CrossOriginProtection, error) {
 	protection := http.NewCrossOriginProtection()
-	for _, origin := range strings.Split(allowOrigin, ",") {
-		origin = strings.TrimSpace(origin)
-		if origin == "" || origin == wildcardOrigin {
-			continue
-		}
+
+	// Named rather than every configured value: the wildcard is dropped, not
+	// expanded. The whole question this middleware answers is which sites may
+	// make a browser send a state-changing request with the user's cookie
+	// attached, and "all of them" is not an answer to it. A deployment that
+	// combines the wildcard with cookie authentication is refused at startup
+	// (checkTrustedOrigins in internal/app/http), so reaching here with one set
+	// means sessions are off.
+	for _, origin := range origins.Named() {
 		if err := protection.AddTrustedOrigin(origin); err != nil {
 			return nil, fmt.Errorf("CORS_ALLOW_ORIGIN names %q, which is not an origin a browser can send "+
 				"(it has to be scheme://host with an optional port, and no trailing slash or path): %w",

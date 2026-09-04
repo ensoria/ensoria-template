@@ -43,7 +43,7 @@ func (refusingChecker) Check(*http.Request) error { return errors.New("cross-ori
 var _ = Describe("NewCrossOriginProtection", func() {
 	It("trusts each origin the CORS setting names", func() {
 		protection, err := middleware.NewCrossOriginProtection(
-			"https://app.example.test, https://admin.example.test")
+			middleware.ParseOrigins("https://app.example.test, https://admin.example.test"))
 		Expect(err).NotTo(HaveOccurred())
 
 		for _, origin := range []string{"https://app.example.test", "https://admin.example.test"} {
@@ -56,7 +56,7 @@ var _ = Describe("NewCrossOriginProtection", func() {
 	// The same-origin deployment writes nothing here, and a request from the
 	// origin serving the page is not cross-origin in the first place.
 	It("accepts an empty setting", func() {
-		protection, err := middleware.NewCrossOriginProtection("")
+		protection, err := middleware.NewCrossOriginProtection(middleware.ParseOrigins(""))
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(protection).NotTo(BeNil())
@@ -67,7 +67,7 @@ var _ = Describe("NewCrossOriginProtection", func() {
 	// deployment that combines it with cookie authentication is refused at
 	// startup, so reaching here means sessions are off.
 	It("skips the wildcard rather than failing over it", func() {
-		protection, err := middleware.NewCrossOriginProtection("*")
+		protection, err := middleware.NewCrossOriginProtection(middleware.ParseOrigins("*"))
 		Expect(err).NotTo(HaveOccurred())
 
 		req := httptest.NewRequest(http.MethodPost, siteHost+"/things", nil)
@@ -76,7 +76,7 @@ var _ = Describe("NewCrossOriginProtection", func() {
 	})
 
 	It("reports a value that is not an origin, naming the key it came from", func() {
-		_, err := middleware.NewCrossOriginProtection("app.example.test/path")
+		_, err := middleware.NewCrossOriginProtection(middleware.ParseOrigins("app.example.test/path"))
 
 		Expect(err).To(HaveOccurred())
 		Expect(err.Error()).To(ContainSubstring("CORS_ALLOW_ORIGIN"))
@@ -86,7 +86,7 @@ var _ = Describe("NewCrossOriginProtection", func() {
 var _ = Describe("CSRF", func() {
 	protection := func() middleware.CrossOriginChecker {
 		GinkgoHelper()
-		p, err := middleware.NewCrossOriginProtection("https://app.example.test")
+		p, err := middleware.NewCrossOriginProtection(middleware.ParseOrigins("https://app.example.test"))
 		Expect(err).NotTo(HaveOccurred())
 		return p
 	}

@@ -482,7 +482,58 @@ The same list feeds the cross-origin check in
 [internal/middleware/csrf.go](internal/middleware/csrf.go), which refuses
 state-changing requests a browser reports as coming from an untrusted origin.
 It reads `CORS_ALLOW_ORIGIN` rather than a setting of its own, so the two cannot
-disagree about which origin is yours.
+disagree about which origin is yours. See the next section for how the two
+layers divide the work.
+
+#### CORS, and which layer refuses
+
+`CORS_ALLOW_ORIGIN` is read once, by
+[`middleware.ParseOrigins`](internal/middleware/origin.go), and handed to
+everything that has to know which other origin is your frontend. Three things
+do, and they must not answer differently:
+
+| | Reads it for |
+|---|---|
+| [`middleware.CORS`](internal/middleware/cors.go) | telling the browser whether it may read the response |
+| [`middleware.CSRF`](internal/middleware/csrf.go) | refusing state-changing requests from elsewhere |
+| the WebSocket upgrade | an upgrade is a `GET`, which the cross-origin check always allows |
+
+**Only one of them refuses anything, and it is not CORS.** CORS is enforced by
+the *browser*: the headers are an instruction, and a caller that is not a browser
+ignores them — including a script that simply omits `Origin`. So a server-side
+CORS refusal would stop honest cross-origin frontends while stopping nothing that
+meant harm. The cross-origin check refuses instead, and only the requests worth
+refusing: the ones that change state. One refusal, one error shape:
+
+```json
+{"error":{"code":"cross_origin_denied","message":"this request did not come from an allowed origin"}}
+```
+
+The settings:
+
+| | |
+|---|---|
+| `CORS_ALLOW_ORIGIN` | Comma-separated. **Unset is the same-origin deployment** — nothing cross-origin is meant to work, and the middleware leaves every response untouched |
+| `CORS_ALLOW_CREDENTIALS` | Required for cookies (or `Authorization`) to cross origins. Never sent alongside `*`, which browsers refuse |
+| `CORS_ALLOW_METHODS`, `CORS_ALLOW_HEADERS`, `CORS_MAX_AGE` | Preflight only — they answer "what *would* be permitted" |
+| `CORS_EXPOSE_HEADERS` | Which response headers the page may read |
+
+Two details that are easy to get wrong, and that a server-side test does not
+catch — both are pinned by specs in
+[cors_test.go](internal/middleware/cors_test.go):
+
+- **The headers go on the real response, not only on the preflight.** With them
+  on the preflight alone the browser sends the request, the server serves it, and
+  the browser then blocks the response — a `200` in your log and a network error
+  in the console.
+- **`Access-Control-Allow-Origin` carries one origin, never the configured
+  list.** With two origins allowed, each request is answered with the one that
+  matched, and `Vary: Origin` is sent so a cache cannot replay one origin's
+  answer to another.
+
+> **CORS is not access control.** It decides what a *page in a browser* may read,
+> and nothing else — every non-browser caller ignores it. What may be called, and
+> by whom, is `Endpoint.Security` and the credential the caller presents.
 
 
 ### 検証は宣言するだけ

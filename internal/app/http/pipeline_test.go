@@ -10,10 +10,10 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/ensoria/config/pkg/appconfig"
 	"github.com/ensoria/ensoria-template/internal/plamo/authkit"
 	"github.com/ensoria/ensoria-template/internal/plamo/restkit"
 	"github.com/ensoria/loggear/pkg/loggear"
-	"github.com/ensoria/rest/pkg/mw"
 	"github.com/ensoria/rest/pkg/rest"
 )
 
@@ -50,7 +50,7 @@ func request() *rest.Request {
 }
 
 var _ = Describe("globalMiddlewares", func() {
-	settings := &mw.CORSSettings{AllowOrigin: "*"}
+	settings := &appconfig.CORS{AllowOriginVal: "*"}
 	panicResponse := &rest.Response{Code: http.StatusInternalServerError}
 
 	// Accepting the verifier and then forgetting to install the middleware is a
