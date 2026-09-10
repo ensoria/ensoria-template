@@ -38,6 +38,7 @@ func requireEveryStub(
 	_ workerDB.DatabaseClient,
 	_ schedulerDB.DatabaseClient,
 	_ authkit.Verifier,
+	_ authkit.ScopeExpander,
 	_ authkit.KeyStore,
 	_ sessionkit.Store,
 	_ *sessionkit.Cookies,

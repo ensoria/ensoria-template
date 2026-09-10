@@ -19,12 +19,13 @@ import (
 )
 
 // globalMiddlewareDeps carries what the chain is built from. It is a struct
-// rather than four parameters so that an entry below can ignore what it does not
-// need without every entry restating the whole list.
+// rather than a parameter list so that an entry below can ignore what it does
+// not need without every entry restating the whole list.
 type globalMiddlewareDeps struct {
 	cors          *appconfig.CORS
 	crossOrigin   middleware.CrossOriginChecker
 	verifier      authkit.Verifier
+	scopes        authkit.ScopeExpander
 	panicResponse *rest.Response
 }
 
@@ -91,8 +92,10 @@ var globalMiddlewareChain = []globalMiddleware{
 		Build: func(d *globalMiddlewareDeps) rest.Middleware { return middleware.CSRF(d.crossOrigin) },
 	},
 	{
-		Name:  apidoc.MiddlewareAuth,
-		Build: func(d *globalMiddlewareDeps) rest.Middleware { return middleware.Auth(d.verifier) },
+		Name: apidoc.MiddlewareAuth,
+		Build: func(d *globalMiddlewareDeps) rest.Middleware {
+			return middleware.Auth(d.verifier, d.scopes)
+		},
 	},
 }
 

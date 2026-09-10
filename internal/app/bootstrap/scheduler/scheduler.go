@@ -78,6 +78,9 @@ func Start(envVal *string) error {
 		// FIXME: schedulerだけでなく、moduleのものも全部うごいてしまっているので修正
 		// scheduler管理用のエンドポイントのみ
 		authApp.NewVerifier(envVal),
+		// What the scopes a caller holds stand for. The scheduler serves its own
+		// management endpoints, so it judges scopes the same way the server does.
+		authApp.NewScopeExpander,
 		// Which origins are this deployment's own frontend, resolved once and read
 		// by CORS, the cross-origin check and the WebSocket upgrade guard.
 		wsApp.NewTrustedOrigins,

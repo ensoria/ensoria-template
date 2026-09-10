@@ -53,7 +53,7 @@ var _ = Describe("authentication middleware", func() {
 			var seen authkit.Principal
 			mw := middleware.Auth(verifierStub{
 				principal: &authkit.Principal{Subject: "usr_1", Scheme: authkit.SchemeJWT},
-			})
+			}, nil)
 
 			res := mw(okHandler(&seen))(authRequest())
 
@@ -61,11 +61,36 @@ var _ = Describe("authentication middleware", func() {
 			Expect(seen.Subject).To(Equal("usr_1"))
 		})
 
+		// This is the only place the scope policy is attached to a caller, for
+		// both HTTP and WebSocket. A caller reaching an endpoint without it is
+		// judged on the scopes their credential literally carries, which
+		// refuses rather than admits — safe, and quiet enough to be worth a
+		// spec of its own.
+		It("attaches the scope policy to the caller it records", func() {
+			expander, err := authkit.NewScopeImplications(map[string][]string{
+				"admin": {"orders:write"},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			var seen authkit.Principal
+			mw := middleware.Auth(verifierStub{
+				principal: &authkit.Principal{
+					Subject: "usr_1", Scheme: authkit.SchemeJWT, Scopes: []string{"admin"},
+				},
+			}, expander)
+
+			mw(okHandler(&seen))(authRequest())
+
+			Expect(seen.HasScopes([]string{"orders:write"})).To(BeTrue())
+			Expect(seen.Scopes).To(Equal([]string{"admin"}),
+				"the credential's own scopes must reach the handler as they arrived")
+		})
+
 		// A request with no credential is not refused here: a public endpoint is
 		// served without one, so the endpoint decides (see Endpoint.Security).
 		It("lets a request with no credential through, carrying no caller", func() {
 			var seen authkit.Principal
-			mw := middleware.Auth(verifierStub{})
+			mw := middleware.Auth(verifierStub{}, nil)
 
 			res := mw(okHandler(&seen))(authRequest())
 
@@ -79,7 +104,7 @@ var _ = Describe("authentication middleware", func() {
 			reached := false
 			mw := middleware.Auth(verifierStub{
 				err: errors.New("bad token: " + authkit.ErrInvalidCredential.Error()),
-			})
+			}, nil)
 
 			res := mw(func(*rest.Request) *rest.Response {
 				reached = true
@@ -91,7 +116,7 @@ var _ = Describe("authentication middleware", func() {
 		})
 
 		It("answers a refusal in the shared error shape", func() {
-			mw := middleware.Auth(verifierStub{err: errors.New("bad token")})
+			mw := middleware.Auth(verifierStub{err: errors.New("bad token")}, nil)
 
 			res := mw(okHandler(&authkit.Principal{}))(authRequest())
 
@@ -103,7 +128,7 @@ var _ = Describe("authentication middleware", func() {
 
 		// RFC 6750 asks a rejected bearer request to say which scheme it expects.
 		It("tells the caller which authentication scheme to use", func() {
-			mw := middleware.Auth(verifierStub{err: errors.New("bad token")})
+			mw := middleware.Auth(verifierStub{err: errors.New("bad token")}, nil)
 
 			res := mw(okHandler(&authkit.Principal{}))(authRequest())
 
@@ -117,7 +142,7 @@ var _ = Describe("authentication middleware", func() {
 			discarding := func() rest.Middleware {
 				return middleware.Auth(verifierStub{
 					discard: []*http.Cookie{{Name: "__Host-session", MaxAge: -1}},
-				})
+				}, nil)
 			}
 
 			It("puts the instruction on the handler's response", func() {
@@ -169,7 +194,7 @@ var _ = Describe("authentication middleware", func() {
 			unavailable := func() rest.Middleware {
 				return middleware.Auth(verifierStub{
 					err: fmt.Errorf("%w: connection refused", authkit.ErrCredentialUnavailable),
-				})
+				}, nil)
 			}
 
 			It("answers 503 rather than 401", func() {
@@ -208,7 +233,7 @@ var _ = Describe("authentication middleware", func() {
 		It("lets the upgrade proceed and carries the caller into the connection", func() {
 			guard := middleware.AuthUpgrade(verifierStub{
 				principal: &authkit.Principal{Subject: "usr_1", Scheme: authkit.SchemeJWT},
-			})
+			}, nil)
 			r := authRequest()
 
 			res := guard(r)
@@ -220,14 +245,14 @@ var _ = Describe("authentication middleware", func() {
 		})
 
 		It("lets an upgrade with no credential proceed", func() {
-			guard := middleware.AuthUpgrade(verifierStub{})
+			guard := middleware.AuthUpgrade(verifierStub{}, nil)
 
 			Expect(guard(authRequest())).To(BeNil())
 		})
 
 		// Rejecting before the upgrade means no connection is ever established.
 		It("stops the upgrade when the credential cannot be trusted", func() {
-			guard := middleware.AuthUpgrade(verifierStub{err: errors.New("bad token")})
+			guard := middleware.AuthUpgrade(verifierStub{err: errors.New("bad token")}, nil)
 
 			res := guard(authRequest())
 
@@ -240,7 +265,7 @@ var _ = Describe("authentication middleware", func() {
 		It("stops the upgrade when the credential could not be checked", func() {
 			guard := middleware.AuthUpgrade(verifierStub{
 				err: fmt.Errorf("%w: connection refused", authkit.ErrCredentialUnavailable),
-			})
+			}, nil)
 
 			res := guard(authRequest())
 

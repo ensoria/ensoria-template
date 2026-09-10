@@ -57,14 +57,28 @@ func NewHTTPApp(envVal *string) func(lc dikit.LC, shutdowner dikit.Shutdowner, h
 	}
 }
 
-func CreateHTTPPipeline(envVal *string) func(modules []*rest.Module, verifier authkit.Verifier, origins *middleware.Origins) (*pipeline.HTTP, error) {
-	return func(modules []*rest.Module, verifier authkit.Verifier, origins *middleware.Origins) (*pipeline.HTTP, error) {
-		return createHTTPPipeline(*envVal, modules, verifier, origins)
+func CreateHTTPPipeline(envVal *string) func(
+	modules []*rest.Module,
+	verifier authkit.Verifier,
+	origins *middleware.Origins,
+	scopes authkit.ScopeExpander,
+) (*pipeline.HTTP, error) {
+	return func(
+		modules []*rest.Module,
+		verifier authkit.Verifier,
+		origins *middleware.Origins,
+		scopes authkit.ScopeExpander,
+	) (*pipeline.HTTP, error) {
+		return createHTTPPipeline(*envVal, modules, verifier, origins, scopes)
 	}
 }
 
 func createHTTPPipeline(
-	envVal string, modules []*rest.Module, verifier authkit.Verifier, origins *middleware.Origins,
+	envVal string,
+	modules []*rest.Module,
+	verifier authkit.Verifier,
+	origins *middleware.Origins,
+	scopes authkit.ScopeExpander,
 ) (*pipeline.HTTP, error) {
 	// TODO: 別のファイルに分ける
 	panicResponse := &rest.Response{
@@ -109,6 +123,7 @@ func createHTTPPipeline(
 			cors:          configParams.CORS,
 			crossOrigin:   crossOrigin,
 			verifier:      verifier,
+			scopes:        scopes,
 			panicResponse: panicResponse,
 		}),
 		// Layer 2: コントローラ/ミドルウェアチェーンの実行（=レスポンスの計算）の上限時間。

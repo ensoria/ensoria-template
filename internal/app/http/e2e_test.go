@@ -12,6 +12,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/ensoria/config/pkg/appconfig"
+	authApp "github.com/ensoria/ensoria-template/internal/app/auth"
 	"github.com/ensoria/ensoria-template/internal/plamo/authkit"
 	"github.com/ensoria/ensoria-template/internal/plamo/restkit"
 	"github.com/ensoria/ensoria-template/internal/plamo/vkit"
@@ -72,6 +73,11 @@ func serve() *httptest.Server {
 	verifier, err := authkit.NewVerifier(e2eAuth(), nil, nil)
 	Expect(err).NotTo(HaveOccurred())
 
+	// The application's own scope policy, not one built for the test: the point
+	// of the specs below is that the wiring reaches it.
+	scopes, err := authApp.NewScopeExpander()
+	Expect(err).NotTo(HaveOccurred())
+
 	ok := func(r *rest.Request, _ *restkit.NoBody) (*rest.Result[e2eBody], error) {
 		return rest.NewResult(&e2eBody{Name: "hoge"}), nil
 	}
@@ -87,6 +93,12 @@ func serve() *httptest.Server {
 		{Path: "/scoped", Get: endpoint(&restkit.SecuritySpec{Scopes: []string{"things:write"}})},
 		{Path: "/api-key-only", Get: endpoint(&restkit.SecuritySpec{
 			Schemes: []string{authkit.SchemeAPIKey},
+		})},
+		// Declared with a scope the application's own policy talks about, so
+		// that the specs below exercise the table the template ships rather
+		// than one written for them.
+		{Path: "/order-write", Get: endpoint(&restkit.SecuritySpec{
+			Scopes: []string{"orders:write"},
 		})},
 		{Path: "/validated", Post: restkit.NewController(&restkit.Endpoint[e2eBody, e2eBody]{
 			Success:   http.StatusOK,
@@ -104,6 +116,7 @@ func serve() *httptest.Server {
 			cors:          &appconfig.CORS{AllowOriginVal: "*"},
 			crossOrigin:   http.NewCrossOriginProtection(),
 			verifier:      verifier,
+			scopes:        scopes,
 			panicResponse: &rest.Response{Code: http.StatusInternalServerError},
 		}),
 	}
@@ -220,6 +233,37 @@ var _ = Describe("authentication and authorization over HTTP", func() {
 			status, _ := call(server, http.MethodGet, "/scoped", bearer("things:read things:write"), "")
 
 			Expect(status).To(Equal(http.StatusOK))
+		})
+	})
+
+	// The policy is what lets an endpoint declare the permission it needs
+	// without also listing every scope that stands for it. Nothing in the
+	// declaration of /order-write mentions admin.
+	//
+	// ⚠ These are the specs that catch the policy not being attached at all.
+	// A caller reaching an endpoint without it is judged on the scopes their
+	// credential literally carries — which refuses rather than admits, so the
+	// failure is safe and completely silent otherwise.
+	Describe("an endpoint reached through a scope implication", func() {
+		It("serves a caller holding only the scope that implies the requirement", func() {
+			status, _ := call(server, http.MethodGet, "/order-write", bearer("admin"), "")
+
+			Expect(status).To(Equal(http.StatusOK))
+		})
+
+		It("serves a caller holding the required scope itself", func() {
+			status, _ := call(server, http.MethodGet, "/order-write", bearer("orders:write"), "")
+
+			Expect(status).To(Equal(http.StatusOK))
+		})
+
+		// The implication runs one way. Being able to read orders says nothing
+		// about being able to write them.
+		It("refuses a caller holding a scope the requirement does not follow from", func() {
+			status, body := call(server, http.MethodGet, "/order-write", bearer("orders:read"), "")
+
+			Expect(status).To(Equal(http.StatusForbidden))
+			Expect(errorCode(body)).To(Equal(restkit.ForbiddenCode))
 		})
 	})
 

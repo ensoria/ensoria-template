@@ -10,6 +10,7 @@ import (
 	enscache "github.com/ensoria/cache/pkg/cache"
 	"github.com/ensoria/cache/pkg/cachememory"
 	"github.com/ensoria/config/pkg/registry"
+	authApp "github.com/ensoria/ensoria-template/internal/app/auth"
 	infrastorage "github.com/ensoria/ensoria-template/internal/infra/storage"
 	"github.com/ensoria/ensoria-template/internal/middleware"
 	"github.com/ensoria/ensoria-template/internal/plamo/authkit"
@@ -140,6 +141,13 @@ func stubs() []any {
 
 		// Request authentication.
 		func() authkit.Verifier { return &stubVerifier{} },
+
+		// What the scopes a caller holds stand for. The real constructor rather
+		// than a stub: it resolves a table of Go constants and reaches nothing,
+		// and a second table written here would be free to disagree with the one
+		// the application enforces. It also means a cycle in the policy fails
+		// document generation, which is the same answer the server gives.
+		authApp.NewScopeExpander,
 
 		// Where API keys are looked up, and where browser sessions are kept.
 		// The application provides both as possibly-nil interfaces — nil means

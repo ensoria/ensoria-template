@@ -38,6 +38,96 @@ var _ = Describe("Principal", func() {
 
 	// Scopes are checked with AND semantics, matching how OpenAPI reads
 	// `security: [{scheme: [a, b]}]`: the caller needs every listed scope.
+	Describe("a scope policy attached to the caller", func() {
+		// The policy is what lets an endpoint declare the permission it needs
+		// and still be reachable by a scope that stands for it.
+		It("lets a held scope satisfy a requirement it implies", func() {
+			principal := (&authkit.Principal{Scopes: []string{"admin"}}).
+				WithScopeExpander(implications(map[string][]string{
+					"admin": {"orders:write"},
+				}))
+
+			Expect(principal.HasScopes([]string{"orders:write"})).To(BeTrue())
+		})
+
+		// Every scheme goes through the same attachment, so none of them may be
+		// judged on a different set of scopes than the others.
+		DescribeTable("applies to a caller of any scheme",
+			func(scheme string) {
+				principal := (&authkit.Principal{Subject: "usr_1", Scheme: scheme, Scopes: []string{"admin"}}).
+					WithScopeExpander(implications(map[string][]string{
+						"admin": {"orders:write"},
+					}))
+
+				Expect(principal.HasScopes([]string{"orders:write"})).To(BeTrue())
+			},
+			Entry("a token", authkit.SchemeJWT),
+			Entry("an API key", authkit.SchemeAPIKey),
+			Entry("a session cookie", authkit.SchemeSession),
+		)
+
+		It("still refuses a requirement nothing held implies", func() {
+			principal := (&authkit.Principal{Scopes: []string{"admin"}}).
+				WithScopeExpander(implications(map[string][]string{
+					"admin": {"orders:write"},
+				}))
+
+			Expect(principal.HasScopes([]string{"users:write"})).To(BeFalse())
+		})
+
+		// Attaching in place would let one request's policy follow a value that
+		// a key store hands to another request.
+		It("is attached to a copy, leaving the caller it came from alone", func() {
+			original := &authkit.Principal{Scopes: []string{"admin"}}
+
+			attached := original.WithScopeExpander(implications(map[string][]string{
+				"admin": {"orders:write"},
+			}))
+
+			Expect(attached).NotTo(BeIdenticalTo(original))
+			Expect(attached.HasScopes([]string{"orders:write"})).To(BeTrue())
+			Expect(original.HasScopes([]string{"orders:write"})).To(BeFalse())
+		})
+
+		// No policy is a real choice: it is what a deployment whose identity
+		// provider already issues every scope asks for.
+		It("changes nothing when no policy is attached", func() {
+			principal := (&authkit.Principal{Scopes: []string{"admin"}}).WithScopeExpander(nil)
+
+			Expect(principal.HasScopes([]string{"orders:write"})).To(BeFalse())
+			Expect(principal.EffectiveScopes()).To(Equal([]string{"admin"}))
+		})
+
+		// ⚠ The credential's own scopes must stay as they arrived: a session is
+		// created from this slice, and expanding it in place would freeze
+		// today's policy into every session created from then on.
+		It("leaves Scopes as the credential carried them", func() {
+			principal := (&authkit.Principal{Scopes: []string{"admin"}}).
+				WithScopeExpander(implications(map[string][]string{
+					"admin": {"orders:write"},
+				}))
+
+			Expect(principal.Scopes).To(Equal([]string{"admin"}))
+			Expect(principal.EffectiveScopes()).To(Equal([]string{"admin", "orders:write"}))
+		})
+
+		Describe("EffectiveScopes", func() {
+			It("is empty for no caller", func() {
+				var missing *authkit.Principal
+
+				Expect(missing.EffectiveScopes()).To(BeEmpty())
+			})
+
+			It("hands back a copy when there is no policy", func() {
+				principal := &authkit.Principal{Scopes: []string{"admin"}}
+
+				principal.EffectiveScopes()[0] = "everything"
+
+				Expect(principal.Scopes).To(Equal([]string{"admin"}))
+			})
+		})
+	})
+
 	Describe("HasScopes", func() {
 		principal := &authkit.Principal{Scopes: []string{"users:read", "users:write"}}
 

@@ -146,6 +146,32 @@ var _ = Describe("POST /session", func() {
 		Expect(session.Snapshot.Claims).To(HaveKeyWithValue("tenant", "acme"))
 	})
 
+	// ⚠ A session records what the credential carried, never what the scope
+	// policy makes of it. Storing the expansion would freeze today's policy
+	// into every session: an edit to the implication table would reach the
+	// tokens still being presented but not the browsers already signed in, and
+	// the two would drift apart silently for as long as a session can live.
+	It("stores the scopes the credential carried, not what the policy adds", func() {
+		expander, err := authkit.NewScopeImplications(map[string][]string{
+			"admin": {"things:read", "things:write"},
+		})
+		Expect(err).NotTo(HaveOccurred())
+		admin := (&authkit.Principal{
+			Subject: "usr_1", Scopes: []string{"admin"}, Scheme: authkit.SchemeJWT,
+		}).WithScopeExpander(expander)
+		Expect(admin.HasScopes([]string{"things:write"})).To(BeTrue(),
+			"the caller has to be one the policy actually widens, or this proves nothing")
+
+		ep := http.NewCreateSession(store, cookies)
+		result, err := ep.Handle(requestFrom(admin), &dto.CreateSession{})
+		Expect(err).NotTo(HaveOccurred())
+
+		session, err := store.Lookup(context.Background(), result.Cookies[0].Value)
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(session.Snapshot.Scopes).To(Equal([]string{"admin"}))
+	})
+
 	It("ends the session the same browser was already holding", func() {
 		ep := http.NewCreateSession(store, cookies)
 		first, err := ep.Handle(requestFrom(caller()), &dto.CreateSession{})

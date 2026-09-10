@@ -22,10 +22,14 @@ import (
 // It does not decide whether an endpoint needs a caller: that is the endpoint's
 // own declaration (Endpoint.Security), enforced in restkit. A request with no
 // credential passes through untouched, so a public endpoint is still served.
-func Auth(verifier authkit.Verifier) rest.Middleware {
+//
+// scopes is the application's scope policy, attached to the caller here so that
+// every scope check downstream counts what the held scopes imply. Nil means no
+// policy, which is the behaviour of an application that states none.
+func Auth(verifier authkit.Verifier, scopes authkit.ScopeExpander) rest.Middleware {
 	return func(next rest.Handler) rest.Handler {
 		return func(r *rest.Request) *rest.Response {
-			result, refusal := authenticate(verifier, r)
+			result, refusal := authenticate(verifier, scopes, r)
 			if refusal != nil {
 				return refusal
 			}
@@ -78,9 +82,9 @@ func withDiscardedCookies(res *rest.Response, result *authkit.VerifyResult) *res
 // middleware lets every handshake through; middleware.UpgradeOrigin is what
 // refuses one a browser started from somewhere else, and the router runs it
 // before this.
-func AuthUpgrade(verifier authkit.Verifier) rest.Handler {
+func AuthUpgrade(verifier authkit.Verifier, scopes authkit.ScopeExpander) rest.Handler {
 	return func(r *rest.Request) *rest.Response {
-		_, refusal := authenticate(verifier, r)
+		_, refusal := authenticate(verifier, scopes, r)
 		return refusal
 	}
 }
@@ -94,7 +98,17 @@ func AuthUpgrade(verifier authkit.Verifier) rest.Handler {
 //
 // This is the policy a project may want to change — accepting a credential from
 // somewhere other than a header, or refusing anonymous requests at the edge.
-func authenticate(verifier authkit.Verifier, r *rest.Request) (*authkit.VerifyResult, *rest.Response) {
+//
+// ⚠ It is also the one place the scope policy is attached to a caller, for both
+// HTTP requests and WebSocket handshakes. A caller put on a context without it
+// is judged on the scopes their credential literally carries, which refuses
+// rather than admits — safe, but quiet. If a third transport ever grows its own
+// way of establishing a caller, it has to attach the policy too.
+func authenticate(
+	verifier authkit.Verifier,
+	scopes authkit.ScopeExpander,
+	r *rest.Request,
+) (*authkit.VerifyResult, *rest.Response) {
 	result, err := verifier.Verify(r)
 	switch {
 	case err == nil:
@@ -102,7 +116,8 @@ func authenticate(verifier authkit.Verifier, r *rest.Request) (*authkit.VerifyRe
 		// endpoints are served without one, and endpoints that need a caller
 		// answer 401 on their own declaration.
 		if result.Principal != nil {
-			r.SetContext(authkit.WithPrincipal(r.Context(), result.Principal))
+			caller := result.Principal.WithScopeExpander(scopes)
+			r.SetContext(authkit.WithPrincipal(r.Context(), caller))
 		}
 		return result, nil
 	case errors.Is(err, authkit.ErrCredentialUnavailable):

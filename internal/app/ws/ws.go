@@ -34,10 +34,15 @@ const defaultModule = "default"
 // for an ordinary GET: the same-origin policy does not apply to WebSocket
 // connections, so a page anywhere can open one and read everything it carries.
 // See middleware.UpgradeOrigin.
-func CreateWSRouter(modules []*wskit.Module, verifier authkit.Verifier, origins *middleware.Origins) *wsrouter.Router {
+func CreateWSRouter(
+	modules []*wskit.Module,
+	verifier authkit.Verifier,
+	origins *middleware.Origins,
+	scopes authkit.ScopeExpander,
+) *wsrouter.Router {
 	guards := []rest.Handler{
 		middleware.UpgradeOrigin(origins),
-		middleware.AuthUpgrade(verifier),
+		middleware.AuthUpgrade(verifier, scopes),
 	}
 
 	runtime := make([]*wsconfig.Module, 0, len(modules))

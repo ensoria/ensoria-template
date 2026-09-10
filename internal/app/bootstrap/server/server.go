@@ -85,6 +85,9 @@ func Run(envVal *string) error {
 
 		// controllers
 		authApp.NewVerifier(envVal),
+		// What the scopes a caller holds stand for. Resolved once here, so a
+		// cycle in the table stops the process rather than one request.
+		authApp.NewScopeExpander,
 		// Which origins are this deployment's own frontend, resolved once and read
 		// by CORS, the cross-origin check and the WebSocket upgrade guard.
 		wsApp.NewTrustedOrigins,

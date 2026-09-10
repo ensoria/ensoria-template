@@ -85,7 +85,7 @@ func serveChannel(cfg *appconfig.Auth, origins *middleware.Origins) (*httptest.S
 		},
 	}
 
-	router := wsApp.CreateWSRouter([]*wskit.Module{wskit.NewModule(channel)}, verifier, origins)
+	router := wsApp.CreateWSRouter([]*wskit.Module{wskit.NewModule(channel)}, verifier, origins, nil)
 	mux := http.NewServeMux()
 	router.Register(mux)
 	return httptest.NewServer(mux), store, opened
