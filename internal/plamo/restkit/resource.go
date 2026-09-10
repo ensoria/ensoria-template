@@ -260,16 +260,44 @@ func (u *UndeclaredAuthorization) LogAttrs() []slog.Attr {
 // endpoint declares.
 //
 // It is reached through the request context as a pointer, so that Authorize can
-// write to the same value Handle reads afterwards — including when the handler
-// has derived a context of its own, which a value in a context could not
-// survive.
+// write to the same value the adapter reads afterwards — including when the
+// handler has derived a context of its own, which a value in a context could
+// not survive.
+//
+// # Which side writes the record
+//
+// Two places can write the drift record, and the rule between them is:
+// **Authorize reports what it finds; the adapter reports what never happened.**
+//
+//	violation                              record written by   500 answered by
+//	------------------------------------   -----------------   ------------------
+//	declared a check, never called          verify              verify
+//	called with no declaration / wrong type  Authorize          the ordinary error
+//	                                                            path, once the
+//	                                                            handler returns it
+//	…and the handler ignored that error      nobody (already)   verify
+//
+// The split is forced rather than chosen, and it is worth saying why, because a
+// single reporting point would be the obvious thing to want:
+//
+//   - It cannot all be Authorize. The first row is the defect of Authorize not
+//     having been called, so there is no call in which to notice it.
+//   - It cannot all be the adapter. Authorize is reachable from outside a typed
+//     endpoint — a raw rest.Controller, or a handler invoked directly — where
+//     there is no state and no adapter to notice anything. And on the ordinary
+//     path for the second row, the handler returns the error, so Handle answers
+//     from errorResponse and never reaches verify.
+//
+// The last row is the seam between the two, and reported is what holds it: the
+// handler was told and carried on regardless, so the answer still has to be
+// refused, while the record has already been written and must not appear twice.
 type authorizationState struct {
 	// check is the endpoint's declaration, nil when it declares none.
 	check *ResourceCheck
 	// done records that a declared check ran and approved the caller.
 	done bool
-	// reported records that Authorize already wrote a record, so that Handle
-	// refuses the response without writing a second one about the same defect.
+	// reported records that Authorize already wrote a record. See the rule
+	// above for what the adapter does with it.
 	reported bool
 }
 
@@ -289,6 +317,11 @@ func authorizationStateFrom(ctx context.Context) (*authorizationState, bool) {
 // verify reports the endpoint if the handler is about to answer with a success
 // the declaration does not support. It returns the response to send instead, or
 // nil to let the handler's own answer through.
+//
+// It is the adapter's half of the reporting rule on authorizationState: what
+// never happened. It is reached only after the handler returned a success —
+// a handler that answered with an error served no resource, so a check it never
+// ran is not a defect.
 func (s *authorizationState) verify(r *rest.Request) *rest.Response {
 	switch {
 	case s.reported:
