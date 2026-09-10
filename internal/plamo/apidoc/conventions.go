@@ -11,6 +11,15 @@ type Conventions struct {
 	BaseURLs map[string]string `json:"base_urls,omitempty"` // 環境名 → ベース URL
 	// SecuritySchemes は呼び出し元が資格情報を提示できる方式。設定から組み立てる。
 	SecuritySchemes []SecurityScheme `json:"security_schemes,omitempty"`
+	// ScopeImplications maps a scope to the scopes it stands for.
+	//
+	// Without it a generated document is misleading rather than merely
+	// incomplete: an endpoint declaring `orders:write` says nothing about admin,
+	// so a reader holding admin would conclude they cannot call it. The
+	// declaration is right to stay silent — which scope implies which is the
+	// application's policy, not the endpoint's — so the policy is published
+	// once, here.
+	ScopeImplications map[string][]string `json:"scope_implications,omitempty"`
 	// AuthMethod は上記で表せない補足を書く自由記述欄(任意)。
 	AuthMethod        string   `json:"auth_method,omitempty"`
 	CORS              *CORS    `json:"cors,omitempty"`

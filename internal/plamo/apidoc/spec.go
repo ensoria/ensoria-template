@@ -98,6 +98,16 @@ type Security struct {
 	Schemes []string `json:"schemes,omitempty"`
 	// Scopes は呼び出し元が**すべて**持つ必要のある権限。
 	Scopes []string `json:"scopes,omitempty"`
+	// ResourceConstraint states, in one sentence for a caller, a rule that
+	// cannot be settled before the resource is read ("Only the owner of the
+	// order can update it").
+	//
+	// It is prose rather than a reference, because the predicate that decides
+	// it is a Go function and no document can carry one. What crosses is the
+	// sentence the declaration wrote; that the code really runs the predicate
+	// is enforced at runtime instead (restkit.Authorize), which is what keeps
+	// this sentence from becoming a promise nobody keeps.
+	ResourceConstraint string `json:"resource_constraint,omitempty"`
 }
 
 // SchemaType は JSON の値種別に対応する中立なスキーマ種別。

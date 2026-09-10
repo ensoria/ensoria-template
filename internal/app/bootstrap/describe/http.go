@@ -7,6 +7,7 @@ import (
 	"github.com/ensoria/config/pkg/registry"
 	assets "github.com/ensoria/ensoria-template"
 	"github.com/ensoria/ensoria-template/internal/app/apiinfo"
+	authApp "github.com/ensoria/ensoria-template/internal/app/auth"
 	apphttp "github.com/ensoria/ensoria-template/internal/app/http"
 	httpdto "github.com/ensoria/ensoria-template/internal/app/http/dto"
 	"github.com/ensoria/ensoria-template/internal/plamo/apidoc"
@@ -59,6 +60,12 @@ func buildConventions(envVal string) *apidoc.Conventions {
 		// Taken from where the chain is built rather than restated here, so the
 		// two cannot say different things. See http.GlobalMiddlewareNames.
 		GlobalMiddlewares: apphttp.GlobalMiddlewareNames(),
+		// The scope policy the running application enforces, read from the one
+		// table rather than restated. It is not configuration, so it does not
+		// wait for the registry below: a document generated for an environment
+		// whose settings could not be read should still not be wrong about who
+		// may call what.
+		ScopeImplications: authApp.ScopeImplicationTable(),
 	}
 
 	params, err := registry.ModuleParams("default")

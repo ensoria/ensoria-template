@@ -230,11 +230,15 @@ func convertSecurity(s *restkit.SecuritySpec) *Security {
 	if s == nil {
 		return nil
 	}
-	return &Security{
+	security := &Security{
 		Public:  s.Public,
 		Schemes: s.Schemes,
 		Scopes:  s.Scopes,
 	}
+	if s.Resource != nil {
+		security.ResourceConstraint = s.Resource.Description
+	}
+	return security
 }
 
 // InternalPathPrefix はアプリケーション自身の運用用エンドポイントを示すパス接頭辞。
