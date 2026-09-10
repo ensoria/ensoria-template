@@ -225,7 +225,22 @@ type SecuritySpec struct {
 	Schemes []string
 	// Scopes are the permissions the caller must hold — all of them, not any of
 	// them, matching how OpenAPI reads a security requirement.
+	//
+	// A caller can hold a scope by carrying it or by carrying one that implies
+	// it; the implications are the application's policy, not the endpoint's, so
+	// nothing about them is written here. See authkit.ScopeExpander.
 	Scopes []string
+	// Resource declares a constraint that cannot be settled before the resource
+	// is read — "only the owner may update this order". Build it with
+	// NewResourceCheck, and call restkit.Authorize from the handler once the
+	// resource exists.
+	//
+	// Optional (runtime): declaring one makes the adapter refuse any success
+	// the check never approved, so this is not a documentation note. It is also
+	// the only field here that a public endpoint may not carry — there is no
+	// caller for a resource rule to be about — and the startup checks refuse
+	// that combination.
+	Resource *ResourceCheck
 }
 
 // ResponseSpec declares a success response other than the primary one

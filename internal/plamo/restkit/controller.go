@@ -88,9 +88,25 @@ func (c *endpointController[Req, Res]) Handle(r *rest.Request) *rest.Response {
 	}
 
 	// 3. ハンドラ実行
+	//
+	// The state is placed before the handler runs, so that Authorize has
+	// somewhere to record that it ran and this method can tell afterwards
+	// whether it did. It is a pointer, so a handler deriving a context of its
+	// own still writes to the value read below.
+	state := &authorizationState{check: resourceCheckOf(c.ep.Security)}
+	r.SetContext(withAuthorizationState(r.Context(), state))
+
 	result, err := c.ep.Handle(r, req)
 	if err != nil {
 		return errorResponse(err)
+	}
+
+	// 3.5. 宣言したリソース判定が実際に走ったかを確かめる。
+	//
+	// 成功応答のときだけ検査する —— ハンドラがエラーを返したなら、そもそも
+	// リソースは提供されていないので、判定が走っていないのは正しい。
+	if res := state.verify(r); res != nil {
+		return res
 	}
 
 	// 4. 成功レスポンス(Produces が指定されていれば形式を固定)
@@ -204,6 +220,15 @@ func errorResponse(err error) *rest.Response {
 			Body: &ErrorEnvelope{Error: ErrorDetail{Code: he.Code(), Message: he.Error()}},
 		}
 	}
+	return internalErrorResponse()
+}
+
+// internalErrorResponse is the answer given when the failure is this
+// application's own: an error the handler did not classify, or a contract the
+// endpoint broke. The caller is told nothing beyond that, deliberately — what
+// went wrong inside is not theirs to see, and the record written alongside is
+// where it is said.
+func internalErrorResponse() *rest.Response {
 	return &rest.Response{
 		Code: http.StatusInternalServerError,
 		Body: &ErrorEnvelope{Error: ErrorDetail{Code: internalErrorCode, Message: internalErrorMessage}},

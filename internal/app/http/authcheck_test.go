@@ -54,6 +54,32 @@ var _ = Describe("checkAuthConfiguration", func() {
 		Expect(checkAuthConfiguration(modules, verifiesNothing)).To(Succeed())
 	})
 
+	// ⚠ Checked before anything else, and therefore before the early return
+	// that lets an all-public application through: a public endpoint carrying a
+	// resource check is exactly the application that would skip it.
+	Describe("a public endpoint declaring a resource check", func() {
+		publicWithResource := func() []*rest.Module {
+			return moduleWith(&restkit.SecuritySpec{
+				Public: true,
+				Resource: restkit.NewResourceCheck[restkit.NoBody](
+					"Only the owner can read it.",
+					func(*authkit.Principal, *restkit.NoBody) bool { return true },
+				),
+			})
+		}
+
+		// The combination cannot mean anything — there is no caller for the
+		// rule to be about — and left alone it serves everyone while the
+		// generated document describes a constraint.
+		It("stops the application, naming the endpoint", func() {
+			err := checkAuthConfiguration(publicWithResource(), verifiesNothing)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("GET /things/0"))
+			Expect(err.Error()).To(ContainSubstring("Resource"))
+		})
+	})
+
 	It("refuses an application whose endpoints need a caller it cannot verify", func() {
 		err := checkAuthConfiguration(moduleWith(nil), verifiesNothing)
 

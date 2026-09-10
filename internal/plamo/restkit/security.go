@@ -1,6 +1,8 @@
 package restkit
 
 import (
+	"net/http"
+
 	"github.com/ensoria/ensoria-template/internal/plamo/authkit"
 	"github.com/ensoria/rest/pkg/rest"
 )
@@ -47,8 +49,8 @@ func RequiresAuthentication(modules []*rest.Module) bool {
 		if m == nil {
 			continue
 		}
-		for _, ctrl := range []rest.Controller{m.Get, m.Post, m.Put, m.Patch, m.Delete} {
-			doc, ok := ctrl.(Documented)
+		for _, route := range routesOf(m) {
+			doc, ok := route.controller.(Documented)
 			if !ok {
 				continue
 			}
@@ -58,6 +60,58 @@ func RequiresAuthentication(modules []*rest.Module) bool {
 		}
 	}
 	return false
+}
+
+// PublicResourceChecks returns the endpoints that declare a resource check on a
+// public endpoint, as "GET /order" strings, in the order they were declared.
+//
+// The combination cannot mean anything: a resource check decides whether this
+// caller may touch this resource, and a public endpoint has no caller for it to
+// be about. Left alone it would be worse than meaningless — authorize() lets a
+// public request past before any check runs, so the endpoint would serve
+// everyone while its generated documentation described a constraint.
+//
+// The application refuses to start on it, which is where a contradiction
+// between two declared facts belongs: nothing about it depends on which request
+// arrives.
+func PublicResourceChecks(modules []*rest.Module) []string {
+	var conflicts []string
+	for _, m := range modules {
+		if m == nil {
+			continue
+		}
+		for _, route := range routesOf(m) {
+			doc, ok := route.controller.(Documented)
+			if !ok {
+				continue
+			}
+			security := doc.EndpointDoc().Security
+			if security != nil && security.Public && security.Resource != nil {
+				conflicts = append(conflicts, route.method+" "+m.Path)
+			}
+		}
+	}
+	return conflicts
+}
+
+// route pairs a controller with the method it answers, which a rest.Module
+// keeps as separate fields. The method is part of naming an endpoint: a path on
+// its own does not identify one.
+type route struct {
+	method     string
+	controller rest.Controller
+}
+
+// routesOf lists what a module answers, in a fixed order so that a startup
+// failure names the same endpoint first on every run.
+func routesOf(m *rest.Module) []route {
+	return []route{
+		{http.MethodGet, m.Get},
+		{http.MethodPost, m.Post},
+		{http.MethodPut, m.Put},
+		{http.MethodPatch, m.Patch},
+		{http.MethodDelete, m.Delete},
+	}
 }
 
 // DeclaredSchemes returns every credential kind the given modules require, in
@@ -74,8 +128,8 @@ func DeclaredSchemes(modules []*rest.Module) []string {
 		if m == nil {
 			continue
 		}
-		for _, ctrl := range []rest.Controller{m.Get, m.Post, m.Put, m.Patch, m.Delete} {
-			doc, ok := ctrl.(Documented)
+		for _, route := range routesOf(m) {
+			doc, ok := route.controller.(Documented)
 			if !ok {
 				continue
 			}

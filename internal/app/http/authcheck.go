@@ -24,6 +24,16 @@ import (
 // It returns an error rather than stopping the process itself so the rule can
 // be tested.
 func checkAuthConfiguration(modules []*rest.Module, verifier authkit.Verifier) error {
+	// First, because it is about the declarations alone. The checks below ask
+	// whether the configuration can serve what is declared; this one asks
+	// whether what is declared means anything, and an application whose
+	// endpoints are all public would skip it at the early return otherwise.
+	if conflicts := restkit.PublicResourceChecks(modules); len(conflicts) > 0 {
+		return fmt.Errorf("%s declared public with a resource check, which has no caller to be about: "+
+			"drop Public, or drop Resource from Endpoint.Security",
+			quoteList(conflicts))
+	}
+
 	if !restkit.RequiresAuthentication(modules) {
 		return nil
 	}
