@@ -143,13 +143,24 @@ noise, and a WARN that suddenly fires a thousand times is an incident.**
 | `session_not_created_log` | ERROR | A caller with a good token was not given a session | **Yes** |
 | `session_not_ended_log` | ERROR | A sign-out did not take effect; the session still works | **Yes** |
 | `declaration_drift_log` | ERROR | The generated documentation no longer matches the code | On a trend |
+| `authorization_drift_log` | ERROR | An endpoint's resource check and its declaration disagree | **Yes** |
 | `upgrade_origin_denied_log` | WARN | A WebSocket upgrade was refused for where it came from | On a rate |
 | `cross_origin_denied_log` | WARN | A state-changing request was refused for where it came from | On a rate |
 | `replaced_session_kept_log` | WARN | A session left behind by a new sign-in could not be ended | No |
 | `session_rejected_log` | INFO | A request presented a session cookie that no longer resolves | No |
 | `access_log` | INFO | One request was served | No |
 
-Four of these deserve a word about why they sit where they do.
+Five of these deserve a word about why they sit where they do.
+
+**`authorization_drift_log` pages, while `declaration_drift_log` only trends.**
+Both mean a declaration and the code disagree, but the consequences are not
+comparable. A status nobody declared is served correctly and documented wrongly.
+A resource check nobody ran is a rule the endpoint promises and does not apply —
+which, in the direction that matters, is one endpoint serving everybody. The
+request is refused with a 500 either way, so the caller is safe; what the record
+tells you is that an endpoint is broken right now. See
+[Rules only the resource can settle](#rules-only-the-resource-can-settle) for
+what the two kinds of record mean and how to fix each.
 
 **`session_store_unavailable_log` is the outage; `session_rejected_log` is
 Tuesday.** They are separate types rather than one type with a reason field
@@ -228,6 +239,327 @@ Security: &restkit.SecuritySpec{
 > **生 Controller には効きません。** `Security` は `restkit.Endpoint` のアダプタが評価します。
 > `rest.Controller` を自分で実装した場合はこの判定を通らないので、認可は自分で書く必要が
 > あります。テンプレート内のコントローラはすべて型付きエンドポイントです。
+
+### Scopes, and what one scope stands for
+
+An endpoint declares the **concrete permissions it needs** and nothing else:
+
+```go
+Security: &restkit.SecuritySpec{Scopes: []string{"orders:write"}},
+```
+
+It does not list the broader scopes that ought to reach it. That an `admin`
+caller may write orders is a fact about your permission model, not about this
+endpoint, and writing it into every endpoint that `admin` should reach is how
+the two drift apart. Two different sets are at work, and keeping them apart is
+what makes the rest of this section simple:
+
+| | Where it is written | What it means |
+|---|---|---|
+| **Requirement** | the endpoint declaration | what a caller must satisfy. Several scopes means **all** of them |
+| **Holding** | the token, API key or session | what the caller carries. **This** is what gets expanded |
+
+Expansion applies to what a caller holds, never to what an endpoint requires.
+
+#### The implication table
+
+`internal/app/auth/scopes.go` is where an application says which scope stands
+for which others:
+
+```go
+var scopeImplications = map[string][]string{
+	"admin": {"orders:read", "orders:write", "users:read", "users:write"},
+}
+```
+
+Only the left-hand side is a scope anybody is issued; the right-hand side is what
+endpoints declare. So a caller holding `admin` alone satisfies an endpoint asking
+for `orders:write`, without `admin` appearing in that endpoint's declaration:
+
+| Caller holds | Effectively holds | Endpoint requires `orders:write` |
+|---|---|---|
+| `admin` | `admin`, `orders:read`, `orders:write`, `users:read`, `users:write` | 200 |
+| `orders:write` | `orders:write` | 200 |
+| `orders:read` | `orders:read` | **403** |
+
+Chains work — give `manager` a row of its own and `admin: {"manager"}` reaches
+everything `manager` reaches — because the alternative is copying the
+right-hand side upwards, and a copy nobody updates leaves "`admin` without what
+`manager` may do" as a silence rather than a failure. The closure is resolved
+once, at startup, so a chain of any length costs a request exactly what a single
+step costs. **A cycle refuses to start**, naming the route that closes it:
+`a -> b -> a` says two names mean one permission, which is a table to fix rather
+than a shape to support.
+
+The table is Go rather than configuration on purpose. It is an authorization
+policy: it goes through the compiler and through review, and it changes in the
+same commit and the same deployment as the endpoints whose scopes it talks
+about. In the environment it would become possible for `admin` to mean one thing
+in staging and another in production — by accident, and without a diff.
+
+#### It is checked when the request is judged, not when the credential is made
+
+Nothing is expanded into a token or into a session. `Principal.Scopes` stays
+exactly what the credential carried, and a session records that; the policy is
+applied at the moment a requirement is checked, by `Principal.SatisfiesScopes`.
+
+Two consequences, both of them the point:
+
+- **Editing the table reaches credentials that already exist.** Add a row and
+  the tokens in circulation and the browsers already signed in are covered from
+  their next request. Remove one and the permission is gone just as promptly.
+- **A session is not a snapshot of a permission model.** It stores `admin`, not
+  what `admin` meant on the day it was created.
+
+`SatisfiesScopes` is deliberately not called `HasScopes`: the answer is not
+"does the credential list these", and a name that said so would invite somebody
+to write the literal comparison by hand — which is the one way to end up judging
+a caller on an unexpanded set. To see both halves, ask the caller:
+
+```go
+principal.Scopes            // ["admin"] — what arrived
+principal.EffectiveScopes() // ["admin", "orders:read", ...] — what it satisfies
+```
+
+#### Expanding in the identity provider instead
+
+Leaving `scopeImplications` empty is a real configuration, not an omission: the
+application then judges callers on exactly the scopes their credentials carry.
+That is the right choice when the identity provider already resolves roles into
+scopes — Keycloak's role-to-scope mapping, for instance — and it is how this
+template behaves before you edit the table.
+
+| | Expand in the identity provider | Expand here |
+|---|---|---|
+| Reaches API keys and sessions | No — only tokens it issues | **Yes**, one table for every scheme |
+| Where the policy is reviewed | The identity provider's configuration | Your repository, beside the endpoints |
+| Who can change it | Whoever administers the IdP | Whoever can merge a pull request |
+| Several services, one policy | **Yes**, issued once and shared | Each service keeps its own copy |
+
+Choose the identity provider when the permission model is shared by several
+services and administered as identity. Choose the table here when the model is
+this application's own, when API keys or sessions carry permissions too, or when
+you want the policy to move with the code that enforces it. Nothing stops you
+from doing both, as long as you do not express the same implication twice.
+
+#### Naming, wildcards, and writing your own expander
+
+`resource:action` (`orders:write`) is the recommended shape for the scopes **your
+application declares**. It is a convention rather than a rule, and it is not
+enforced: scopes arriving in a token are opaque strings, and real identity
+providers do not agree on a shape — `openid` and `profile` from OIDC,
+`read:users` from Auth0, whole URLs from others.
+
+**There are no wildcards.** `orders:*` matches nothing, and the right-hand side
+of the table lists concrete scopes. How a scope is interpreted is part of a
+protocol shared with the identity provider and with every other service holding
+the same token; adding a non-standard meaning to it makes this application
+disagree with all of them about what a credential permits.
+
+A project that finds the enumeration tedious has a seam rather than a wildcard.
+`authkit.ScopeExpander` has one method, and anything satisfying it can be handed
+to `middleware.Auth` in place of the table:
+
+```go
+// prefixExpander lets "orders:*" stand for every orders scope a caller could
+// need, without teaching the comparison itself about wildcards.
+type prefixExpander struct{ known []string }
+
+func (e prefixExpander) Expand(held []string) []string {
+	expanded := slices.Clone(held)
+	for _, scope := range held {
+		prefix, ok := strings.CutSuffix(scope, ":*")
+		if !ok {
+			continue
+		}
+		for _, candidate := range e.known {
+			if strings.HasPrefix(candidate, prefix+":") && !slices.Contains(expanded, candidate) {
+				expanded = append(expanded, candidate)
+			}
+		}
+	}
+	return expanded
+}
+```
+
+Note what has and has not changed. The comparison an endpoint's requirement goes
+through is still exact equality; what varies is only the set the caller is
+judged to hold. Keep `Expand` free of side effects and stable in its ordering —
+the result reaches the generated documentation, which has to come out the same
+on every run.
+
+### Rules only the resource can settle
+
+Some rules cannot be decided before the data is read. "Only the owner of the
+order may update it" is not a fact about the caller, and no declaration made up
+front can settle it.
+
+The decision therefore happens inside the handler — and a decision inside a
+handler is exactly the kind that quietly stops matching the documentation. So
+the declaration holds a reference to the very predicate the handler runs, and
+the adapter refuses to serve a success the predicate never approved:
+
+```go
+// The declaration: what the rule is, and what decides it.
+var orderOwnerCheck = restkit.NewResourceCheck[dto.Order](
+	"Only the caller the order belongs to can update it.",
+	func(p *authkit.Principal, order *dto.Order) bool {
+		return service.IsOwner(p.Subject, order)
+	},
+)
+
+Security: &restkit.SecuritySpec{
+	Scopes:   []string{"orders:write"}, // may write orders at all
+	Resource: orderOwnerCheck,          // may write *this* order
+},
+
+// The handler: authorize as soon as the resource exists, before answering.
+order, err := svc.FindOrder(id)
+if err != nil {
+	return nil, err
+}
+if err := restkit.Authorize(r, order); err != nil {
+	return nil, err
+}
+```
+
+A refused caller gets the same 403 a missing scope produces. That is deliberate:
+neither is something presenting the credential again would fix, so a caller has
+nothing to do with the difference.
+
+`PUT /order/{id}` in the order module is this worked example, including the test
+that matters — a caller holding **every scope the endpoint declares**, refused
+because the order is somebody else's.
+
+#### Trying both of them against a running server
+
+Order 1 belongs to `alice` and order 2 to `bob`, so a local checkout can
+exercise the scope policy and the resource rule together. `encli auth token`
+mints tokens for `local` and `test` with `AUTH_MODE=hs256`:
+
+```sh
+ALICE=$(encli auth token --sub alice --scope orders:write)
+ADMIN=$(encli auth token --sub alice --scope admin)      # no orders:write at all
+BOB=$(encli auth token --sub bob --scope orders:write)
+BODY='{"amount":1500,"status":"paid"}'
+
+# The owner, holding the scope the endpoint asks for.
+curl -X PUT localhost:8080/order/1 -H "Authorization: Bearer $ALICE" \
+  -H 'Content-Type: application/json' -d "$BODY"
+# 200 {"id":1,"ownerSubject":"alice","amount":1500,"status":"paid"}
+
+# The same caller holding only admin. Nothing in the endpoint mentions admin;
+# the implication table is what lets this through.
+curl -X PUT localhost:8080/order/1 -H "Authorization: Bearer $ADMIN" \
+  -H 'Content-Type: application/json' -d "$BODY"
+# 200
+
+# A caller holding every scope the endpoint declares — and not the owner.
+curl -X PUT localhost:8080/order/2 -H "Authorization: Bearer $ALICE" \
+  -H 'Content-Type: application/json' -d "$BODY"
+# 403 {"error":{"code":"forbidden","message":"this operation is not allowed for the caller"}}
+```
+
+The third one is the one to sit with. `alice` is authenticated, holds
+`orders:write`, and is refused — because the scope answered "may write orders"
+and the order answered "not this one".
+
+#### Where the predicate belongs
+
+In your domain. What "owner" means is part of the order's specification, and an
+authorization framework has no business defining it. `service.IsOwner` is the
+whole definition, and it takes a subject rather than a `*authkit.Principal`:
+
+```go
+func IsOwner(subject string, order *dto.Order) bool {
+	return order != nil && subject != "" && order.OwnerSubject == subject
+}
+```
+
+Keeping the authorization framework out of that signature is what lets the rule
+be read, tested and reused without it. The declaration above is the one place
+that knows a verified caller is identified by a `Subject`.
+
+#### Forgetting the call is not a silent failure
+
+An endpoint that declares a `Resource` and answers with a success that no check
+approved is refused with a 500 and an `authorization_drift_log` record. **This is
+on in production as well.** A declaration promising that only the owner may update
+an order, with a handler that forgot to ask, is an endpoint serving everyone —
+which is not a documentation problem to be logged and moved past.
+
+The mirror case is caught too: calling `Authorize` where nothing is declared, or
+with a type the declared predicate does not take. It is far less dangerous — the
+handler is stricter than the document, not laxer — and it is still refused,
+because there is no answer `Authorize` could give instead. Returning "allowed"
+would let a handler serve a resource it believes was checked, and returning
+"refused" would turn a wiring mistake into a denial for a legitimate caller.
+
+| The record says | What happened | What to do |
+|---|---|---|
+| `never ran` | The declaration promises a check the handler skipped | Call `restkit.Authorize` with the resource before returning, or drop `Resource` if the rule is not real |
+| `does not declare` | The handler ran a check the endpoint does not mention | Add `Resource` so the documentation states the rule, or stop calling `Authorize` |
+| `but the handler passed` | The check is declared for another type | Hand `Authorize` the type the predicate takes |
+
+Two combinations cannot mean anything and are refused **at startup** rather than
+on a request: a `Public` endpoint carrying a `Resource` (there is no caller for
+the rule to be about), and a declaration whose scheme nothing can verify.
+
+#### One rule per endpoint
+
+Calling `Authorize` again runs the same rule on another resource, which is what
+a handler loading a list wants. An endpoint needing two genuinely different rules
+is asking to be two endpoints, and this deliberately does not help it stay as
+one.
+
+#### Deciding whether to hide that the resource exists
+
+Answering 403 for somebody else's order tells the caller that the order exists.
+Answering 404 instead hides it, and hides your own users' mistakes with it. This
+template does not choose for you, because the answer is not general. Ask:
+
+- **Is the identifier guessable?** Sequential ids leak a great deal under 403 —
+  a competitor can count your orders. Opaque ids leak nothing they did not
+  already have.
+- **Is existence itself sensitive?** Whether a *user* exists usually is; whether
+  an *order id* exists usually is not.
+- **Would 404 send a legitimate caller down the wrong path?** Somebody who
+  mistyped one digit of their own order id is helped by 403 and misled by 404.
+
+If you choose 404, return it from the handler in place of the `Authorize` error
+and keep the shape identical to a genuine miss — a 404 that differs in wording,
+timing or headers hides nothing.
+
+#### Rules that read a claim
+
+The predicate receives the whole `*authkit.Principal`, so a rule can read a claim
+the token carried:
+
+```go
+func inSameOrg(p *authkit.Principal, order *dto.Order) bool {
+	org, _ := p.Claims["org"].(string)
+	return org != "" && org == order.Org
+}
+```
+
+⚠ **Claims that went through JSON have JSON's types.** A number is `float64`, an
+array is `[]any`, and `p.Claims["level"].(int)` always fails — for tokens, for
+sessions restored from the store, for everything. Until typed accessors exist,
+keep rules to string claims, or convert deliberately and handle the failure.
+
+⚠ **A claim is a fact the issuer asserted, not one your database confirmed.** It
+is as current as the credential it arrived on: a caller moved out of an
+organisation keeps the old `org` until their token expires or their session ends.
+For a rule where that lag matters, read the current value instead of trusting the
+claim.
+
+#### One boundary worth knowing
+
+The guarantee above covers a buffered response, which is every response a typed
+`Endpoint` can produce today. If streaming ever reaches this adapter, the rule
+becomes "`Authorize` must precede the first write", and the guarantee then covers
+the first byte of the body — not the status line, which the pipeline sends before
+the body and cannot take back.
 
 ### 認証の設定
 

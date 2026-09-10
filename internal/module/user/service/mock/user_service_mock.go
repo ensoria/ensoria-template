@@ -7,7 +7,7 @@
 package mock
 
 import (
-	"github.com/ensoria/ensoria-template/internal/module/user/model"
+	"github.com/ensoria/ensoria-template/internal/module/user/dto"
 	"github.com/ensoria/testutil/pkg/mock"
 )
 
@@ -19,9 +19,9 @@ func NewUserServiceMock() *UserServiceMock {
 	return &UserServiceMock{Mock: mock.New()}
 }
 
-func (m *UserServiceMock) GetById(p0 int64) (*model.User, error) {
+func (m *UserServiceMock) GetById(p0 int64) (*dto.GetUser, error) {
 	r := m.Called("GetById", p0)
-	return mock.Get[*model.User](r, 0), mock.Get[error](r, 1)
+	return mock.Get[*dto.GetUser](r, 0), mock.Get[error](r, 1)
 }
 
 func (m *UserServiceMock) GetPostContent(p0 string) (string, error) {

@@ -14,10 +14,14 @@ func (s *OrderSeeder) TableName() string { return "orders" }
 
 func (s *OrderSeeder) Seed(_ faker.Faker) []model.Order {
 	now := time.Now()
+	// The owner is a subject, the same value a verified caller carries, because
+	// that is what the authorization rule on PUT /order/{id} compares against.
+	// They are deliberately different callers: an owner rule that is only ever
+	// tried against its own owner's order has not been tried.
 	return []model.Order{
-		{UserID: 1, OrderDetailID: 1, Total: 1000, CreatedAt: now, UpdatedAt: now},
-		{UserID: 2, OrderDetailID: 2, Total: 2000, CreatedAt: now, UpdatedAt: now},
-		{UserID: 3, OrderDetailID: 3, Total: 3000, CreatedAt: now, UpdatedAt: now},
+		{OwnerSubject: "alice", UserID: 1, OrderDetailID: 1, Total: 1000, Status: "pending", CreatedAt: now, UpdatedAt: now},
+		{OwnerSubject: "bob", UserID: 2, OrderDetailID: 2, Total: 2000, Status: "pending", CreatedAt: now, UpdatedAt: now},
+		{OwnerSubject: "carol", UserID: 3, OrderDetailID: 3, Total: 3000, Status: "paid", CreatedAt: now, UpdatedAt: now},
 	}
 }
 

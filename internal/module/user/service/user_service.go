@@ -6,7 +6,7 @@ import (
 	"time"
 
 	order "github.com/ensoria/ensoria-template/internal/module/order/service"
-	"github.com/ensoria/ensoria-template/internal/module/user/model"
+	"github.com/ensoria/ensoria-template/internal/module/user/dto"
 	"github.com/ensoria/ensoria-template/internal/module/user/repository"
 	pbPost "github.com/ensoria/ensoria-template/pb/post"
 	"github.com/ensoria/worker/pkg/worker"
@@ -24,7 +24,7 @@ import (
 type UserService interface {
 	Something() string
 	GetPostContent(postId string) (string, error)
-	GetById(id int64) (*model.User, error)
+	GetById(id int64) (*dto.GetUser, error)
 }
 
 // gRPCクライアントが必要な場合は、クライアントの型を指定する
@@ -83,6 +83,16 @@ func (s *userService) GetPostContent(postId string) (string, error) {
 
 }
 
-func (s *userService) GetById(id int64) (*model.User, error) {
-	return s.repository.GetByID(id)
+// GetById answers with a DTO rather than the model the repository returned.
+//
+// The rule at the top of this file says so, and it was not being kept here
+// until 2026-09-10: a model is the shape the storage holds, and letting one out
+// of the service puts every caller in the way of a storage change. Converting
+// is dto.To*'s job.
+func (s *userService) GetById(id int64) (*dto.GetUser, error) {
+	user, err := s.repository.GetByID(id)
+	if err != nil {
+		return nil, err
+	}
+	return dto.ToGetUser(user), nil
 }

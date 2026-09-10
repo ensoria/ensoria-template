@@ -122,4 +122,25 @@ var MaxValue = rule.CreateIntMax(
 		"en": "must be %d or less",
 	})
 
+// 小数を取る数値フィールドの下限・上限。
+//
+// ⚠ MinValue / MaxValue は整数専用で、小数のフィールドに使うと**値によらず落ちる**
+// (型が合わないため)。金額や割合のように小数を取り得るフィールドには、こちらを使うこと。
+//
+// ⚠ **閾値も小数で渡すこと**(`MinFloatValue(0.0)`。`MinFloatValue(0)` ではない)。
+// 整数リテラルは untyped int として渡り、閾値の型が合わないと**そのフィールドは
+// 値によらず不正**と判定される —— 設定ミスではなく検証失敗として現れるので、
+// 気づきにくい。
+var MinFloatValue = rule.CreateFloatMin(
+	map[string]string{
+		"ja": "%v以上である必要があります",
+		"en": "must be %v or greater",
+	})
+
+var MaxFloatValue = rule.CreateFloatMax(
+	map[string]string{
+		"ja": "%v以下である必要があります",
+		"en": "must be %v or less",
+	})
+
 // TODO: 他のバリデーションも一通り定義する

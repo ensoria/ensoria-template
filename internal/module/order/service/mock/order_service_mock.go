@@ -19,7 +19,17 @@ func NewOrderServiceMock() *OrderServiceMock {
 	return &OrderServiceMock{Mock: mock.New()}
 }
 
+func (m *OrderServiceMock) FindOrder(p0 uint) (*dto.Order, error) {
+	r := m.Called("FindOrder", p0)
+	return mock.Get[*dto.Order](r, 0), mock.Get[error](r, 1)
+}
+
 func (m *OrderServiceMock) GetOrder() (*dto.Order, error) {
 	r := m.Called("GetOrder")
+	return mock.Get[*dto.Order](r, 0), mock.Get[error](r, 1)
+}
+
+func (m *OrderServiceMock) UpdateOrder(p0 uint, p1 *dto.UpdateOrder) (*dto.Order, error) {
+	r := m.Called("UpdateOrder", p0, p1)
 	return mock.Get[*dto.Order](r, 0), mock.Get[error](r, 1)
 }
