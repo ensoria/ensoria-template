@@ -45,8 +45,8 @@ var _ = Describe("APIKeyStore", func() {
 
 			principal, _ := store.Lookup(context.Background(), testKey)
 
-			Expect(principal.HasScopes([]string{"orders:write"})).To(BeTrue())
-			Expect(principal.HasScopes([]string{"orders:read"})).To(BeFalse())
+			Expect(principal.SatisfiesScopes([]string{"orders:write"})).To(BeTrue())
+			Expect(principal.SatisfiesScopes([]string{"orders:read"})).To(BeFalse())
 		})
 
 		// The scheme is what an endpoint's Schemes declaration is matched
@@ -106,7 +106,7 @@ var _ = Describe("APIKeyStore", func() {
 
 			Expect(a.Subject).To(Equal("a"))
 			Expect(b.Subject).To(Equal("b"))
-			Expect(a.HasScopes([]string{"orders:read"})).To(BeFalse())
+			Expect(a.SatisfiesScopes([]string{"orders:read"})).To(BeFalse())
 		})
 	})
 
@@ -122,7 +122,7 @@ var _ = Describe("APIKeyStore", func() {
 			keys["added-later"] = &authkit.Principal{Subject: "intruder"}
 
 			principal, _ := store.Lookup(context.Background(), testKey)
-			Expect(principal.HasScopes([]string{"orders:read"})).To(BeFalse())
+			Expect(principal.SatisfiesScopes([]string{"orders:read"})).To(BeFalse())
 			_, err = store.Lookup(context.Background(), "added-later")
 			Expect(err).To(HaveOccurred())
 		})
@@ -138,7 +138,7 @@ var _ = Describe("APIKeyStore", func() {
 			first.Subject = "somebody-else"
 
 			second, _ := store.Lookup(context.Background(), testKey)
-			Expect(second.HasScopes([]string{"orders:read"})).To(BeFalse())
+			Expect(second.SatisfiesScopes([]string{"orders:read"})).To(BeFalse())
 			Expect(second.Subject).To(Equal(testCaller))
 		})
 	})

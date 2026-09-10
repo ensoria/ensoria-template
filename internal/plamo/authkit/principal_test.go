@@ -47,7 +47,7 @@ var _ = Describe("Principal", func() {
 					"admin": {"orders:write"},
 				}))
 
-			Expect(principal.HasScopes([]string{"orders:write"})).To(BeTrue())
+			Expect(principal.SatisfiesScopes([]string{"orders:write"})).To(BeTrue())
 		})
 
 		// Every scheme goes through the same attachment, so none of them may be
@@ -59,7 +59,7 @@ var _ = Describe("Principal", func() {
 						"admin": {"orders:write"},
 					}))
 
-				Expect(principal.HasScopes([]string{"orders:write"})).To(BeTrue())
+				Expect(principal.SatisfiesScopes([]string{"orders:write"})).To(BeTrue())
 			},
 			Entry("a token", authkit.SchemeJWT),
 			Entry("an API key", authkit.SchemeAPIKey),
@@ -72,7 +72,7 @@ var _ = Describe("Principal", func() {
 					"admin": {"orders:write"},
 				}))
 
-			Expect(principal.HasScopes([]string{"users:write"})).To(BeFalse())
+			Expect(principal.SatisfiesScopes([]string{"users:write"})).To(BeFalse())
 		})
 
 		// Attaching in place would let one request's policy follow a value that
@@ -85,8 +85,8 @@ var _ = Describe("Principal", func() {
 			}))
 
 			Expect(attached).NotTo(BeIdenticalTo(original))
-			Expect(attached.HasScopes([]string{"orders:write"})).To(BeTrue())
-			Expect(original.HasScopes([]string{"orders:write"})).To(BeFalse())
+			Expect(attached.SatisfiesScopes([]string{"orders:write"})).To(BeTrue())
+			Expect(original.SatisfiesScopes([]string{"orders:write"})).To(BeFalse())
 		})
 
 		// No policy is a real choice: it is what a deployment whose identity
@@ -94,7 +94,7 @@ var _ = Describe("Principal", func() {
 		It("changes nothing when no policy is attached", func() {
 			principal := (&authkit.Principal{Scopes: []string{"admin"}}).WithScopeExpander(nil)
 
-			Expect(principal.HasScopes([]string{"orders:write"})).To(BeFalse())
+			Expect(principal.SatisfiesScopes([]string{"orders:write"})).To(BeFalse())
 			Expect(principal.EffectiveScopes()).To(Equal([]string{"admin"}))
 		})
 
@@ -128,27 +128,27 @@ var _ = Describe("Principal", func() {
 		})
 	})
 
-	Describe("HasScopes", func() {
+	Describe("SatisfiesScopes", func() {
 		principal := &authkit.Principal{Scopes: []string{"users:read", "users:write"}}
 
 		It("accepts a caller holding every required scope", func() {
-			Expect(principal.HasScopes([]string{"users:read"})).To(BeTrue())
-			Expect(principal.HasScopes([]string{"users:read", "users:write"})).To(BeTrue())
+			Expect(principal.SatisfiesScopes([]string{"users:read"})).To(BeTrue())
+			Expect(principal.SatisfiesScopes([]string{"users:read", "users:write"})).To(BeTrue())
 		})
 
 		It("rejects a caller missing any one of them", func() {
-			Expect(principal.HasScopes([]string{"users:read", "users:delete"})).To(BeFalse())
+			Expect(principal.SatisfiesScopes([]string{"users:read", "users:delete"})).To(BeFalse())
 		})
 
 		It("accepts when nothing is required", func() {
-			Expect(principal.HasScopes(nil)).To(BeTrue())
+			Expect(principal.SatisfiesScopes(nil)).To(BeTrue())
 		})
 
 		It("rejects everything on a nil principal instead of panicking", func() {
 			var missing *authkit.Principal
 
-			Expect(missing.HasScopes(nil)).To(BeFalse())
-			Expect(missing.HasScopes([]string{"users:read"})).To(BeFalse())
+			Expect(missing.SatisfiesScopes(nil)).To(BeFalse())
+			Expect(missing.SatisfiesScopes([]string{"users:read"})).To(BeFalse())
 		})
 	})
 

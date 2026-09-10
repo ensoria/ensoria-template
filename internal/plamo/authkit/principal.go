@@ -90,18 +90,23 @@ func (p *Principal) EffectiveScopes() []string {
 	return p.implied.Expand(p.Scopes)
 }
 
-// HasScopes reports whether the caller holds every required scope.
+// SatisfiesScopes reports whether the caller meets a scope requirement.
 //
 // The check is AND, not OR: OpenAPI reads `security: [{scheme: [a, b]}]` as
 // "needs both", so requiring all of them keeps the generated document and the
 // running code saying the same thing.
 //
-// The requirement is compared against EffectiveScopes, so an attached policy
-// applies here and nowhere else. That is the whole reason the policy hangs off
-// the Principal instead of being passed to each decision: this is the only
-// place scopes are judged, so there is no second way to judge them that could
-// forget to expand.
-func (p *Principal) HasScopes(required []string) bool {
+// The requirement is compared against EffectiveScopes, so a caller can meet it
+// through a scope that implies it rather than by carrying it. That is why this
+// is not called HasScopes, which is what it was until the policy existed: the
+// answer is not "does the credential list these", and a name saying it does
+// would invite someone to write the literal check themselves — which is the one
+// way to end up judging a caller on an unexpanded set.
+//
+// Being the only place scopes are judged is the point. The policy hangs off the
+// Principal rather than being passed to each decision precisely so that there
+// is no second way to judge them, and therefore no way to forget.
+func (p *Principal) SatisfiesScopes(required []string) bool {
 	if p == nil {
 		return false
 	}

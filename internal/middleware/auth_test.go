@@ -47,6 +47,12 @@ func okHandler(seen *authkit.Principal) rest.Handler {
 	}
 }
 
+// ⚠ Most specs below hand the middleware a nil scope policy. Nil is a real
+// configuration — it is what an application that states no implications runs
+// with — and it means a caller is judged on the scopes their credential
+// literally carries. These specs are about authentication, so that is the
+// setting that keeps them about one thing. The two specs that do pass a policy
+// are the ones about the policy being attached at all, and they say so.
 var _ = Describe("authentication middleware", func() {
 	Describe("in the HTTP pipeline", func() {
 		It("records the verified caller on the request context", func() {
@@ -81,7 +87,7 @@ var _ = Describe("authentication middleware", func() {
 
 			mw(okHandler(&seen))(authRequest())
 
-			Expect(seen.HasScopes([]string{"orders:write"})).To(BeTrue())
+			Expect(seen.SatisfiesScopes([]string{"orders:write"})).To(BeTrue())
 			Expect(seen.Scopes).To(Equal([]string{"admin"}),
 				"the credential's own scopes must reach the handler as they arrived")
 		})
@@ -242,6 +248,30 @@ var _ = Describe("authentication middleware", func() {
 			p, ok := authkit.PrincipalFrom(r.Context())
 			Expect(ok).To(BeTrue())
 			Expect(p.Subject).To(Equal("usr_1"))
+		})
+
+		// The other half of the single attachment point. A connection is opened
+		// once and read from for as long as it lasts, so a caller carried into
+		// one without the policy would be judged on an unexpanded set for every
+		// message they ever send.
+		It("attaches the scope policy to the caller it carries in", func() {
+			expander, err := authkit.NewScopeImplications(map[string][]string{
+				"admin": {"orders:write"},
+			})
+			Expect(err).NotTo(HaveOccurred())
+
+			guard := middleware.AuthUpgrade(verifierStub{
+				principal: &authkit.Principal{
+					Subject: "usr_1", Scheme: authkit.SchemeSession, Scopes: []string{"admin"},
+				},
+			}, expander)
+			r := authRequest()
+
+			Expect(guard(r)).To(BeNil())
+
+			p, ok := authkit.PrincipalFrom(r.Context())
+			Expect(ok).To(BeTrue())
+			Expect(p.SatisfiesScopes([]string{"orders:write"})).To(BeTrue())
 		})
 
 		It("lets an upgrade with no credential proceed", func() {

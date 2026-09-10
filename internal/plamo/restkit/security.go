@@ -25,7 +25,7 @@ func authorize(security *SecuritySpec, r *rest.Request) *rest.Response {
 	if security != nil {
 		schemes, scopes = security.Schemes, security.Scopes
 	}
-	if !principal.HasScheme(schemes) || !principal.HasScopes(scopes) {
+	if !principal.HasScheme(schemes) || !principal.SatisfiesScopes(scopes) {
 		// The caller is known and still may not: repeating the credential
 		// would not help, so this is 403 rather than 401.
 		return ForbiddenResponse()

@@ -56,6 +56,10 @@ var _ = Describe("CreateWSRouter", func() {
 			wskit.NewModule(&wskit.Channel{Path: "/ws/two"}),
 		}
 
+		// nil is the scope policy: these specs are about which handshakes are
+		// refused, and no policy means a caller is judged on the scopes their
+		// credential literally carries. That the policy reaches a connection at
+		// all is fixed in internal/middleware (AuthUpgrade).
 		router := wsApp.CreateWSRouter(modules, rejectingVerifier{}, sameOriginOnly, nil)
 
 		Expect(router.Modules).To(HaveLen(2))

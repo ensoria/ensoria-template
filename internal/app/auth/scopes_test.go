@@ -23,7 +23,7 @@ var _ = Describe("the application's scope policy", func() {
 
 		caller := (&authkit.Principal{Scopes: []string{"admin"}}).WithScopeExpander(expander)
 
-		Expect(caller.HasScopes(devScopes())).To(BeTrue())
+		Expect(caller.SatisfiesScopes(devScopes())).To(BeTrue())
 	})
 
 	// ⚠ Deliberate: the README teaches the difference between "authenticated"
@@ -37,7 +37,7 @@ var _ = Describe("the application's scope policy", func() {
 
 		caller := (&authkit.Principal{Scopes: []string{"orders:write"}}).WithScopeExpander(expander)
 
-		Expect(caller.HasScopes([]string{"orders:read"})).To(BeFalse())
+		Expect(caller.SatisfiesScopes([]string{"orders:read"})).To(BeFalse())
 	})
 
 	Describe("ScopeImplicationTable", func() {
@@ -56,7 +56,7 @@ var _ = Describe("the application's scope policy", func() {
 
 			caller := (&authkit.Principal{Scopes: []string{"admin"}}).WithScopeExpander(expander)
 
-			Expect(caller.HasScopes(devScopes())).To(BeTrue())
+			Expect(caller.SatisfiesScopes(devScopes())).To(BeTrue())
 		})
 	})
 })

@@ -159,7 +159,7 @@ var _ = Describe("POST /session", func() {
 		admin := (&authkit.Principal{
 			Subject: "usr_1", Scopes: []string{"admin"}, Scheme: authkit.SchemeJWT,
 		}).WithScopeExpander(expander)
-		Expect(admin.HasScopes([]string{"things:write"})).To(BeTrue(),
+		Expect(admin.SatisfiesScopes([]string{"things:write"})).To(BeTrue(),
 			"the caller has to be one the policy actually widens, or this proves nothing")
 
 		ep := http.NewCreateSession(store, cookies)

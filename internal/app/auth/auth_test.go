@@ -149,7 +149,7 @@ var _ = Describe("the development key store", func() {
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(principal.Subject).To(Equal(DevSubject))
-		Expect(principal.HasScopes(devScopes())).To(BeTrue())
+		Expect(principal.SatisfiesScopes(devScopes())).To(BeTrue())
 	})
 
 	// The keys still come from the configuration, so adding one locally keeps
@@ -161,7 +161,7 @@ var _ = Describe("the development key store", func() {
 		principal, err := keys.Lookup(context.Background(), "a-key-of-my-own")
 
 		Expect(err).NotTo(HaveOccurred())
-		Expect(principal.HasScopes(devScopes())).To(BeTrue())
+		Expect(principal.SatisfiesScopes(devScopes())).To(BeTrue())
 	})
 
 	Describe("the payment provider key", func() {
@@ -173,8 +173,8 @@ var _ = Describe("the development key store", func() {
 
 			Expect(err).NotTo(HaveOccurred())
 			Expect(principal.Subject).To(Equal(DevPaymentSubject))
-			Expect(principal.HasScopes([]string{"orders:write"})).To(BeTrue())
-			Expect(principal.HasScopes([]string{"orders:read"})).To(BeFalse())
+			Expect(principal.SatisfiesScopes([]string{"orders:write"})).To(BeTrue())
+			Expect(principal.SatisfiesScopes([]string{"orders:read"})).To(BeFalse())
 		})
 
 		// It exists to make the difference between "authenticated" and
@@ -186,8 +186,8 @@ var _ = Describe("the development key store", func() {
 			payment, _ := keys.Lookup(context.Background(), DevPaymentAPIKey)
 			configured, _ := keys.Lookup(context.Background(), DevAPIKey)
 
-			Expect(payment.HasScopes(devScopes())).To(BeFalse())
-			Expect(configured.HasScopes(devScopes())).To(BeTrue())
+			Expect(payment.SatisfiesScopes(devScopes())).To(BeFalse())
+			Expect(configured.SatisfiesScopes(devScopes())).To(BeTrue())
 		})
 
 		// Unlike DevAPIKey it is not in the configuration, so nothing outside
