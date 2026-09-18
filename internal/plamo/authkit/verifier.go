@@ -392,9 +392,15 @@ func (v *verifier) verifyJWT(token string) (*Principal, error) {
 		Subject: subject,
 		Scopes:  scopesOf(claims),
 		Scheme:  SchemeJWT,
-		// A conversion, not a copy: the parser's map is handed over whole. The
-		// registered claims (sub, exp, iss) stay in it, so a caller reading them
-		// through the accessors sees the same token the verifier judged.
+		// A conversion, not a copy: the parser's map is handed over whole.
+		//
+		// Copying would protect nothing. jwt.Parse builds a fresh map for every
+		// token it parses, so this one belongs to this request alone — unlike a
+		// KeyStore's principal, which may well be shared between requests and is
+		// copied for that reason.
+		//
+		// The registered claims (sub, exp, iss) stay in it, so a caller reading
+		// them through the accessors sees the same token the verifier judged.
 		Claims: Claims(claims),
 	}, nil
 }
