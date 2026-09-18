@@ -78,6 +78,19 @@ type ResourceCheck struct {
 // keeping authkit out of the domain's signatures means the rule can be read,
 // tested and reused without the authorization layer.
 //
+// A rule about something the credential carried reads it here, in the
+// declaration, and hands the domain the value:
+//
+//	func(p *authkit.Principal, o *dto.Order) bool {
+//	    org, ok := p.Claims.String("org")
+//	    return ok && service.BelongsToOrg(org, o)
+//	}
+//
+// ⚠ Read claims through the accessors on authkit.Claims rather than by asserting
+// on the map. A claim that went through JSON has JSON's types, so
+// p.Claims["level"].(int) fails on a number the issuer wrote as one — and it
+// fails by refusing a caller who should have been allowed.
+//
 // ⚠ The predicate is called with exactly what the handler passed, a nil pointer
 // included. A handler that can reach Authorize without a resource has usually
 // skipped a 404 it should have answered first — but if yours can, say so in the

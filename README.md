@@ -532,20 +532,75 @@ timing or headers hides nothing.
 
 #### Rules that read a claim
 
-The predicate receives the whole `*authkit.Principal`, so a rule can read a claim
-the token carried:
+A rule can be about something the credential carried rather than about the
+caller's identity — the organisation a token names, the clearance level an
+identity provider assigns. The claim is read **in the declaration**, which then
+hands the domain a plain value:
 
 ```go
-func inSameOrg(p *authkit.Principal, order *dto.Order) bool {
-	org, _ := p.Claims["org"].(string)
-	return org != "" && org == order.Org
+// The declaration: it knows about credentials, so it is where a claim is read.
+var sameOrgCheck = restkit.NewResourceCheck[dto.Order](
+	"Only a caller in the order's organisation can update it.",
+	func(p *authkit.Principal, order *dto.Order) bool {
+		org, ok := p.Claims.String("org")
+		return ok && service.BelongsToOrg(org, order)
+	},
+)
+
+// The domain: what "the same organisation" means, with no framework in sight.
+func BelongsToOrg(org string, order *dto.Order) bool {
+	return order != nil && org != "" && order.Org == org
 }
 ```
 
-⚠ **Claims that went through JSON have JSON's types.** A number is `float64`, an
-array is `[]any`, and `p.Claims["level"].(int)` always fails — for tokens, for
-sessions restored from the store, for everything. Until typed accessors exist,
-keep rules to string claims, or convert deliberately and handle the failure.
+That is the same split `IsOwner` uses above, for the same reason: the predicate
+in your domain takes the values it reasons about, not the caller object. (The
+rule above is a sketch — the module that ships uses the owner rule; orders have
+no organisation.)
+
+##### Reading claims
+
+`Claims` are read through accessors rather than by asserting on the map:
+
+```go
+org, ok := p.Claims.String("org")
+level, ok := p.Claims.Int("level")           // Number for one that may be fractional
+verified, ok := p.Claims.Bool("email_verified")
+roles, ok := p.Claims.StringSlice("roles")
+```
+
+**They exist because a claim's type is not the type you wrote.** A claim that
+reached this application through JSON — a verified token, a session restored from
+the store — arrives in JSON's type system: every number is a `float64` and every
+array a `[]any`, so `p.Claims["level"].(int)` never succeeds. It fails by
+refusing a caller who should have been allowed, which is the quietest way an
+authorization rule can be wrong. A caller a `KeyStore` built in Go keeps its Go
+types instead. The accessors read both, so a rule does not have to know which
+kind of caller it is looking at.
+
+- **`ok` is false when the claim is absent *or* holds something else.** For a
+  rule that is the same answer — deny — so the two are not distinguished. Read
+  the map directly (it is a plain `map[string]any`) to tell them apart, or to
+  reach a shape the accessors do not cover, such as a nested object.
+- **Nothing is converted between values.** `float64(3)`, `int(3)` and
+  `json.Number("3")` are one number and all read as `3`; the string `"3"` is a
+  different claim and reads as nothing. `"true"` is not a boolean, and `"admin"`
+  is not a one-element list. Whether `"yes"` counts as true, or whether
+  `"admin editor"` is one role or two, is a guess — and a guess made here becomes
+  an authorization decision your issuer never made. The refusal is visible
+  instead: the rule denies, you see the 403 while developing, and the fix goes
+  where it belongs (a mapper in the identity provider, or a deliberate conversion
+  in the declaration).
+- **`Int` refuses what it cannot answer**: a number with a fractional part, and
+  one beyond 2^53. An integer that large does not survive a JWT — the token
+  carries the digits, and decoding lands them in a `float64` — so ids that big
+  should be issued as strings.
+- **`StringSlice` returns a fresh slice**, and refuses a list holding anything
+  but strings rather than returning the strings that happened to be in it.
+
+`encli auth token --claim-json level=3` mints a local token whose claim has the
+type the identity provider would give it, which is what makes a rule like this
+testable before one exists.
 
 ⚠ **A claim is a fact the issuer asserted, not one your database confirmed.** It
 is as current as the credential it arrived on: a caller moved out of an

@@ -68,7 +68,9 @@ var ErrSessionNotFound = errors.New("sessionkit: no such session")
 // number is a float64 and every array a []any, however it was written. So
 // claims["level"].(int) fails on a value that was written as an int, and it
 // fails the same way for a caller who presented a JWT — JSON is what both went
-// through. Read them with care until typed accessors exist.
+// through. Application code should read them through the accessors on
+// authkit.Claims, which take that difference out of the caller's hands (this
+// package cannot name that type: the dependency runs authkit → sessionkit).
 type Snapshot struct {
 	Subject string         `json:"sub"`
 	Scopes  []string       `json:"scopes,omitempty"`

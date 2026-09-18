@@ -392,7 +392,10 @@ func (v *verifier) verifyJWT(token string) (*Principal, error) {
 		Subject: subject,
 		Scopes:  scopesOf(claims),
 		Scheme:  SchemeJWT,
-		Claims:  claims,
+		// A conversion, not a copy: the parser's map is handed over whole. The
+		// registered claims (sub, exp, iss) stay in it, so a caller reading them
+		// through the accessors sees the same token the verifier judged.
+		Claims: Claims(claims),
 	}, nil
 }
 

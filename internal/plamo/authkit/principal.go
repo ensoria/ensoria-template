@@ -34,9 +34,14 @@ type Principal struct {
 	// Scheme is how the caller authenticated: SchemeJWT, SchemeAPIKey or
 	// SchemeSession.
 	Scheme string
-	// Claims are the remaining token claims, for application code that needs
-	// more than the fields above. Nil for API keys.
-	Claims map[string]any
+	// Claims are what the credential carried besides the fields above: the
+	// token's claims, or whatever a KeyStore attached to the caller behind an
+	// API key. Nil when the credential carried nothing else.
+	//
+	// Read them with the accessors rather than by asserting on the map: a claim
+	// that went through JSON has JSON's types, so claims["level"].(int) fails on
+	// a number the issuer wrote as one. See Claims.
+	Claims Claims
 
 	// implied is the application's scope policy: what Scopes stand for. It is
 	// attached once the caller has been verified (see WithScopeExpander) and is
