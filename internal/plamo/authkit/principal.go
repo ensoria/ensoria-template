@@ -1,9 +1,16 @@
 // Package authkit verifies the credentials a caller presents and turns them into
 // a Principal that the rest of the application can read off the request context.
 //
-// It only verifies credentials; issuing them is left to an identity provider or
-// to application code. That keeps the framework independent of any particular
-// login design (user store, password policy, refresh strategy).
+// It only verifies credentials. Issuing them is an identity provider's job —
+// always, by design: nothing in this template holds a user, hashes a password,
+// or signs a token for a person, so a project cannot grow a second way in. A
+// backend with no credential material to leak has no credential leak.
+//
+// A browser session is not an exception to that. It is traded for a token this
+// package verified first (sessionkit), so the identity provider is still the
+// only thing that says who anyone is; what the trade buys is a credential the
+// server can take back. See "Where tokens come from" in the README for the
+// policy and its boundaries, API keys included.
 //
 // The package lives under plamo so that a project can replace or extend it —
 // swapping the API key store for a database-backed one, for example.

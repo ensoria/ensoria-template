@@ -631,8 +631,9 @@ the body and cannot take back.
 （鍵を持てばトークンを偽造できる）なので**ローカル開発向け**です。本番は `jwks` を使い、
 IdP の公開鍵で検証してください。
 
-> **このテンプレートはトークンを発行しません。** 発行（ログイン）は IdP か、自分で書く
-> ログインエンドポイントの仕事です。`Auth` に署名鍵や有効期限の設定が無いのはそのためで、
+> **このテンプレートはトークンを発行しません。** 発行（ログイン）は IdP の仕事です
+> （方針とその境界は [Where tokens come from](#where-tokens-come-from) を参照）。
+> `Auth` に署名鍵や有効期限の設定が無いのはそのためで、
 > **アプリケーション自身にとって `AUTH_SECRET` は検証専用**です。
 >
 > 開発時にトークンが要るときは `encli auth token` を使ってください。これはアプリケーションの
@@ -1050,6 +1051,90 @@ catch — both are pinned by specs in
 > **CORS is not access control.** It decides what a *page in a browser* may read,
 > and nothing else — every non-browser caller ignores it. What may be called, and
 > by whom, is `Endpoint.Security` and the credential the caller presents.
+
+
+### Where tokens come from
+
+This application verifies credentials. It does not issue them: there is no user
+store here, nothing that hashes a password, and nothing that signs a token for a
+person. Signing in happens at an identity provider, and what reaches this
+backend is the result of it.
+
+That is a decision, not a gap in the template:
+
+- **It removes the worst migration there is.** Adding an identity provider later
+  means moving user records, re-hashing passwords into a format the new system
+  accepts, and making every client sign in again on the same day. A project that
+  started at an identity provider never has that week.
+- **An application that stores no passwords cannot leak them.** The whole class
+  of incident — a credential dump — needs credentials to dump.
+- **A door that exists gets used.** "Supported but discouraged" self-issuance is
+  what a project reaches for the week before a deadline, and what nobody revisits
+  afterwards. There is no such door here, deliberately: not even a disabled one.
+
+So the story is one sentence: **the application verifies, the identity provider
+issues.**
+
+#### Three things that look like exceptions and are not
+
+| What | Why it is inside the policy |
+|---|---|
+| **API keys** (`X-API-Key` and `KeyStore`) | A machine's credential, for callers that cannot speak OAuth — a payment provider's callback, a partner's batch job. It identifies a service, never a person, and no human identity is issued anywhere in the flow. |
+| **`encli auth token`** | It runs in `local` and `test` only, and only under `AUTH_MODE=hs256`, with no flag that overrides either check. Every deployed environment uses `jwks`, where this application holds the issuer's public keys and can sign nothing at all. It is how you call your own endpoints before an identity provider exists. |
+| **Browser sessions** | A session is traded for a token that was verified first (`POST /session`). It says who the identity provider already said you are, and unlike a token it can be taken back. See [Cookie authentication](#cookie-authentication-browser-sessions). |
+
+One thing is genuinely absent: **refresh tokens**. This backend does not issue,
+store, rotate, receive or verify them — that is the identity provider's token
+endpoint, and reimplementing rotation and reuse detection here would be
+reimplementing the part that is easiest to get subtly wrong. A browser holds a
+session instead; a native app refreshes directly with the identity provider and
+presents the fresh token here like any other.
+
+#### If you would rather not depend on someone else's service
+
+Run an identity provider yourself. The answer to "we cannot use a third-party
+SaaS" is a proven product on your own infrastructure — Keycloak, Authentik,
+Zitadel — rather than a login endpoint of your own. Password reset, email
+verification, lockout, MFA, social login, account linking and admin tooling are
+finished problems there, and unfinished ones in anything written this quarter.
+
+Nothing changes on this side. A self-hosted issuer is configured exactly like a
+hosted one:
+
+```sh
+AUTH_MODE=jwks
+AUTH_JWKS_URL=https://sso.example.com/realms/acme/protocol/openid-connect/certs
+AUTH_ISSUER=https://sso.example.com/realms/acme
+AUTH_AUDIENCE=acme-api
+```
+
+The next section runs exactly that arrangement against a Keycloak this
+repository already carries, so the configuration above can be tried before any
+infrastructure exists. Its realm is a development realm and not a starting point
+for a production one — [.keycloak/README.md](.keycloak/README.md) says what is
+in it and why.
+
+##### Before it carries production traffic
+
+Running an identity provider is its own operational job, and its documentation
+is the place to learn it. What the compose service here leaves out, in the order
+it tends to hurt:
+
+- **A database of its own**, backed up and restorable. It holds your users; it is
+  a system of record, not a cache.
+- **More than one instance**, behind whatever fronts your services.
+- **A fixed public hostname and TLS.** The issuer URL is written into every token
+  and checked on every request, so it cannot be whatever hostname a request
+  happened to use.
+- **An admin console that is not on the public internet**, with administrator
+  accounts that use MFA.
+- **An upgrade plan.** Realms migrate between versions, and a login system that
+  cannot be upgraded becomes one that cannot be patched.
+- **Signing-key rotation.** Verification here follows it by itself — the key set
+  is refetched on the interval `AUTH_JWKS_CACHE_TTL` sets — but rotating in the
+  first place is the issuer's side to arrange.
+
+Keycloak's [server guide](https://www.keycloak.org/guides) covers each of these.
 
 
 ### Developing against Keycloak
