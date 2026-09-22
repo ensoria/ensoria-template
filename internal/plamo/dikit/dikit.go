@@ -111,6 +111,25 @@ func AsHTTPModule(f any) any {
 	)
 }
 
+// AsHTTPModuleWithTags registers an HTTP module whose endpoints have to be
+// asked for by name, giving one tag per parameter (an empty string leaves that
+// parameter untagged).
+//
+// It exists because two endpoints of the same type are indistinguishable to the
+// container: GET /order and POST /order/{id}/approval are both
+// Endpoint[NoBody, dto.Order], so one of them has to be provided under a name
+// (ProvideNamed) and asked for under that name here.
+//
+//	dikit.ProvideNamed(http.NewApprove, "orderApprove"),
+//	dikit.AsHTTPModuleWithTags(NewOrderApprovalModule, `name:"orderApprove"`),
+func AsHTTPModuleWithTags(f any, tags ...string) any {
+	return fx.Annotate(
+		f,
+		fx.ParamTags(tags...),
+		fx.ResultTags(GroupTagHttpModules),
+	)
+}
+
 func AsWSModule(f any) any {
 	return fx.Annotate(
 		f,

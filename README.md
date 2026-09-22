@@ -532,31 +532,65 @@ timing or headers hides nothing.
 
 #### Rules that read a claim
 
-A rule can be about something the credential carried rather than about the
-caller's identity — the organisation a token names, the clearance level an
-identity provider assigns. The claim is read **in the declaration**, which then
-hands the domain a plain value:
+A rule can be about something the credential carried rather than about who the
+caller is — how much this caller may approve, which organisation they belong to.
+`POST /order/{id}/approval` in the order module is the worked example: approving
+is a staff action, so ownership says nothing about it, and what decides it is a
+claim the identity provider asserts.
+
+The claim is read **in the declaration**, which then hands the domain a plain
+value:
 
 ```go
 // The declaration: it knows about credentials, so it is where a claim is read.
-var sameOrgCheck = restkit.NewResourceCheck[dto.Order](
-	"Only a caller in the order's organisation can update it.",
+var orderApprovalCheck = restkit.NewResourceCheck[dto.Order](
+	"Only a caller whose approval limit covers the order's amount can approve it.",
 	func(p *authkit.Principal, order *dto.Order) bool {
-		org, ok := p.Claims.String("org")
-		return ok && service.BelongsToOrg(org, order)
+		limit, ok := p.Claims.Number("approval_limit")
+		return ok && service.WithinApprovalLimit(limit, order)
 	},
 )
 
-// The domain: what "the same organisation" means, with no framework in sight.
-func BelongsToOrg(org string, order *dto.Order) bool {
-	return order != nil && org != "" && order.Org == org
+// The domain: what "within the limit" means, with no framework in sight.
+func WithinApprovalLimit(limit float64, order *dto.Order) bool {
+	return order != nil && order.Amount <= limit
 }
 ```
 
 That is the same split `IsOwner` uses above, for the same reason: the predicate
-in your domain takes the values it reasons about, not the caller object. (The
-rule above is a sketch — the module that ships uses the owner rule; orders have
-no organisation.)
+in your domain takes the values it reasons about, not the caller object.
+
+A caller whose token carries no `approval_limit` is refused, and so is one whose
+token carries it as the string `"1500"`. Both mean the same thing — this caller
+has not been given a limit — and the `ok` is what keeps them from meaning
+anything else.
+
+##### Trying it against a running server
+
+Order 1 costs 1000 and order 2 costs 2000, so one limit demonstrates both
+answers. `--claim-json` is what mints a token whose claim is a **number**, the
+way an identity provider issues it:
+
+```sh
+STAFF=$(encli auth token --sub dana --scope orders:write --claim-json approval_limit=1500)
+
+# Within the limit.
+curl -X POST localhost:8080/order/1/approval -H "Authorization: Bearer $STAFF"
+# 200 {"id":1,"ownerSubject":"alice","amount":1000,"status":"approved"}
+
+# Above it. Same caller, same scope, different order.
+curl -X POST localhost:8080/order/2/approval -H "Authorization: Bearer $STAFF"
+# 403 {"error":{"code":"forbidden","message":"this operation is not allowed for the caller"}}
+
+# The same limit as a string, which is what a misconfigured mapper produces.
+STRING=$(encli auth token --sub dana --scope orders:write --claim approval_limit=1500)
+curl -X POST localhost:8080/order/1/approval -H "Authorization: Bearer $STRING"
+# 403 — "1500" is not a number, and the rule does not guess that it meant one
+```
+
+The last one is worth running once. It is the failure this whole section is
+about, and it looks identical to "not allowed" from the outside — which is why
+the type is checked here rather than assumed.
 
 ##### Reading claims
 
@@ -1192,7 +1226,7 @@ TOKEN=$(curl -s -X POST \
   http://localhost:8081/realms/ensoria/protocol/openid-connect/token \
   -d grant_type=password -d client_id=ensoria-frontend \
   -d username=alice -d password=alice \
-  -d scope="users:read users:write orders:read" \
+  -d scope="users:read users:write orders:read orders:write" \
   | jq -r .access_token)
 ```
 
@@ -1213,7 +1247,7 @@ curl -X POST localhost:8080/session -H "Authorization: Bearer $TOKEN" \
 The `subject` in that response is now Keycloak's user id rather than a name you
 chose, which is what a real deployment records as the session's owner.
 
-#### The three things that usually go wrong
+#### The four things that usually go wrong
 
 - **`iss` does not match.** The token says one thing and `AUTH_ISSUER` another,
   usually because Keycloak decided its own hostname from the request. The compose
@@ -1221,6 +1255,11 @@ chose, which is what a real deployment records as the session's owner.
   set it there too.
 - **`aud` is `account`.** Keycloak's default audience is not the application, so
   every token is refused. The realm adds `ensoria` with an audience mapper.
+- **A claim that should be a number arrives as a string.** Keycloak's attribute
+  mappers write strings unless `jsonType.label` says otherwise, and a rule
+  reading a number refuses a string rather than guessing (see
+  `POST /order/{id}/approval`). The realm's `approval-limit` mapper shows the
+  setting.
 - **Scopes arrive but nothing is authorized.** The application reads permissions
   from the space-separated `scope` claim (RFC 8693). Keycloak can also be
   configured to put roles in `realm_access.roles`, or into `scope` as a JSON

@@ -14,6 +14,11 @@ import (
 
 const ModuleName = "order"
 
+// approvalEndpointName tells the approval endpoint apart from GET /order in the
+// container: both are Endpoint[NoBody, dto.Order], and a type is all the
+// container has to go on.
+const approvalEndpointName = "orderApprove"
+
 func Params() (*appconfig.Parameters, error) {
 	return registry.ModuleParams(ModuleName)
 }
@@ -44,15 +49,28 @@ func NewOrderByIDModule(put *restkit.Endpoint[dto.UpdateOrder, dto.Order]) *rest
 	}
 }
 
+// NewOrderApprovalModule は1件の注文の承認。
+//
+// 承認は「注文の更新」とは別のルールで守られる(呼び出し元の承認限度額)。
+// 別のルールは別のエンドポイントにする —— 1つの宣言に2つのルールを持たせない。
+func NewOrderApprovalModule(approve *restkit.Endpoint[restkit.NoBody, dto.Order]) *rest.Module {
+	return &rest.Module{
+		Path: "/order/{id}/approval",
+		Post: restkit.NewController(approve),
+	}
+}
+
 func init() {
 	dikit.AppendConstructors([]any{
 		dikit.ProvideAs[repository.OrderRepository](repository.NewOrderRepository),
 		dikit.ProvideAs[service.OrderService](service.NewOrderService),
 		http.NewGet,
 		http.NewPut,
+		dikit.ProvideNamed(http.NewApprove, approvalEndpointName),
 		http.NewPaymentCallback,
 		dikit.AsHTTPModule(NewModule),
 		dikit.AsHTTPModule(NewOrderByIDModule),
+		dikit.AsHTTPModuleWithTags(NewOrderApprovalModule, `name:"`+approvalEndpointName+`"`),
 		dikit.AsHTTPModule(NewPaymentCallbackModule),
 	})
 }

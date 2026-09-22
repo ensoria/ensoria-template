@@ -56,6 +56,15 @@
       }
     },
     {
+      "name": "orders:write",
+      "description": "Change or approve an order",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      }
+    },
+    {
       "name": "admin:jobs:read",
       "description": "Read the worker's jobs",
       "protocol": "openid-connect",
@@ -116,6 +125,7 @@
         "users:read",
         "users:write",
         "orders:read",
+        "orders:write",
         "admin:jobs:read",
         "admin:jobs:write",
         "admin:tasks:read",
@@ -132,6 +142,20 @@
             "access.token.claim": "true",
             "id.token.claim": "false"
           }
+        },
+        {
+          "name": "approval-limit",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-attribute-mapper",
+          "consentRequired": false,
+          "config": {
+            "user.attribute": "approval_limit",
+            "claim.name": "approval_limit",
+            "jsonType.label": "long",
+            "access.token.claim": "true",
+            "id.token.claim": "false",
+            "introspection.token.claim": "true"
+          }
         }
       ]
     }
@@ -144,6 +168,11 @@
       "email": "alice@example.com",
       "firstName": "Alice",
       "lastName": "Example",
+      "attributes": {
+        "approval_limit": [
+          "1500"
+        ]
+      },
       "credentials": [
         {
           "type": "password",

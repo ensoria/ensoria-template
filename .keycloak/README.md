@@ -60,8 +60,9 @@ changes nothing.
 | User | `alice` / `alice` | The only account. It may request every scope |
 | Client scope `basic` | The `sub` mapper | Puts the user's id in `sub` |
 | Client scopes `users:read`, … | One per declared permission | Requested per token, so `403` can be demonstrated as easily as `200` |
+| User attribute `approval_limit` = 1500 | The `approval-limit` mapper | A claim `POST /order/{id}/approval` reads. 1500 covers order 1 and not order 2, so both answers can be seen |
 
-## Two things Keycloak's defaults get wrong for this application
+## Three things Keycloak's defaults get wrong for this application
 
 Both were found by running it, and both fail in a way that produces a working
 token the application then refuses — or accepts while authorizing nothing.
@@ -83,8 +84,34 @@ reads a string, so the claim is silently ignored and the token authorizes
 nothing. Modelling permissions as client scopes is both the fix and the correct
 OAuth modelling.
 
+**The type of a claim.** A claim carrying a number has to arrive as a number.
+Keycloak's attribute mappers write **strings** unless `jsonType.label` says
+otherwise, and `authkit.Claims.Number` refuses a string on purpose — guessing
+that `"1500"` meant 1500 would be this application inventing an authorization
+decision the issuer never made. The `approval-limit` mapper therefore sets
+`"jsonType.label": "long"`:
+
+```json
+{
+  "name": "approval-limit",
+  "protocolMapper": "oidc-usermodel-attribute-mapper",
+  "config": {
+    "user.attribute": "approval_limit",
+    "claim.name": "approval_limit",
+    "jsonType.label": "long",
+    "access.token.claim": "true"
+  }
+}
+```
+
+Without it the token still verifies, the caller is still authenticated, and the
+approval is refused with a `403` that says nothing about why. `encli auth token
+--claim-json approval_limit=1500` mints the correct shape locally, and
+`--claim approval_limit=1500` mints the broken one, if you want to see both
+without touching a realm.
+
 If you point the application at a realm somebody else configured, these are the
-two things to check first.
+three things to check first.
 
 ## Why the built-in client scopes are written out
 

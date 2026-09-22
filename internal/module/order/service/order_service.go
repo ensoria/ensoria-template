@@ -45,6 +45,19 @@ func IsOwner(subject string, order *dto.Order) bool {
 	return order != nil && subject != "" && order.OwnerSubject == subject
 }
 
+// WithinApprovalLimit reports whether an order is small enough for someone
+// allowed to approve up to limit.
+//
+// Approving is a staff action rather than an owner's, and how much any one of
+// them may approve is not a fact this application holds: it arrives on the
+// credential, as a claim the identity provider asserts. So the limit is passed
+// in — like IsOwner's subject, and for the same reason. What orders is, is that
+// the whole amount has to be covered; the endpoint declaration in
+// controller/http is where the claim carrying it is read.
+func WithinApprovalLimit(limit float64, order *dto.Order) bool {
+	return order != nil && order.Amount <= limit
+}
+
 func NewOrderService(repo repository.OrderRepository) *orderService {
 	return &orderService{repo: repo}
 }
