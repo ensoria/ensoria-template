@@ -111,23 +111,51 @@ func AsHTTPModule(f any) any {
 	)
 }
 
-// AsHTTPModuleWithTags registers an HTTP module whose endpoints have to be
-// asked for by name, giving one tag per parameter (an empty string leaves that
-// parameter untagged).
+// AsHTTPModuleWithTags registers an HTTP module, tagging what it asks for: one
+// fx tag per parameter, in order, with an empty string leaving that parameter
+// untagged.
 //
-// It exists because two endpoints of the same type are indistinguishable to the
-// container: GET /order and POST /order/{id}/approval are both
-// Endpoint[NoBody, dto.Order], so one of them has to be provided under a name
-// (ProvideNamed) and asked for under that name here.
+// This is the general form. Asking for an endpoint by name — the ordinary reason
+// a module needs a tag at all — is AsHTTPModuleWithNamedEndpoints, which writes
+// the tag for you; reach for this one when a name cannot express it, such as
+// asking for a group.
 //
-//	dikit.ProvideNamed(http.NewApprove, "orderApprove"),
-//	dikit.AsHTTPModuleWithTags(NewOrderApprovalModule, `name:"orderApprove"`),
+//	dikit.AsHTTPModuleWithTags(NewSomeModule, `name:"orderApprove"`, `group:"widgets"`),
 func AsHTTPModuleWithTags(f any, tags ...string) any {
 	return fx.Annotate(
 		f,
 		fx.ParamTags(tags...),
 		fx.ResultTags(GroupTagHttpModules),
 	)
+}
+
+// AsHTTPModuleWithNamedEndpoints registers an HTTP module, asking for its
+// endpoints by name — one name per parameter, in order. An empty string leaves
+// that parameter to be resolved by type, which is what a module mixing a named
+// endpoint with ordinary ones needs.
+//
+// A name is needed when two endpoints share a type, since a type is all the
+// container has to go on: GET /order and POST /order/{id}/approval are both
+// Endpoint[NoBody, dto.Order], so one of them is provided under a name
+// (ProvideNamed) and asked for by that name here.
+//
+//	dikit.ProvideNamed(http.NewApprove, "orderApprove"),
+//	dikit.AsHTTPModuleWithNamedEndpoints(NewOrderApprovalModule, "orderApprove"),
+//
+// The tag syntax stays in this package on purpose: a misspelled tag is a startup
+// failure that names neither the module nor the endpoint, while a misspelled
+// name is at least a name. Use AsHTTPModuleWithTags for anything a name cannot
+// express, such as asking for a group.
+func AsHTTPModuleWithNamedEndpoints(f any, names ...string) any {
+	tags := make([]string, 0, len(names))
+	for _, name := range names {
+		if name == "" {
+			tags = append(tags, "")
+			continue
+		}
+		tags = append(tags, `name:"`+name+`"`)
+	}
+	return AsHTTPModuleWithTags(f, tags...)
 }
 
 func AsWSModule(f any) any {

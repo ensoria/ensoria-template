@@ -70,7 +70,7 @@ func init() {
 		http.NewPaymentCallback,
 		dikit.AsHTTPModule(NewModule),
 		dikit.AsHTTPModule(NewOrderByIDModule),
-		dikit.AsHTTPModuleWithTags(NewOrderApprovalModule, `name:"`+approvalEndpointName+`"`),
+		dikit.AsHTTPModuleWithNamedEndpoints(NewOrderApprovalModule, approvalEndpointName),
 		dikit.AsHTTPModule(NewPaymentCallbackModule),
 	})
 }
