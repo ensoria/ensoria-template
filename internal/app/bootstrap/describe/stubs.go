@@ -311,5 +311,10 @@ func (p *stubPublisher) SetOptions(opts ...mb.PublishOption) mb.Publisher {
 func (*stubPublisher) Publish(ctx context.Context, target string, data []byte, metadata map[string]string, opts ...mb.PublishOption) error {
 	return nil
 }
+
+// CarriesMetadata answers like the brokers the template connects to, so that
+// building the graph for describe raises no warning about a broker that
+// cannot carry metadata.
+func (*stubPublisher) CarriesMetadata() bool          { return true }
 func (*stubPublisher) Ping(ctx context.Context) error { return nil }
 func (*stubPublisher) Close() error                   { return nil }
