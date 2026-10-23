@@ -8,6 +8,7 @@ import (
 	"github.com/ensoria/config/pkg/appconfig"
 	"github.com/ensoria/config/pkg/registry"
 	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
+	"github.com/ensoria/ensoria-template/internal/plamo/initiator"
 	"github.com/ensoria/loggear/pkg/loggear"
 	enmb "github.com/ensoria/mb/pkg/mb"
 	"github.com/ensoria/mb/pkg/mq"
@@ -18,12 +19,21 @@ import (
 // defaultModule is the configuration module the broker settings are read from.
 const defaultModule = "default"
 
+// SubscriberPanicHandler records a panic in a subscription handler.
+//
+// The record is there to pin down a defect in this application: the channel,
+// the message that triggered it and the stack. It deliberately leaves out who
+// started the work. The headers that carry it (initiator.ReservedHeaders) hold
+// an ID — the caller's sub, an email address with some identity providers — and
+// claims, including ones this application chose not to carry, which its
+// subscribers drop. The broker hands this handler the metadata as it arrived,
+// before that filtering, so the headers are removed here.
 type SubscriberPanicHandler struct{}
 
 func (h *SubscriberPanicHandler) OnPanic(panicValue interface{}, stackTrace []byte, metadata enmb.PanicMetadata) {
 	loggear.Error("Panic Recovered in Subscriber",
 		"target", metadata.Target,
-		"metadata", metadata.Metadata,
+		"metadata", initiator.WithoutHeaders(metadata.Metadata),
 		"data", metadata.Data,
 		"panic_value", panicValue,
 		"panic_type", fmt.Sprintf("%T", panicValue),

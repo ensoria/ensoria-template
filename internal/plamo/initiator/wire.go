@@ -36,6 +36,20 @@ func IsReservedHeader(key string) bool {
 	return slices.Contains(ReservedHeaders(), key)
 }
 
+// WithoutHeaders returns a copy of metadata without the wire form's headers,
+// leaving metadata itself alone. Use it wherever metadata leaves the framework's
+// hands raw — to a handler, into a log — so that the headers are read only
+// through FromHeaders, under its rules.
+func WithoutHeaders(metadata map[string]string) map[string]string {
+	kept := make(map[string]string, len(metadata))
+	for key, value := range metadata {
+		if !IsReservedHeader(key) {
+			kept[key] = value
+		}
+	}
+	return kept
+}
+
 // Headers writes the value in its wire form.
 //
 // The kind is always written, unknown included: a consumer can then tell "the

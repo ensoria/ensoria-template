@@ -1,6 +1,7 @@
 package mb_test
 
 import (
+	"fmt"
 	"os"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -10,6 +11,7 @@ import (
 	"github.com/ensoria/config/pkg/registry"
 	"github.com/ensoria/ensoria-template/internal/infra/mb"
 	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
+	"github.com/ensoria/ensoria-template/internal/plamo/initiator"
 	enmb "github.com/ensoria/mb/pkg/mb"
 	"go.uber.org/fx"
 )
@@ -152,3 +154,40 @@ var _ = Describe("brokerConfigFromParams", func() {
 
 // dikit.LC is what the connection constructors take; the fake has to satisfy it.
 var _ dikit.LC = (*fakeLifecycle)(nil)
+
+// The panic record is there to identify a defect in this application, so it
+// carries what pins the defect down and nothing about who started the work: the
+// headers that travel in hold an ID and claims this application may well have
+// chosen not to carry, and a log is the last place they should end up.
+var _ = Describe("SubscriberPanicHandler", func() {
+	It("records the panic without the headers who-started-this travels in", func() {
+		records := captureLogRecords(func() {
+			(&mb.SubscriberPanicHandler{}).OnPanic("boom", []byte("stack"), enmb.PanicMetadata{
+				Target: "hello_world",
+				Data:   []byte(`{"message":"hi"}`),
+				Metadata: map[string]string{
+					"routing_key":          "hello_world",
+					initiator.HeaderKind:   "app_user",
+					initiator.HeaderID:     "user@example.com",
+					initiator.HeaderClaims: `{"email":"user@example.com"}`,
+				},
+			})
+		})
+
+		Expect(records).To(HaveLen(1))
+		Expect(records[0]).To(HaveKeyWithValue("type", "subscriber_panic_log"))
+		Expect(records[0]).To(HaveKeyWithValue("target", "hello_world"))
+		Expect(records[0]["metadata"]).To(Equal(map[string]any{"routing_key": "hello_world"}))
+		Expect(fmt.Sprint(records[0])).NotTo(ContainSubstring("user@example.com"))
+	})
+
+	It("does not change the metadata it was handed", func() {
+		metadata := map[string]string{"routing_key": "hello_world", initiator.HeaderKind: "system"}
+
+		captureLogRecords(func() {
+			(&mb.SubscriberPanicHandler{}).OnPanic("boom", nil, enmb.PanicMetadata{Target: "hello_world", Metadata: metadata})
+		})
+
+		Expect(metadata).To(HaveKey(initiator.HeaderKind))
+	})
+})

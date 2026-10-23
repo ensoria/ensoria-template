@@ -18,6 +18,13 @@ var _ = Describe("the wire form", func() {
 		Expect(initiator.IsReservedHeader("trace_id")).To(BeFalse())
 	})
 
+	It("hands out metadata without the reserved headers, leaving the original alone", func() {
+		metadata := map[string]string{"routing_key": "q", initiator.HeaderKind: "system", "ce_authid": "user-1"}
+
+		Expect(initiator.WithoutHeaders(metadata)).To(Equal(map[string]string{"routing_key": "q"}))
+		Expect(metadata).To(HaveLen(3))
+	})
+
 	It("uses the CloudEvents authcontext attribute names", func() {
 		Expect(initiator.HeaderKind).To(Equal("ce_authtype"))
 		Expect(initiator.HeaderID).To(Equal("ce_authid"))

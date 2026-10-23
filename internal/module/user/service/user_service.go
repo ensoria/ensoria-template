@@ -55,8 +55,13 @@ func (s *userService) Something() string {
 	fmt.Printf("injected orderService: %T\n", s.orderService)
 	s.orderService.GetOrder()
 
-	// worker test contextは基本的には`context.Background()`を使う
-	// request.Context()などを使わないように注意すること
+	// Enqueue with the caller's context, cancellation detached:
+	// context.WithoutCancel(ctx). Its values say who started the work, and the
+	// worker carries that to the job; its cancellation must not, or a request
+	// that finishes first would fail the enqueue.
+	//
+	// This scaffolding method takes no ctx, so it falls back to
+	// context.Background(), and the job runs as unknown.
 	a, err := s.jobQueue.Enqueue(context.Background(), "simple_log", map[string]any{
 		"message": "UserServiceImpl.Something called",
 	})

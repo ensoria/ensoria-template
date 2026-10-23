@@ -52,7 +52,7 @@ func NewSubscribe(rootCtx dikit.RootContext, subConn mb.Subscriber, claims *init
 		// ctx はブローカー実装が受信時に供給する受信スコープのコンテキストで、OnReceiveへ伝播される
 		messageHandler := func(ctx context.Context, data []byte, metadata map[string]string) error {
 			restored := initiator.FromHeaders(metadata, claims, target)
-			return handler.OnReceive(initiator.With(ctx, restored), data, withoutReservedHeaders(metadata))
+			return handler.OnReceive(initiator.With(ctx, restored), data, initiator.WithoutHeaders(metadata))
 		}
 		return subConn.Subscribe(rootCtx.Ctx, target, messageHandler, opts...)
 	}
@@ -116,17 +116,6 @@ func withInitiatorHeaders(metadata map[string]string, from *initiator.Initiator)
 	}
 	maps.Copy(merged, from.Headers())
 	return merged
-}
-
-// withoutReservedHeaders returns a copy of metadata without the headers.
-func withoutReservedHeaders(metadata map[string]string) map[string]string {
-	kept := make(map[string]string, len(metadata))
-	for key, value := range metadata {
-		if !initiator.IsReservedHeader(key) {
-			kept[key] = value
-		}
-	}
-	return kept
 }
 
 // StartSubscriptions は宣言された購読(mb_subscriptions group)をまとめて開始する。
