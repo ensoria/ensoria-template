@@ -16,10 +16,6 @@ import (
 	"go.uber.org/fx"
 )
 
-// workerJobSource names the worker in the records written about the
-// who-started-this value a job carries.
-const workerJobSource = "worker job"
-
 func NewWorker(
 	lc dikit.LC,
 	cacheClient *goredis.Client,
@@ -70,14 +66,15 @@ func NewWorker(
 // the worker writes it into the job's metadata inside Enqueue and puts it back
 // on the handler's context before the job runs, so a job enqueued while serving
 // a request runs as that caller's work, and one a scheduled task enqueued runs
-// as the system's. The claims kept are the application's Initiator claims.
+// as the system's. The claims kept are the application's Initiator claims, and
+// a record about a value a job carries names the job.
 //
 // ⚠ It travels in the context's values, so enqueue with the caller's context
 // (context.WithoutCancel(ctx), detaching only its cancellation). A job enqueued
 // with context.Background() carries nothing and runs as unknown.
 func workerOptions(claims *initiator.ClaimSet) []worker.Option {
 	return []worker.Option{
-		worker.WithPropagator(initiator.NewPropagator(claims, workerJobSource)),
+		worker.WithPropagator(initiator.NewPropagator(claims)),
 	}
 }
 

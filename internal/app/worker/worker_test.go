@@ -103,4 +103,44 @@ var _ = Describe("a job", func() {
 
 		Expect(from.Kind()).To(Equal(initiator.KindUnknown))
 	})
+
+	// A record about the value a job carries says which job it was, the way a
+	// record about a message says which channel.
+	It("carrying a value it cannot read is reported with the job's name, and still runs", func() {
+		q := newMemoryQueue()
+		w := libworker.New(q, append(workerOptions(nil), libworker.WithHistory(&history.NoopRepository{}))...)
+		seen := make(chan *initiator.Initiator, 1)
+		w.Register(reportJob, func(ctx context.Context, _ []byte) error {
+			seen <- initiator.From(ctx)
+			return nil
+		})
+
+		var from *initiator.Initiator
+		records := captureLogRecords(func() {
+			runCtx, stop := context.WithCancel(context.Background())
+			defer stop()
+			go w.Start(runCtx)
+
+			// Written by something other than this application's propagator:
+			// an ID with no kind.
+			q.jobs <- &job.JobData{
+				ID:       "job-1",
+				Name:     reportJob,
+				Payload:  []byte(`{}`),
+				Options:  job.DefaultOption(),
+				Metadata: map[string]string{initiator.HeaderID: "user-1"},
+			}
+			Eventually(seen).WithTimeout(jobTimeout).Should(Receive(&from))
+		})
+
+		Expect(from.Kind()).To(Equal(initiator.KindUnknown))
+		var malformed []map[string]any
+		for _, r := range records {
+			if r["type"] == initiator.LogTypeHeaderMalformed {
+				malformed = append(malformed, r)
+			}
+		}
+		Expect(malformed).To(HaveLen(1))
+		Expect(malformed[0]).To(HaveKeyWithValue("source", reportJob))
+	})
 })
