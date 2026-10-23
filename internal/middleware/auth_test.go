@@ -11,6 +11,7 @@ import (
 
 	"github.com/ensoria/ensoria-template/internal/middleware"
 	"github.com/ensoria/ensoria-template/internal/plamo/authkit"
+	"github.com/ensoria/ensoria-template/internal/plamo/initiator"
 	"github.com/ensoria/ensoria-template/internal/plamo/restkit"
 	"github.com/ensoria/rest/pkg/rest"
 )
@@ -59,7 +60,7 @@ var _ = Describe("authentication middleware", func() {
 			var seen authkit.Principal
 			mw := middleware.Auth(verifierStub{
 				principal: &authkit.Principal{Subject: "usr_1", Scheme: authkit.SchemeJWT},
-			}, nil)
+			}, nil, nil)
 
 			res := mw(okHandler(&seen))(authRequest())
 
@@ -83,7 +84,7 @@ var _ = Describe("authentication middleware", func() {
 				principal: &authkit.Principal{
 					Subject: "usr_1", Scheme: authkit.SchemeJWT, Scopes: []string{"admin"},
 				},
-			}, expander)
+			}, expander, nil)
 
 			mw(okHandler(&seen))(authRequest())
 
@@ -96,7 +97,7 @@ var _ = Describe("authentication middleware", func() {
 		// served without one, so the endpoint decides (see Endpoint.Security).
 		It("lets a request with no credential through, carrying no caller", func() {
 			var seen authkit.Principal
-			mw := middleware.Auth(verifierStub{}, nil)
+			mw := middleware.Auth(verifierStub{}, nil, nil)
 
 			res := mw(okHandler(&seen))(authRequest())
 
@@ -110,7 +111,7 @@ var _ = Describe("authentication middleware", func() {
 			reached := false
 			mw := middleware.Auth(verifierStub{
 				err: errors.New("bad token: " + authkit.ErrInvalidCredential.Error()),
-			}, nil)
+			}, nil, nil)
 
 			res := mw(func(*rest.Request) *rest.Response {
 				reached = true
@@ -122,7 +123,7 @@ var _ = Describe("authentication middleware", func() {
 		})
 
 		It("answers a refusal in the shared error shape", func() {
-			mw := middleware.Auth(verifierStub{err: errors.New("bad token")}, nil)
+			mw := middleware.Auth(verifierStub{err: errors.New("bad token")}, nil, nil)
 
 			res := mw(okHandler(&authkit.Principal{}))(authRequest())
 
@@ -134,7 +135,7 @@ var _ = Describe("authentication middleware", func() {
 
 		// RFC 6750 asks a rejected bearer request to say which scheme it expects.
 		It("tells the caller which authentication scheme to use", func() {
-			mw := middleware.Auth(verifierStub{err: errors.New("bad token")}, nil)
+			mw := middleware.Auth(verifierStub{err: errors.New("bad token")}, nil, nil)
 
 			res := mw(okHandler(&authkit.Principal{}))(authRequest())
 
@@ -148,7 +149,7 @@ var _ = Describe("authentication middleware", func() {
 			discarding := func() rest.Middleware {
 				return middleware.Auth(verifierStub{
 					discard: []*http.Cookie{{Name: "__Host-session", MaxAge: -1}},
-				}, nil)
+				}, nil, nil)
 			}
 
 			It("puts the instruction on the handler's response", func() {
@@ -200,7 +201,7 @@ var _ = Describe("authentication middleware", func() {
 			unavailable := func() rest.Middleware {
 				return middleware.Auth(verifierStub{
 					err: fmt.Errorf("%w: connection refused", authkit.ErrCredentialUnavailable),
-				}, nil)
+				}, nil, nil)
 			}
 
 			It("answers 503 rather than 401", func() {
@@ -239,7 +240,7 @@ var _ = Describe("authentication middleware", func() {
 		It("lets the upgrade proceed and carries the caller into the connection", func() {
 			guard := middleware.AuthUpgrade(verifierStub{
 				principal: &authkit.Principal{Subject: "usr_1", Scheme: authkit.SchemeJWT},
-			}, nil)
+			}, nil, nil)
 			r := authRequest()
 
 			res := guard(r)
@@ -264,7 +265,7 @@ var _ = Describe("authentication middleware", func() {
 				principal: &authkit.Principal{
 					Subject: "usr_1", Scheme: authkit.SchemeSession, Scopes: []string{"admin"},
 				},
-			}, expander)
+			}, expander, nil)
 			r := authRequest()
 
 			Expect(guard(r)).To(BeNil())
@@ -275,14 +276,14 @@ var _ = Describe("authentication middleware", func() {
 		})
 
 		It("lets an upgrade with no credential proceed", func() {
-			guard := middleware.AuthUpgrade(verifierStub{}, nil)
+			guard := middleware.AuthUpgrade(verifierStub{}, nil, nil)
 
 			Expect(guard(authRequest())).To(BeNil())
 		})
 
 		// Rejecting before the upgrade means no connection is ever established.
 		It("stops the upgrade when the credential cannot be trusted", func() {
-			guard := middleware.AuthUpgrade(verifierStub{err: errors.New("bad token")}, nil)
+			guard := middleware.AuthUpgrade(verifierStub{err: errors.New("bad token")}, nil, nil)
 
 			res := guard(authRequest())
 
@@ -295,12 +296,84 @@ var _ = Describe("authentication middleware", func() {
 		It("stops the upgrade when the credential could not be checked", func() {
 			guard := middleware.AuthUpgrade(verifierStub{
 				err: fmt.Errorf("%w: connection refused", authkit.ErrCredentialUnavailable),
-			}, nil)
+			}, nil, nil)
 
 			res := guard(authRequest())
 
 			Expect(res).NotTo(BeNil())
 			Expect(res.Code).To(Equal(http.StatusServiceUnavailable))
+		})
+	})
+})
+
+// The entry point is the one place that can tell an anonymous request from work
+// that lost track of its origin, so it marks every request it lets through, and
+// "who started this" is then read off the caller (TODO-auth-6.1 §1.2).
+var _ = Describe("the Initiator at the entry point", func() {
+	tenantOnly := func() *initiator.ClaimSet {
+		set, err := initiator.NewClaimSet([]string{"tenant"})
+		Expect(err).NotTo(HaveOccurred())
+		return set
+	}
+
+	// initiatorSeen runs the HTTP middleware and returns what the handler read.
+	initiatorSeen := func(v verifierStub, claims *initiator.ClaimSet) *initiator.Initiator {
+		var seen *initiator.Initiator
+		mw := middleware.Auth(v, nil, claims)
+		mw(func(r *rest.Request) *rest.Response {
+			seen = initiator.From(r.Context())
+			return &rest.Response{Code: http.StatusOK}
+		})(authRequest())
+		return seen
+	}
+
+	Describe("in the HTTP pipeline", func() {
+		It("reads a request with no credential as unauthenticated", func() {
+			Expect(initiatorSeen(verifierStub{}, nil).Kind()).To(Equal(initiator.KindUnauthenticated))
+		})
+
+		It("reads the caller, carrying the application's claims", func() {
+			seen := initiatorSeen(verifierStub{principal: &authkit.Principal{
+				Subject: "usr_1",
+				Scheme:  authkit.SchemeJWT,
+				Claims:  authkit.Claims{"tenant": "t-1", "email": "x@example.com"},
+			}}, tenantOnly())
+
+			Expect(seen.Kind()).To(Equal(initiator.KindAppUser))
+			Expect(seen.ID()).To(Equal("usr_1"))
+			Expect(seen.Claims()).To(Equal(authkit.Claims{"tenant": "t-1"}))
+		})
+
+		It("reads a caller with an API key as an API key", func() {
+			seen := initiatorSeen(verifierStub{principal: &authkit.Principal{Subject: "apikey", Scheme: authkit.SchemeAPIKey}}, nil)
+
+			Expect(seen.Kind()).To(Equal(initiator.KindAPIKey))
+		})
+	})
+
+	Describe("in front of a WebSocket upgrade", func() {
+		It("reads an upgrade with no credential as unauthenticated", func() {
+			r := authRequest()
+
+			Expect(middleware.AuthUpgrade(verifierStub{}, nil, nil)(r)).To(BeNil())
+
+			Expect(initiator.From(r.Context()).Kind()).To(Equal(initiator.KindUnauthenticated))
+		})
+
+		It("reads the caller carried into the connection, with the application's claims", func() {
+			r := authRequest()
+			guard := middleware.AuthUpgrade(verifierStub{principal: &authkit.Principal{
+				Subject: "usr_1",
+				Scheme:  authkit.SchemeSession,
+				Claims:  authkit.Claims{"tenant": "t-1", "email": "x@example.com"},
+			}}, nil, tenantOnly())
+
+			Expect(guard(r)).To(BeNil())
+
+			seen := initiator.From(r.Context())
+			Expect(seen.Kind()).To(Equal(initiator.KindAppUser))
+			Expect(seen.ID()).To(Equal("usr_1"))
+			Expect(seen.Claims()).To(Equal(authkit.Claims{"tenant": "t-1"}))
 		})
 	})
 })

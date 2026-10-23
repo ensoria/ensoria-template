@@ -10,6 +10,7 @@ import (
 	"github.com/ensoria/ensoria-template/internal/middleware"
 	"github.com/ensoria/ensoria-template/internal/plamo/authkit"
 	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
+	"github.com/ensoria/ensoria-template/internal/plamo/initiator"
 	"github.com/ensoria/loggear/pkg/loggear"
 	"github.com/ensoria/rest/pkg/pipeline"
 	"github.com/ensoria/rest/pkg/rest"
@@ -62,14 +63,16 @@ func CreateHTTPPipeline(envVal *string) func(
 	verifier authkit.Verifier,
 	origins *middleware.Origins,
 	scopes authkit.ScopeExpander,
+	claims *initiator.ClaimSet,
 ) (*pipeline.HTTP, error) {
 	return func(
 		modules []*rest.Module,
 		verifier authkit.Verifier,
 		origins *middleware.Origins,
 		scopes authkit.ScopeExpander,
+		claims *initiator.ClaimSet,
 	) (*pipeline.HTTP, error) {
-		return createHTTPPipeline(*envVal, modules, verifier, origins, scopes)
+		return createHTTPPipeline(*envVal, modules, verifier, origins, scopes, claims)
 	}
 }
 
@@ -79,6 +82,7 @@ func createHTTPPipeline(
 	verifier authkit.Verifier,
 	origins *middleware.Origins,
 	scopes authkit.ScopeExpander,
+	claims *initiator.ClaimSet,
 ) (*pipeline.HTTP, error) {
 	// TODO: 別のファイルに分ける
 	panicResponse := &rest.Response{
@@ -124,6 +128,7 @@ func createHTTPPipeline(
 			crossOrigin:   crossOrigin,
 			verifier:      verifier,
 			scopes:        scopes,
+			claims:        claims,
 			panicResponse: panicResponse,
 		}),
 		// Layer 2: コントローラ/ミドルウェアチェーンの実行（=レスポンスの計算）の上限時間。

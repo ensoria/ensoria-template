@@ -89,7 +89,7 @@ func serveChannel(cfg *appconfig.Auth, origins *middleware.Origins) (*httptest.S
 	// caller reaches the lifecycle handlers at all; whether that caller carries
 	// the policy is fixed in internal/middleware (AuthUpgrade), and no channel
 	// declares a scope yet for it to make a difference to.
-	router := wsApp.CreateWSRouter([]*wskit.Module{wskit.NewModule(channel)}, verifier, origins, nil)
+	router := wsApp.CreateWSRouter([]*wskit.Module{wskit.NewModule(channel)}, verifier, origins, nil, nil)
 	mux := http.NewServeMux()
 	router.Register(mux)
 	return httptest.NewServer(mux), store, opened

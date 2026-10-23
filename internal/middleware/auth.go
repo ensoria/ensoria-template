@@ -11,6 +11,7 @@ import (
 	"errors"
 
 	"github.com/ensoria/ensoria-template/internal/plamo/authkit"
+	"github.com/ensoria/ensoria-template/internal/plamo/initiator"
 	"github.com/ensoria/ensoria-template/internal/plamo/restkit"
 	"github.com/ensoria/rest/pkg/rest"
 )
@@ -26,10 +27,15 @@ import (
 // scopes is the application's scope policy, attached to the caller here so that
 // every scope check downstream counts what the held scopes imply. Nil means no
 // policy, which is the behaviour of an application that states none.
-func Auth(verifier authkit.Verifier, scopes authkit.ScopeExpander) rest.Middleware {
+//
+// claims is the application's Initiator claim list. Every request let through
+// is marked as an entry point (initiator.WithEntry), so initiator.From reads
+// "who started this" off the caller — or reads unauthenticated when there is
+// none — and carries those claims. Nil carries none.
+func Auth(verifier authkit.Verifier, scopes authkit.ScopeExpander, claims *initiator.ClaimSet) rest.Middleware {
 	return func(next rest.Handler) rest.Handler {
 		return func(r *rest.Request) *rest.Response {
-			result, refusal := authenticate(verifier, scopes, r)
+			result, refusal := authenticate(verifier, scopes, claims, r)
 			if refusal != nil {
 				return refusal
 			}
@@ -82,9 +88,9 @@ func withDiscardedCookies(res *rest.Response, result *authkit.VerifyResult) *res
 // middleware lets every handshake through; middleware.UpgradeOrigin is what
 // refuses one a browser started from somewhere else, and the router runs it
 // before this.
-func AuthUpgrade(verifier authkit.Verifier, scopes authkit.ScopeExpander) rest.Handler {
+func AuthUpgrade(verifier authkit.Verifier, scopes authkit.ScopeExpander, claims *initiator.ClaimSet) rest.Handler {
 	return func(r *rest.Request) *rest.Response {
-		_, refusal := authenticate(verifier, scopes, r)
+		_, refusal := authenticate(verifier, scopes, claims, r)
 		return refusal
 	}
 }
@@ -104,21 +110,29 @@ func AuthUpgrade(verifier authkit.Verifier, scopes authkit.ScopeExpander) rest.H
 // is judged on the scopes their credential literally carries, which refuses
 // rather than admits — safe, but quiet. If a third transport ever grows its own
 // way of establishing a caller, it has to attach the policy too.
+//
+// The same goes for the entry mark: it is what lets initiator.From tell an
+// anonymous request (unauthenticated) from work that lost track of its origin
+// (unknown). A transport that establishes callers its own way has to mark its
+// requests as well.
 func authenticate(
 	verifier authkit.Verifier,
 	scopes authkit.ScopeExpander,
+	claims *initiator.ClaimSet,
 	r *rest.Request,
 ) (*authkit.VerifyResult, *rest.Response) {
 	result, err := verifier.Verify(r)
 	switch {
 	case err == nil:
+		ctx := initiator.WithEntry(r.Context(), claims)
 		// A result with no Principal is an ordinary anonymous request: public
 		// endpoints are served without one, and endpoints that need a caller
 		// answer 401 on their own declaration.
 		if result.Principal != nil {
 			caller := result.Principal.WithScopeExpander(scopes)
-			r.SetContext(authkit.WithPrincipal(r.Context(), caller))
+			ctx = authkit.WithPrincipal(ctx, caller)
 		}
+		r.SetContext(ctx)
 		return result, nil
 	case errors.Is(err, authkit.ErrCredentialUnavailable):
 		// Nothing was decided about the credential, because whatever holds the

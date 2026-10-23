@@ -7,6 +7,7 @@ import (
 	"github.com/ensoria/ensoria-template/internal/middleware"
 	"github.com/ensoria/ensoria-template/internal/plamo/authkit"
 	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
+	"github.com/ensoria/ensoria-template/internal/plamo/initiator"
 	"github.com/ensoria/ensoria-template/internal/plamo/wskit"
 	"github.com/ensoria/rest/pkg/rest"
 	"github.com/ensoria/websocket/pkg/wsconfig"
@@ -39,10 +40,11 @@ func CreateWSRouter(
 	verifier authkit.Verifier,
 	origins *middleware.Origins,
 	scopes authkit.ScopeExpander,
+	claims *initiator.ClaimSet,
 ) *wsrouter.Router {
 	guards := []rest.Handler{
 		middleware.UpgradeOrigin(origins),
-		middleware.AuthUpgrade(verifier, scopes),
+		middleware.AuthUpgrade(verifier, scopes, claims),
 	}
 
 	runtime := make([]*wsconfig.Module, 0, len(modules))

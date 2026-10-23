@@ -9,6 +9,7 @@ import (
 	"github.com/ensoria/ensoria-template/internal/middleware"
 	"github.com/ensoria/ensoria-template/internal/plamo/authkit"
 	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
+	"github.com/ensoria/ensoria-template/internal/plamo/initiator"
 	"github.com/ensoria/ensoria-template/internal/plamo/sessionkit"
 	"github.com/ensoria/file/pkg/file"
 	"github.com/ensoria/mb/pkg/mb"
@@ -39,6 +40,7 @@ func requireEveryStub(
 	_ schedulerDB.DatabaseClient,
 	_ authkit.Verifier,
 	_ authkit.ScopeExpander,
+	_ *initiator.ClaimSet,
 	_ authkit.KeyStore,
 	_ sessionkit.Store,
 	_ *sessionkit.Cookies,

@@ -7,6 +7,7 @@ import (
 	_ "github.com/ensoria/ensoria-template/internal/app/scheduler/api"
 	"github.com/ensoria/ensoria-template/internal/app/scheduler/task"
 	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
+	"github.com/ensoria/ensoria-template/internal/plamo/initiator"
 	"github.com/ensoria/loggear/pkg/loggear"
 	"github.com/ensoria/scheduler/pkg/control"
 	"github.com/ensoria/scheduler/pkg/database"
@@ -73,12 +74,24 @@ func NewSchedulerApp(lc dikit.LC, s *scheduler.Scheduler, tasks []*task.Schedule
 
 func RegisterTasks(s *sched.Scheduler, tasks []*task.ScheduledTask) error {
 	for _, task := range tasks {
-		if err := s.SetSchedule(task.Name, task.Cron, task.Task); err != nil {
+		if err := s.SetSchedule(task.Name, task.Cron, asSystemTask(task.Task)); err != nil {
 			return err
 		}
 	}
 
 	return nil
+}
+
+// asSystemTask marks the context a scheduled task runs with as the system's
+// work, so that initiator.From reads it as such in the task and in everything
+// it starts — a message it publishes, a job it enqueues.
+//
+// The system is a label, not a principal: it grants nothing, and code that
+// authorizes still finds no caller on the context.
+func asSystemTask(run sched.Task) sched.Task {
+	return func(ctx context.Context) error {
+		return run(initiator.WithSystem(ctx))
+	}
 }
 
 func InjectScheduledTasks(f any) any {

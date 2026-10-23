@@ -148,6 +148,10 @@ func stubs() []any {
 		// the application enforces. It also means a cycle in the policy fails
 		// document generation, which is the same answer the server gives.
 		authApp.NewScopeExpander,
+		// Which claims an Initiator carries. The real constructor for the same
+		// reasons: a list of Go constants, and one a refused name must fail
+		// here as it fails the server.
+		authApp.NewInitiatorClaims,
 
 		// Where API keys are looked up, and where browser sessions are kept.
 		// The application provides both as possibly-nil interfaces — nil means

@@ -11,6 +11,7 @@ import (
 	"github.com/ensoria/cache/pkg/cachememory"
 	"github.com/ensoria/config/pkg/appconfig"
 	"github.com/ensoria/ensoria-template/internal/plamo/authkit"
+	"github.com/ensoria/ensoria-template/internal/plamo/initiator"
 	"github.com/ensoria/ensoria-template/internal/plamo/sessionkit"
 )
 
@@ -227,15 +228,20 @@ var _ = Describe("Claims", func() {
 	// whichever credential the caller presented. A token and a session go through
 	// JSON and arrive in JSON's types; a caller a KeyStore built never does.
 	//
-	// ⚠ The sources are a table so that another one can be added to it. Carrying
-	// a caller over a message broker (TODO-auth-6) is the next one.
+	//
+	// The claims an Initiator carries are one of the sources too: a message
+	// carries them across a broker as JSON, and the consumer reads them with
+	// these same accessors (TODO-auth-6.1 §1.5). A consumer never gets a
+	// Principal — the claims are all that travels.
+	//
+	// ⚠ The sources are a table so that another one can be added to it.
 	Describe("the answers are the same whatever the caller presented", func() {
-		for _, source := range principalSources() {
-			Describe("a caller from "+source.name, func() {
+		for _, source := range claimSources() {
+			Describe("claims from "+source.name, func() {
 				var claims authkit.Claims
 
 				BeforeEach(func() {
-					claims = source.build().Claims
+					claims = source.build()
 				})
 
 				It("reads a string claim", func() {
@@ -300,20 +306,37 @@ var _ = Describe("Claims", func() {
 	})
 })
 
-// principalSource is one way a verified caller reaches application code.
-type principalSource struct {
+// claimSource is one way the claims of a caller reach application code.
+type claimSource struct {
 	name  string
-	build func() *authkit.Principal
+	build func() authkit.Claims
 }
 
-// principalSources lists them. Each builds a caller carrying the same claims —
-// the same values, written the way that source would write them.
-func principalSources() []principalSource {
-	return []principalSource{
-		{name: "a verified token", build: principalFromToken},
-		{name: "a restored session", build: principalFromSession},
-		{name: "an API key store", build: principalFromKeyStore},
+// claimSources lists them. Each builds the same claims — the same values,
+// written the way that source would write them.
+func claimSources() []claimSource {
+	return []claimSource{
+		{name: "a verified token", build: func() authkit.Claims { return principalFromToken().Claims }},
+		{name: "a restored session", build: func() authkit.Claims { return principalFromSession().Claims }},
+		{name: "an API key store", build: func() authkit.Claims { return principalFromKeyStore().Claims }},
+		{name: "an Initiator carried over a message broker", build: claimsFromBrokerInitiator},
 	}
+}
+
+// claimsFromBrokerInitiator takes the caller from a token at an entry point,
+// writes the Initiator the way the publisher does, and restores it the way a
+// subscriber does — through the wire form, which is what puts the claims into
+// JSON's types.
+func claimsFromBrokerInitiator() authkit.Claims {
+	GinkgoHelper()
+
+	carried, err := initiator.NewClaimSet([]string{"org", "level", "ratio", "active", "roles"})
+	Expect(err).NotTo(HaveOccurred())
+
+	entry := authkit.WithPrincipal(initiator.WithEntry(context.Background(), carried), principalFromToken())
+	headers := initiator.From(entry).Headers()
+
+	return initiator.FromHeaders(headers, carried, "test").Claims()
 }
 
 // principalFromToken verifies a signed token, so the claims arrive the way the

@@ -74,6 +74,8 @@ github.com/ensoria/config v0.0.36 h1:9fTX9FLI8beTOlO5niD9vyYRMV67snZL88FgbUKSK94
 github.com/ensoria/config v0.0.36/go.mod h1:smi7IfzjWCbg+7O8yppSNVgkPoZCqwfMtq3oNXDwv7s=
 github.com/ensoria/config v0.0.37 h1:VKatlX+yb/epGMRNfLQArXBulpfns4Lrr5hnk+7ruMs=
 github.com/ensoria/config v0.0.37/go.mod h1:smi7IfzjWCbg+7O8yppSNVgkPoZCqwfMtq3oNXDwv7s=
+github.com/ensoria/config v0.0.38 h1:JHiWYaboM7Eim2TCedTmY1UFVq+QI9MTn8Icyk0zMOY=
+github.com/ensoria/config v0.0.38/go.mod h1:smi7IfzjWCbg+7O8yppSNVgkPoZCqwfMtq3oNXDwv7s=
 github.com/ensoria/encli v0.0.3 h1:lqx3X8iKoBsgbykbbOQQ4bZRUfUqqkpRKj1vD3Iv8Qs=
 github.com/ensoria/encli v0.0.3/go.mod h1:vHUI7tY9UMWTX9EEgfEUrm6H4oXDCX81g24J0Wb/B2A=
 github.com/ensoria/encli v0.0.5 h1:QBD6OM1Cc+STOTmIRECJqQOGwywaKxDrY7J9h3Rq64w=
@@ -106,8 +108,12 @@ github.com/ensoria/validator v0.0.10 h1:JMgNtVNa41avRvWh27e+9ymg1EpJMOa+sDeJgK1L
 github.com/ensoria/validator v0.0.10/go.mod h1:/z6EJxz5JRyOjDW1Wop2XNP4KsCvxuFK16r3xYIDP9k=
 github.com/ensoria/websocket v0.0.6 h1:YD3eSd0Z9rxvA2Swzs+/1n1BGxMBH+/RTL4M81zQQ6w=
 github.com/ensoria/websocket v0.0.6/go.mod h1:pRFOIscmtFWxqPm3CVkZu8dsMk31bw+UmIPE2bCL+fw=
+github.com/ensoria/websocket v0.0.7 h1:B/KWQ1IVM8Z5l2AlRKJjDC2M08jX4osbe13qL6Kypuk=
+github.com/ensoria/websocket v0.0.7/go.mod h1:pRFOIscmtFWxqPm3CVkZu8dsMk31bw+UmIPE2bCL+fw=
 github.com/ensoria/worker v0.0.6 h1:V3dVSoRoDcTLMUgIrb/FhexZlvJBlEM0bd9IGkpHuHo=
 github.com/ensoria/worker v0.0.6/go.mod h1:8EAzIAqnGIl2CWTZtwlYeeDW2Nzhd6B4dXvsWnAELhQ=
+github.com/ensoria/worker v0.0.7 h1:9+4sHdlVjQKK5oDzgXffIa55wXzdIl1rWKrOgNvok5w=
+github.com/ensoria/worker v0.0.7/go.mod h1:8EAzIAqnGIl2CWTZtwlYeeDW2Nzhd6B4dXvsWnAELhQ=
 github.com/fsnotify/fsnotify v1.9.0 h1:2Ml+OJNzbYCTzsxtv8vKSFD9PbJjmhYF14k/jKC7S9k=
 github.com/fsnotify/fsnotify v1.9.0/go.mod h1:8jBTzvmWwFyi3Pb8djgCCO5IBqzKJ/Jwo8TRcHyHii0=
 github.com/gkampitakis/ciinfo v0.3.2 h1:JcuOPk8ZU7nZQjdUhctuhQofk7BGHuIy0c9Ez8BNhXs=

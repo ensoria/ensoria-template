@@ -88,6 +88,10 @@ func Run(envVal *string) error {
 		// What the scopes a caller holds stand for. Resolved once here, so a
 		// cycle in the table stops the process rather than one request.
 		authApp.NewScopeExpander,
+		// Which claims "who started this" (an Initiator) carries: read off the
+		// caller at the entry points, kept from what arrives, sent on with what
+		// is published. Resolved once here, so a refused name stops the process.
+		authApp.NewInitiatorClaims,
 		// Which origins are this deployment's own frontend, resolved once and read
 		// by CORS, the cross-origin check and the WebSocket upgrade guard.
 		wsApp.NewTrustedOrigins,

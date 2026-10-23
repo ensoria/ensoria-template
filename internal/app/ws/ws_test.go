@@ -60,7 +60,7 @@ var _ = Describe("CreateWSRouter", func() {
 		// refused, and no policy means a caller is judged on the scopes their
 		// credential literally carries. That the policy reaches a connection at
 		// all is fixed in internal/middleware (AuthUpgrade).
-		router := wsApp.CreateWSRouter(modules, rejectingVerifier{}, sameOriginOnly, nil)
+		router := wsApp.CreateWSRouter(modules, rejectingVerifier{}, sameOriginOnly, nil, nil)
 
 		Expect(router.Modules).To(HaveLen(2))
 	})
@@ -76,7 +76,7 @@ var _ = Describe("CreateWSRouter", func() {
 			wskit.Raw(wsconfig.NewDefaultModule("/ws/two")),
 		}
 
-		wsApp.CreateWSRouter(modules, rejectingVerifier{}, sameOriginOnly, nil)
+		wsApp.CreateWSRouter(modules, rejectingVerifier{}, sameOriginOnly, nil, nil)
 
 		for _, module := range modules {
 			m := module.RuntimeModule()
@@ -103,7 +103,7 @@ var _ = Describe("CreateWSRouter", func() {
 			wskit.Raw(wsconfig.NewDefaultModule("/ws/two")),
 		}
 
-		wsApp.CreateWSRouter(modules, allowingVerifier{}, middleware.ParseOrigins("https://app.example.test"), nil)
+		wsApp.CreateWSRouter(modules, allowingVerifier{}, middleware.ParseOrigins("https://app.example.test"), nil, nil)
 
 		for _, module := range modules {
 			m := module.RuntimeModule()
@@ -126,7 +126,7 @@ var _ = Describe("CreateWSRouter", func() {
 	It("checks the origin before it checks the credential", func() {
 		modules := []*wskit.Module{wskit.NewModule(&wskit.Channel{Path: "/ws/one"})}
 
-		wsApp.CreateWSRouter(modules, rejectingVerifier{}, middleware.ParseOrigins(""), nil)
+		wsApp.CreateWSRouter(modules, rejectingVerifier{}, middleware.ParseOrigins(""), nil, nil)
 
 		// Both guards would refuse this handshake. Whichever answers first is
 		// the one that ran first.

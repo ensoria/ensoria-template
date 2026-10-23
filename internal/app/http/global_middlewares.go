@@ -14,6 +14,7 @@ import (
 	"github.com/ensoria/ensoria-template/internal/middleware"
 	"github.com/ensoria/ensoria-template/internal/plamo/apidoc"
 	"github.com/ensoria/ensoria-template/internal/plamo/authkit"
+	"github.com/ensoria/ensoria-template/internal/plamo/initiator"
 	"github.com/ensoria/rest/pkg/mw"
 	"github.com/ensoria/rest/pkg/rest"
 )
@@ -26,6 +27,7 @@ type globalMiddlewareDeps struct {
 	crossOrigin   middleware.CrossOriginChecker
 	verifier      authkit.Verifier
 	scopes        authkit.ScopeExpander
+	claims        *initiator.ClaimSet
 	panicResponse *rest.Response
 }
 
@@ -94,7 +96,7 @@ var globalMiddlewareChain = []globalMiddleware{
 	{
 		Name: apidoc.MiddlewareAuth,
 		Build: func(d *globalMiddlewareDeps) rest.Middleware {
-			return middleware.Auth(d.verifier, d.scopes)
+			return middleware.Auth(d.verifier, d.scopes, d.claims)
 		},
 	},
 }

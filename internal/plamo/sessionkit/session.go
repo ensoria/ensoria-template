@@ -58,11 +58,15 @@ var ErrSessionNotFound = errors.New("sessionkit: no such session")
 // one is created — which is the same rule as for a JWT, whose claims are fixed
 // when it is signed.
 //
-// ⚠ The fields are the wire shape of "a verified caller, serialized", and the
-// JSON tags are load-bearing: records outlive a deployment, so renaming a tag
-// signs out everyone holding a session written by the previous version. Carrying
-// a caller between services — over a message broker, say — wants the same shape,
-// so treat it as a format rather than as this package's private business.
+// ⚠ The JSON tags are load-bearing: records outlive a deployment, so renaming a
+// tag signs out everyone holding a session written by the previous version.
+// Treat the shape as a stored format rather than as this package's private
+// business.
+//
+// It is not the shape anything carries between services. A message carries
+// who started the work as an Initiator (plamo/initiator: a kind, an ID and an
+// allowlisted set of claims, never scopes), because what crosses a broker is
+// context the consumer did not verify, not a caller it could act as.
 //
 // ⚠ Claims comes back from storage in JSON's type system, not Go's: every
 // number is a float64 and every array a []any, however it was written. So

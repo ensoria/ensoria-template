@@ -81,6 +81,9 @@ func Start(envVal *string) error {
 		// What the scopes a caller holds stand for. The scheduler serves its own
 		// management endpoints, so it judges scopes the same way the server does.
 		authApp.NewScopeExpander,
+		// Which claims an Initiator carries; the management endpoints are entry
+		// points like the server's.
+		authApp.NewInitiatorClaims,
 		// Which origins are this deployment's own frontend, resolved once and read
 		// by CORS, the cross-origin check and the WebSocket upgrade guard.
 		wsApp.NewTrustedOrigins,
