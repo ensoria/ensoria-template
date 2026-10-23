@@ -28,24 +28,44 @@ import (
 //	        Summary: "Announce that a user was created",
 //	    })
 //	}
+//
+// # Which fields you actually have to fill in
+//
+// Only Target is required to publish. Every field is marked below with the
+// labels restkit.Endpoint and Subscription use: Required, Optional (runtime),
+// Optional (documentation only).
 type PublicationSpec[Msg any] struct {
-	// Target is the channel address to publish to ("user.created"). Required.
+	// Target is the channel address to publish to ("user.created").
+	//
+	// Required.
 	Target string
 
 	// --- Prose that cannot be derived from the types ---
 
 	// Summary is the one-line description of the event being announced.
+	//
+	// Optional (documentation only).
 	Summary string
 	// Description is the longer explanation.
+	//
+	// Optional (documentation only).
 	Description string
 	// FieldDocs gives the meaning of individual payload fields, keyed by field
 	// path in dot / bracket notation.
+	//
+	// Optional (documentation only).
 	FieldDocs map[string]string
 	// Task is the intent label shown in generated indexes (1-3 words).
+	//
+	// Optional (documentation only).
 	Task string
 	// AlsoRead lists further documents to read with this one.
+	//
+	// Optional (documentation only).
 	AlsoRead []string
 	// Related declares operations that come before or after this one.
+	//
+	// Optional (documentation only).
 	Related []string
 
 	// --- Validation ---
@@ -53,15 +73,22 @@ type PublicationSpec[Msg any] struct {
 	// BodyRules validates the message before it is published. Publishing a
 	// message that violates the contract this very declaration documents is
 	// worth catching here, at the only place it can still be stopped.
+	//
+	// Optional (runtime).
 	BodyRules []*rule.RuleSet
 
 	// --- Behaviour and delivery ---
 
 	// Behavior declares side effects, idempotency, delivery and ordering.
+	//
+	// Optional (documentation only): nothing here is enforced. The delivery
+	// facts that do take effect come from Options.
 	Behavior BehaviorSpec
 	// Options are the broker publish options applied to every Publish call.
 	// Per-call options passed to Publish are applied after these, so a call can
 	// override the declared default.
+	//
+	// Optional (runtime).
 	Options []mb.PublishOption
 }
 
@@ -101,6 +128,11 @@ func (p *Publication[Msg]) Target() string {
 //
 // meta may be nil. opts are applied after the declared Options, so a single call
 // can override a declared default without changing what every other call does.
+//
+// Who started the work is read from ctx (initiator.From) and travels in the
+// message's headers next to meta; the application's publish function writes
+// them. So pass the context of the work the message belongs to, and leave the
+// ce_auth* names out of meta: they are refused.
 func (p *Publication[Msg]) Publish(ctx context.Context, msg *Msg, meta Metadata, opts ...mb.PublishOption) error {
 	if p.spec == nil || p.publish == nil {
 		return fmt.Errorf("mbkit: publication was not built with NewPublication")

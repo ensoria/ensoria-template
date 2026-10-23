@@ -19,51 +19,90 @@ import (
 // is invisible to reflection, so no generator can learn which channels the
 // application actually consumes.
 //
-// Only Target and Handle are required to run. Everything else is either an
-// option that changes behaviour (BodyRules, Options, OnInvalid) or read solely
-// by the generators, which show TODO where a declaration is missing.
+// # Which fields you actually have to fill in
+//
+// Only Target and Handle are required to run. Every field is marked below as
+// one of the same labels restkit.Endpoint uses:
+//
+//   - Required — leaving it out is a bug.
+//   - Optional (runtime) — it changes how the subscription behaves. Skipping it
+//     is a real choice, not just a documentation gap.
+//   - Optional (documentation only) — read solely by the generators, which show
+//     TODO where it is missing. Skipping it changes nothing at runtime.
 type Subscription[Msg any] struct {
-	// Target is the channel address to subscribe to ("hello_world"). Required.
+	// Target is the channel address to subscribe to ("hello_world").
+	//
+	// Required.
 	Target string
 
 	// --- Prose that cannot be derived from the types ---
 
 	// Summary is the one-line description of why this subscription exists.
+	//
+	// Optional (documentation only).
 	Summary string
 	// Description is the longer explanation.
+	//
+	// Optional (documentation only).
 	Description string
 	// FieldDocs gives the meaning of individual payload fields, keyed by field
 	// path in dot / bracket notation ("address.city", "items[].id").
+	//
+	// Optional (documentation only).
 	FieldDocs map[string]string
 	// Task is the intent label shown in generated indexes (1-3 words).
+	//
+	// Optional (documentation only).
 	Task string
 	// AlsoRead lists further documents to read with this one.
+	//
+	// Optional (documentation only).
 	AlsoRead []string
 	// Related declares operations that come before or after this one.
+	//
+	// Optional (documentation only).
 	Related []string
 
 	// --- Validation ---
 
 	// BodyRules validates the decoded message. A violation stops the message
 	// before Handle is called and is dealt with according to OnInvalid.
+	//
+	// Optional (runtime).
 	BodyRules []*rule.RuleSet
 
 	// --- Behaviour and delivery ---
 
 	// Behavior declares side effects, idempotency, delivery and ordering.
+	//
+	// Optional (documentation only): nothing here is enforced. The delivery
+	// facts that do take effect come from Options.
 	Behavior BehaviorSpec
 	// Options are the broker subscribe options. They are applied at runtime and
 	// read back for the documentation, so the delivery section describes the
 	// subscription that is really running.
+	//
+	// Optional (runtime).
 	Options []mb.SubscribeOption
 	// OnInvalid decides what happens to a message that cannot be decoded or
 	// fails BodyRules. The zero value discards it; see InvalidPolicy.
+	//
+	// Optional (runtime).
 	OnInvalid InvalidPolicy
 
-	// Handle receives the decoded, validated message. Required.
+	// Handle receives the decoded, validated message.
 	//
 	// ctx is the receive-scoped context supplied by the broker: propagate it
 	// downstream so cancellation on shutdown and trace continuation both work.
+	// It also says who started the work the message belongs to: read it with
+	// initiator.From. There is no Principal — nothing on this path was
+	// verified — so decide what a party may do from your own data, keyed by
+	// the Initiator's ID, never from what the message carried.
+	//
+	// meta is the broker metadata, without the headers that Initiator travels
+	// in.
+	//
+	// Required.
 	Handle func(ctx context.Context, msg *Msg, meta Metadata) error
 }
 

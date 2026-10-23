@@ -164,7 +164,6 @@ func subscribeBehavior(declared mbkit.BehaviorSpec, cfg *mb.SubscribeConfig, pro
 		SideEffects:   declared.SideEffects,
 		Idempotent:    declared.Idempotent,
 		Preconditions: declared.Preconditions,
-		Scopes:        declared.Scopes,
 		Ordering:      declared.Ordering,
 		Delivery: &DeliverySpec{
 			Guarantee: declared.Delivery.Guarantee,
@@ -180,7 +179,6 @@ func publishBehavior(declared mbkit.BehaviorSpec, cfg *mb.PublishConfig, protoco
 		SideEffects:   declared.SideEffects,
 		Idempotent:    declared.Idempotent,
 		Preconditions: declared.Preconditions,
-		Scopes:        declared.Scopes,
 		Ordering:      declared.Ordering,
 		Delivery: &DeliverySpec{
 			Guarantee: declared.Delivery.Guarantee,

@@ -36,8 +36,6 @@ type BehaviorSpec struct {
 	Idempotent *bool
 	// Preconditions lists what must already be true for handling to succeed.
 	Preconditions []string
-	// Scopes are the permissions required to use this channel.
-	Scopes []string
 	// Delivery describes the delivery semantics the code relies on.
 	Delivery DeliverySpec
 	// Ordering states the order guarantee relied upon ("none",

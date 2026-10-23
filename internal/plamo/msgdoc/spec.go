@@ -152,7 +152,11 @@ type Behavior struct {
 	// brokers redeliver whether or not the handler is ready for it.
 	Idempotent    *bool    `json:"idempotent,omitempty"`
 	Preconditions []string `json:"preconditions,omitempty"`
-	// Scopes are the permissions a caller must hold to use this channel.
+	// Scopes are the permissions a caller must hold to use this channel. Only
+	// WebSocket channels fill it: a broker operation has no gate to describe
+	// (consumers authorize nothing; see plamo/initiator). It goes too once
+	// WebSocket channels state their conditions in a declaration that is
+	// enforced (TODO-auth-6.1 Phase 7).
 	Scopes   []string      `json:"scopes,omitempty"`
 	Delivery *DeliverySpec `json:"delivery,omitempty"`
 	// Ordering states what order guarantee the operation relies on

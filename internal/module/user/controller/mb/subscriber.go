@@ -5,6 +5,7 @@ import (
 
 	"github.com/ensoria/ensoria-template/internal/module/user/dto"
 	"github.com/ensoria/ensoria-template/internal/module/user/service"
+	"github.com/ensoria/ensoria-template/internal/plamo/initiator"
 	"github.com/ensoria/ensoria-template/internal/plamo/mbkit"
 	"github.com/ensoria/ensoria-template/internal/plamo/vkit"
 	"github.com/ensoria/loggear/pkg/loggear"
@@ -52,6 +53,11 @@ func NewHelloWorldSubscription(us service.UserService) *mbkit.SubscriptionModule
 			mb.WithErrorStrategy(mb.ErrorStrategyDiscard),
 		},
 		Handle: func(ctx context.Context, msg *dto.HelloWorld, meta mbkit.Metadata) error {
+			// Who started the work this message belongs to, as the publisher
+			// wrote it. It is context for logs and audits, not permission: a
+			// consumer decides what a party may do from its own data, keyed by
+			// the ID.
+			from := initiator.From(ctx)
 			loggear.Info("📨 Received message",
 				"topic", meta["topic"],
 				"partition", meta["partition"],
@@ -59,7 +65,9 @@ func NewHelloWorldSubscription(us service.UserService) *mbkit.SubscriptionModule
 				"key", meta["key"],
 				"message", msg.Message,
 				"source", msg.Source,
-				"timestamp", meta["timestamp"])
+				"timestamp", meta["timestamp"],
+				"initiator_kind", from.Kind(),
+				"initiator_id", from.ID())
 			return nil
 		},
 	})

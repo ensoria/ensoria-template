@@ -57,11 +57,18 @@ const (
 	// KindAppUser is a caller authenticated by the application: a session, or a
 	// JWT — any JWT, including one a service obtained with client credentials.
 	KindAppUser Kind = "app_user"
-	// KindUser is an infrastructure account. This application never writes it;
-	// another producer may.
+	// KindUser is a person's account on the infrastructure the work runs on —
+	// an AWS IAM user, a Google Cloud user account — as opposed to KindAppUser,
+	// a person this application authenticates. An operator changing something
+	// through the cloud console or CLI is one. This application never writes it:
+	// its authentication knows no such accounts. It arrives from producers that
+	// are not Ensoria, which write the CloudEvents authtype of their own.
 	KindUser Kind = "user"
-	// KindServiceAccount is a service identity. This application never writes
-	// it; another producer may.
+	// KindServiceAccount is a non-human account on that infrastructure — a
+	// Google Cloud service account, a Kubernetes ServiceAccount, an assumed AWS
+	// IAM role — such as a batch job running under its own identity. Like
+	// KindUser, this application never writes it, and receives it from other
+	// producers.
 	KindServiceAccount Kind = "service_account"
 	// KindAPIKey is a caller authenticated with an API key.
 	KindAPIKey Kind = "api_key"
