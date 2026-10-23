@@ -231,8 +231,8 @@ var _ = Describe("Claims", func() {
 	//
 	// The claims an Initiator carries are one of the sources too: a message
 	// carries them across a broker as JSON, and the consumer reads them with
-	// these same accessors (TODO-auth-6.1 §1.5). A consumer never gets a
-	// Principal — the claims are all that travels.
+	// these same accessors. A consumer never gets a Principal — the claims are
+	// all that travels.
 	//
 	// ⚠ The sources are a table so that another one can be added to it.
 	Describe("the answers are the same whatever the caller presented", func() {

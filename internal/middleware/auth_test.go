@@ -308,7 +308,8 @@ var _ = Describe("authentication middleware", func() {
 
 // The entry point is the one place that can tell an anonymous request from work
 // that lost track of its origin, so it marks every request it lets through, and
-// "who started this" is then read off the caller (TODO-auth-6.1 §1.2).
+// "who started this" is then read off the caller when it is read — never
+// stored beside it, so the two cannot disagree.
 var _ = Describe("the Initiator at the entry point", func() {
 	tenantOnly := func() *initiator.ClaimSet {
 		set, err := initiator.NewClaimSet([]string{"tenant"})

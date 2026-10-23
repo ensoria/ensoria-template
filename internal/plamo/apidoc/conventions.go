@@ -6,7 +6,7 @@ import "reflect"
 
 // Conventions は API 全体の共通規約(docai CONVENTIONS.md の素材)。
 // 実行時 config / pipeline 由来の値(BaseURLs/CORS/GlobalMiddlewares/AuthMethod)は
-// describe 実行時(Phase 7)に populate する。CommonError は型から組める。
+// describe 実行時に populate する。CommonError は型から組める。
 type Conventions struct {
 	BaseURLs map[string]string `json:"base_urls,omitempty"` // 環境名 → ベース URL
 	// SecuritySchemes は呼び出し元が資格情報を提示できる方式。設定から組み立てる。

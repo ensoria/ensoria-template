@@ -136,7 +136,7 @@ func NewResourceCheck[T any](
 // typed Endpoint can produce today. Should streaming ever reach this adapter,
 // the rule becomes "Authorize must precede the first write", and the guarantee
 // then covers the first byte of the body — not the status line, which the
-// pipeline sends before the body and cannot take back. See TODO-streaming-1.md.
+// pipeline sends before the body and cannot take back.
 //
 // # Endpoints with more than one resource
 //

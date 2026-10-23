@@ -60,7 +60,7 @@ func importsOf(dir string) map[string][]string {
 
 // A message carries who started the work as an Initiator, never as a caller:
 // nothing on this path was verified, so a Principal here would be one that
-// authorization trusts without grounds (TODO-auth-6.1 §1.1). The dependency
+// authorization trusts without grounds. The dependency
 // makes that visible: the broker path reads plamo/initiator and never imports
 // authkit, and a change that starts to is caught here rather than in review.
 var _ = Describe("the message broker path", func() {

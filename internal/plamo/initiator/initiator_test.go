@@ -30,7 +30,8 @@ func atEntry(caller *authkit.Principal, claims *initiator.ClaimSet) context.Cont
 }
 
 var _ = Describe("From", func() {
-	// The table of TODO-auth-6.1 §1.4: what each origin of work reads as.
+	// What each origin of work reads as, for each origin the package
+	// documentation lists.
 	Describe("at an entry point", func() {
 		It("reads a caller signed in with a session as an application user", func() {
 			from := initiator.From(atEntry(&authkit.Principal{Subject: "user-1", Scheme: authkit.SchemeSession}, nil))
