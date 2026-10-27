@@ -27,13 +27,13 @@ func checkChannelSecurity(modules []*wskit.Module, verifier authkit.Verifier) er
 	// First, because it is about the declarations alone. The checks below ask
 	// whether the configuration can serve what is declared, and an application
 	// whose channels are all public would skip them at the early return.
-	if paths := channelsWhere(modules, (*wskit.SecuritySpec).Contradictory); len(paths) > 0 {
+	if paths := contradictoryChannels(modules); len(paths) > 0 {
 		return fmt.Errorf("WebSocket channels %s are declared public and also require a scheme or a scope, "+
 			"which a public channel never checks: drop Public to require them, or drop Schemes and Scopes to admit everyone",
 			quoteList(paths))
 	}
 
-	paths := channelsWhere(modules, (*wskit.SecuritySpec).RequiresCaller)
+	paths := channelsRequiringCaller(modules)
 	if len(paths) == 0 {
 		return nil
 	}
@@ -54,14 +54,25 @@ func checkChannelSecurity(modules []*wskit.Module, verifier authkit.Verifier) er
 	return nil
 }
 
-// channelsWhere returns the paths of the channels whose declaration passes
-// test, in the order the modules were given. test is handed nil for a channel
-// that declares nothing, which the SecuritySpec methods read as "requires a
-// caller".
-func channelsWhere(modules []*wskit.Module, test func(*wskit.SecuritySpec) bool) []string {
+// contradictoryChannels returns the paths of the public channels that also
+// state a condition, in the order the modules were given.
+func contradictoryChannels(modules []*wskit.Module) []string {
 	var paths []string
 	for _, m := range modules {
-		if test(m.Security()) {
+		if m.Security().Contradictory() {
+			paths = append(paths, m.RuntimeModule().Path)
+		}
+	}
+	return paths
+}
+
+// channelsRequiringCaller returns the paths of the channels that admit only a
+// verified caller — every one not declared Public, including those that
+// declare nothing — in the order the modules were given.
+func channelsRequiringCaller(modules []*wskit.Module) []string {
+	var paths []string
+	for _, m := range modules {
+		if m.Security().RequiresCaller() {
 			paths = append(paths, m.RuntimeModule().Path)
 		}
 	}
