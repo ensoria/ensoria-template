@@ -72,10 +72,11 @@ func withDiscardedCookies(res *rest.Response, result *authkit.VerifyResult) *res
 //
 // ⚠ It refuses a credential it cannot trust, not a missing one. A handshake
 // carrying no cookie — or one whose session has expired or been signed out
-// elsewhere — opens an anonymous connection, exactly as an anonymous HTTP
-// request is served. What decides whether that is acceptable is the channel,
-// not this: there is no per-channel security declaration the way restkit has
-// one for endpoints.
+// elsewhere — goes on as anonymous, exactly as an anonymous HTTP request does.
+// What decides whether that is acceptable is the channel's declaration
+// (wskit.Channel.Security), judged by ChannelSecurity, which the router puts
+// right after this: a channel that declares nothing requires a caller, and only
+// a public one admits an anonymous handshake.
 //
 // ⚠ An upgrade that succeeds has nowhere to put a Set-Cookie: the WebSocket
 // library writes that response itself, and this handler is only consulted about

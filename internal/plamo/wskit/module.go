@@ -53,9 +53,15 @@ type Channel struct {
 	// and the catalog cannot fall behind the code.
 	Send []DocumentedMessage
 
+	// --- Access ---
+
+	// Security declares who may open a connection to the channel. nil requires
+	// a verified caller; only Public opens it to everyone. See SecuritySpec.
+	Security *SecuritySpec
+
 	// --- Behaviour ---
 
-	// Behavior declares side effects, idempotency, scopes and ordering.
+	// Behavior declares side effects, idempotency and ordering.
 	Behavior BehaviorSpec
 
 	// Configure adjusts the underlying wsconfig.Module. Everything the module
@@ -89,8 +95,9 @@ type Channel struct {
 // Its fields are unexported and it is only built by NewModule or Raw, so a
 // Channel cannot be registered in the DI group by mistake.
 type Module struct {
-	runtime *wsconfig.Module
-	doc     *ModuleDoc
+	runtime  *wsconfig.Module
+	security *SecuritySpec
+	doc      *ModuleDoc
 }
 
 // ModuleDoc is the non-generic view of one channel that msgdoc reads.
@@ -101,9 +108,12 @@ type ModuleDoc struct {
 	Task        string
 	AlsoRead    []string
 	Related     []string
-	Behavior    BehaviorSpec
-	Receive     []*MessageDoc
-	Send        []*MessageDoc
+	// Security is who may open a connection, as declared (nil requires a
+	// verified caller).
+	Security *SecuritySpec
+	Behavior BehaviorSpec
+	Receive  []*MessageDoc
+	Send     []*MessageDoc
 	// Untyped marks a channel served by a raw wsconfig.Module, where no message
 	// types are known. The channel still appears in the generated document — a
 	// reachable endpoint missing from the documentation is worse than one marked
@@ -125,7 +135,7 @@ func NewModule(channel *Channel) *Module {
 	// Installed last: whatever Configure did, messages go through the catalog.
 	runtime.OnMessage = dispatch(receivers)
 
-	return &Module{runtime: runtime, doc: channelDoc(channel)}
+	return &Module{runtime: runtime, security: channel.Security, doc: channelDoc(channel)}
 }
 
 // Raw wraps a hand-built wsconfig.Module so it can sit in the same DI group.
@@ -133,10 +143,16 @@ func NewModule(channel *Channel) *Module {
 // Its messages are undocumented, by construction — that is what "raw" means
 // here. Prefer NewModule; use this only for a channel whose framing genuinely
 // is not the envelope, and accept that the generated document shows TODO for it.
-func Raw(m *wsconfig.Module) *Module {
+//
+// Who may connect is declared all the same, with the same meaning as
+// Channel.Security: nil requires a verified caller, Public opens the channel.
+// A raw channel is an entry point like any other, and "raw" must not come to
+// mean "open".
+func Raw(m *wsconfig.Module, security *SecuritySpec) *Module {
 	return &Module{
-		runtime: m,
-		doc:     &ModuleDoc{Path: m.Path, Untyped: true},
+		runtime:  m,
+		security: security,
+		doc:      &ModuleDoc{Path: m.Path, Security: security, Untyped: true},
 	}
 }
 
@@ -145,6 +161,10 @@ func (m *Module) RuntimeModule() *wsconfig.Module { return m.runtime }
 
 // ModuleDoc exposes the declaration for msgdoc.
 func (m *Module) ModuleDoc() *ModuleDoc { return m.doc }
+
+// Security is who may open a connection to the channel (nil requires a
+// verified caller). The router checks it before every upgrade.
+func (m *Module) Security() *SecuritySpec { return m.security }
 
 // channelDoc builds the documentation view of a declared channel.
 func channelDoc(channel *Channel) *ModuleDoc {
@@ -155,6 +175,7 @@ func channelDoc(channel *Channel) *ModuleDoc {
 		Task:        channel.Task,
 		AlsoRead:    channel.AlsoRead,
 		Related:     channel.Related,
+		Security:    channel.Security,
 		Behavior:    channel.Behavior,
 	}
 	for _, r := range channel.Receive {

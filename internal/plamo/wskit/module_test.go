@@ -385,9 +385,9 @@ var _ = Describe("ModuleDoc", func() {
 			c.Behavior = wskit.BehaviorSpec{
 				SideEffects: []string{"none"},
 				Idempotent:  &idempotent,
-				Scopes:      []string{"users:read"},
 				Ordering:    "ordered within one connection",
 			}
+			c.Security = &wskit.SecuritySpec{Scopes: []string{"users:read"}}
 		})
 
 		doc := module.ModuleDoc()
@@ -397,7 +397,7 @@ var _ = Describe("ModuleDoc", func() {
 		Expect(doc.Task).To(Equal("demo realtime"))
 		Expect(doc.AlsoRead).To(Equal([]string{"workflows/realtime.md"}))
 		Expect(doc.Related).To(Equal([]string{"Opened after: POST /sessions"}))
-		Expect(doc.Behavior.Scopes).To(Equal([]string{"users:read"}))
+		Expect(doc.Security).To(Equal(&wskit.SecuritySpec{Scopes: []string{"users:read"}}))
 		Expect(doc.Untyped).To(BeFalse())
 
 		Expect(doc.Receive).To(HaveLen(1))
@@ -410,7 +410,7 @@ var _ = Describe("ModuleDoc", func() {
 
 var _ = Describe("Raw", func() {
 	It("marks a hand-built module as untyped rather than dropping it", func() {
-		module := wskit.Raw(wsconfig.NewDefaultModule("/ws/legacy"))
+		module := wskit.Raw(wsconfig.NewDefaultModule("/ws/legacy"), nil)
 
 		doc := module.ModuleDoc()
 
@@ -425,6 +425,32 @@ var _ = Describe("Raw", func() {
 	It("serves the module it was given, untouched", func() {
 		raw := wsconfig.NewDefaultModule("/ws/legacy")
 
-		Expect(wskit.Raw(raw).RuntimeModule()).To(BeIdenticalTo(raw))
+		Expect(wskit.Raw(raw, nil).RuntimeModule()).To(BeIdenticalTo(raw))
+	})
+})
+
+var _ = Describe("a module's security declaration", func() {
+	It("is the channel's", func() {
+		security := &wskit.SecuritySpec{Public: true}
+
+		module := wskit.NewModule(&wskit.Channel{Path: testPath, Security: security})
+
+		Expect(module.Security()).To(BeIdenticalTo(security))
+	})
+
+	// A raw channel is an entry point like any other: the same declaration,
+	// the same default.
+	It("is the one a raw module was given", func() {
+		security := &wskit.SecuritySpec{Scopes: []string{"things:read"}}
+
+		module := wskit.Raw(wsconfig.NewDefaultModule("/ws/legacy"), security)
+
+		Expect(module.Security()).To(BeIdenticalTo(security))
+		Expect(module.ModuleDoc().Security).To(BeIdenticalTo(security))
+	})
+
+	It("is nil, which requires a caller, when nothing was declared", func() {
+		Expect(wskit.NewModule(&wskit.Channel{Path: testPath}).Security().RequiresCaller()).To(BeTrue())
+		Expect(wskit.Raw(wsconfig.NewDefaultModule("/ws/legacy"), nil).Security().RequiresCaller()).To(BeTrue())
 	})
 })

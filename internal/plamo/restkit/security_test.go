@@ -179,3 +179,28 @@ var _ = Describe("RequiresAuthentication", func() {
 		Expect(restkit.RequiresAuthentication(nil)).To(BeFalse())
 	})
 })
+
+var _ = Describe("PublicWithConditions", func() {
+	moduleOf := func(path string, security *restkit.SecuritySpec) *rest.Module {
+		return &rest.Module{Path: path, Get: guarded(security)}
+	}
+
+	// authorize lets a public request through before it looks at anything
+	// else, so a scope or scheme written next to Public is never applied: the
+	// endpoint serves everyone while its declaration says otherwise.
+	It("names every public endpoint that also states a condition, in declaration order", func() {
+		modules := []*rest.Module{
+			moduleOf("/a", &restkit.SecuritySpec{Public: true, Scopes: []string{"orders:read"}}),
+			moduleOf("/b", &restkit.SecuritySpec{Public: true}),
+			moduleOf("/c", &restkit.SecuritySpec{Public: true, Schemes: []string{authkit.SchemeAPIKey}}),
+			moduleOf("/d", &restkit.SecuritySpec{Scopes: []string{"orders:read"}}),
+			moduleOf("/e", nil),
+		}
+
+		Expect(restkit.PublicWithConditions(modules)).To(Equal([]string{"GET /a", "GET /c"}))
+	})
+
+	It("finds nothing when no public endpoint states a condition", func() {
+		Expect(restkit.PublicWithConditions([]*rest.Module{moduleOf("/b", &restkit.SecuritySpec{Public: true})})).To(BeEmpty())
+	})
+})

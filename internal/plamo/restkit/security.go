@@ -94,6 +94,35 @@ func PublicResourceChecks(modules []*rest.Module) []string {
 	return conflicts
 }
 
+// PublicWithConditions returns the public endpoints that also state a
+// condition — a scheme or a scope — as "GET /order" strings, in the order they
+// were declared.
+//
+// Like a resource check on a public endpoint, the combination cannot mean what
+// it says: authorize() lets a public request past before it reads the
+// conditions, so the endpoint serves everyone, and the generated documentation
+// (which sees Public first too) leaves the conditions out. It fails open, which
+// is why the application refuses to start on it rather than serve it.
+func PublicWithConditions(modules []*rest.Module) []string {
+	var conflicts []string
+	for _, m := range modules {
+		if m == nil {
+			continue
+		}
+		for _, route := range routesOf(m) {
+			doc, ok := route.controller.(Documented)
+			if !ok {
+				continue
+			}
+			security := doc.EndpointDoc().Security
+			if security != nil && security.Public && (len(security.Schemes) > 0 || len(security.Scopes) > 0) {
+				conflicts = append(conflicts, route.method+" "+m.Path)
+			}
+		}
+	}
+	return conflicts
+}
+
 // route pairs a controller with the method it answers, which a rest.Module
 // keeps as separate fields. The method is part of naming an endpoint: a path on
 // its own does not identify one.

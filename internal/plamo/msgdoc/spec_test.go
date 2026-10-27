@@ -69,7 +69,6 @@ var _ = Describe("MessagingSpec JSON round-trip", func() {
 				Behavior: &msgdoc.Behavior{
 					SideEffects: []string{"writes a row into users"},
 					Idempotent:  &idempotent,
-					Scopes:      []string{"users:write"},
 					Ordering:    msgdoc.None,
 					Delivery: &msgdoc.DeliverySpec{
 						Guarantee: "at-least-once",

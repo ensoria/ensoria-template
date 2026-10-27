@@ -115,8 +115,6 @@ type BehaviorSpec struct {
 	Idempotent *bool
 	// Preconditions lists what must already be true to use the channel.
 	Preconditions []string
-	// Scopes are the permissions the connecting caller must hold.
-	Scopes []string
 	// Ordering states the order guarantee relied upon.
 	Ordering string
 }

@@ -19,12 +19,23 @@ import (
 // They belong to the application rather than to one channel.
 const defaultModule = "default"
 
-// CreateWSRouter collects the WebSocket modules and puts two checks in front of
-// every upgrade: where the handshake came from, and who is making it.
+// CreateWSRouter collects the WebSocket modules and puts three checks in front
+// of every upgrade: where the handshake came from, who is making it, and
+// whether the channel admits them (the channel's wskit.SecuritySpec — nil
+// requires a caller, only Public opens a channel).
 //
 // Guarding here rather than in each module is deliberate: a module added later
 // cannot forget the guards, which would otherwise leave that endpoint reachable
 // without them.
+//
+// ⚠ The guards go in front of the channel's own pre-upgrade middlewares, not
+// after them. A middleware a channel adds (one that looks a room up, say) must
+// never run for a handshake that is going to be refused, or it would act for a
+// caller nobody verified.
+//
+// It refuses to build a router for channels whose declarations cannot be
+// served as written (see checkChannelSecurity), so the mistake stops the
+// process at startup rather than refusing every handshake.
 //
 // The trusted origins are taken as an argument rather than read here, so that
 // the check can be exercised against an origin list a test chose.
@@ -41,22 +52,26 @@ func CreateWSRouter(
 	origins *middleware.Origins,
 	scopes authkit.ScopeExpander,
 	claims *initiator.ClaimSet,
-) *wsrouter.Router {
-	guards := []rest.Handler{
-		middleware.UpgradeOrigin(origins),
-		middleware.AuthUpgrade(verifier, scopes, claims),
+) (*wsrouter.Router, error) {
+	if err := checkChannelSecurity(modules, verifier); err != nil {
+		return nil, err
 	}
 
 	runtime := make([]*wsconfig.Module, 0, len(modules))
 	for _, m := range modules {
 		rm := m.RuntimeModule()
-		rm.AddHTTPMiddlewares(guards...)
+		guards := []rest.Handler{
+			middleware.UpgradeOrigin(origins),
+			middleware.AuthUpgrade(verifier, scopes, claims),
+			middleware.ChannelSecurity(m.Security()),
+		}
+		rm.HTTPMiddlewares = append(guards, rm.HTTPMiddlewares...)
 		runtime = append(runtime, rm)
 	}
 
 	return &wsrouter.Router{
 		Modules: runtime,
-	}
+	}, nil
 }
 
 // NewTrustedOrigins reads which origins this deployment calls its own frontend.

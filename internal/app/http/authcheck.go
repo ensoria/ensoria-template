@@ -33,6 +33,14 @@ func checkAuthConfiguration(modules []*rest.Module, verifier authkit.Verifier) e
 			"drop Public, or drop Resource from Endpoint.Security",
 			quoteList(conflicts))
 	}
+	// The same kind of contradiction, and a worse one: a public endpoint is
+	// served before its conditions are read, so it would answer everyone while
+	// declaring that it needs a scheme or a scope.
+	if conflicts := restkit.PublicWithConditions(modules); len(conflicts) > 0 {
+		return fmt.Errorf("%s declared public and also requiring a scheme or a scope, which a public endpoint never checks: "+
+			"drop Public to require them, or drop Schemes and Scopes to serve everyone",
+			quoteList(conflicts))
+	}
 
 	if !restkit.RequiresAuthentication(modules) {
 		return nil

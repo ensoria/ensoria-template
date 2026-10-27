@@ -19,6 +19,7 @@ import (
 	"github.com/ensoria/ensoria-template/internal/plamo/wskit"
 	"github.com/ensoria/websocket/pkg/wsconfig"
 	"github.com/ensoria/websocket/pkg/wsevent"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/gorilla/websocket"
 )
 
@@ -62,7 +63,7 @@ type openedAs struct {
 // handshake. That context is derived from the one the pre-upgrade middleware
 // enriched, and whether the enrichment survives the upgrade is the thing worth
 // checking — it is what lets a handler know who is on the other end.
-func serveChannel(cfg *appconfig.Auth, origins *middleware.Origins) (*httptest.Server, sessionkit.Store, <-chan openedAs) {
+func serveChannel(cfg *appconfig.Auth, origins *middleware.Origins, security *wskit.SecuritySpec) (*httptest.Server, sessionkit.Store, <-chan openedAs) {
 	GinkgoHelper()
 
 	sessionCfg, err := sessionkit.NewConfig(cfg.Session)
@@ -75,7 +76,8 @@ func serveChannel(cfg *appconfig.Auth, origins *middleware.Origins) (*httptest.S
 
 	opened := make(chan openedAs, 1)
 	channel := &wskit.Channel{
-		Path: e2eWSPath,
+		Path:     e2eWSPath,
+		Security: security,
 		Configure: func(m *wsconfig.Module) {
 			m.OnOpen = func(ctx context.Context, _ *wsevent.Open) error {
 				principal, found := authkit.PrincipalFrom(ctx)
@@ -89,7 +91,7 @@ func serveChannel(cfg *appconfig.Auth, origins *middleware.Origins) (*httptest.S
 	// caller reaches the lifecycle handlers at all; whether that caller carries
 	// the policy is fixed in internal/middleware (AuthUpgrade), and no channel
 	// declares a scope yet for it to make a difference to.
-	router := wsApp.CreateWSRouter([]*wskit.Module{wskit.NewModule(channel)}, verifier, origins, nil, nil)
+	router := mustRouter(wsApp.CreateWSRouter([]*wskit.Module{wskit.NewModule(channel)}, verifier, origins, nil, nil))
 	mux := http.NewServeMux()
 	router.Register(mux)
 	return httptest.NewServer(mux), store, opened
@@ -121,8 +123,11 @@ var _ = Describe("a WebSocket upgrade", func() {
 		opened <-chan openedAs
 	)
 
+	// A public channel: these specs are about what reaches a connection —
+	// the caller, the origin check, a dead cookie — on a channel that admits
+	// anonymous callers too. What a channel requiring a caller refuses is below.
 	BeforeEach(func() {
-		server, store, opened = serveChannel(wsAuth(), middleware.ParseOrigins(e2eWSOrigin))
+		server, store, opened = serveChannel(wsAuth(), middleware.ParseOrigins(e2eWSOrigin), &wskit.SecuritySpec{Public: true})
 	})
 	AfterEach(func() { server.Close() })
 
@@ -186,10 +191,10 @@ var _ = Describe("a WebSocket upgrade", func() {
 
 	// ⚠ Documented rather than desired. The upgrade guard refuses a credential
 	// it cannot trust, but an absent one leaves the connection anonymous — the
-	// channel itself decides whether that is acceptable. A dead cookie is the
-	// same case: the verifier reports it as anonymous, and the discard
-	// instruction it produced has nowhere to go, because the WebSocket library
-	// writes the handshake response itself.
+	// channel's declaration decides whether that is acceptable, and this one is
+	// public. A dead cookie is the same case: the verifier reports it as
+	// anonymous, and the discard instruction it produced has nowhere to go,
+	// because the WebSocket library writes the handshake response itself.
 	Describe("carrying a cookie that no longer resolves", func() {
 		It("opens an anonymous connection rather than refusing", func() {
 			headers := http.Header{}
@@ -207,6 +212,176 @@ var _ = Describe("a WebSocket upgrade", func() {
 			var seen openedAs
 			Eventually(opened).Should(Receive(&seen))
 			Expect(seen.found).To(BeFalse())
+		})
+	})
+})
+
+// The credentials of a deployment that verifies every kind: a token signed with
+// the shared secret, an API key from the configuration, and a session cookie.
+const (
+	e2eWSSecret = "e2e-ws-shared-secret"
+	e2eWSAPIKey = "e2e-ws-api-key"
+	// e2eWSTokenLifetime is how long the specs' tokens are valid.
+	e2eWSTokenLifetime = time.Hour
+)
+
+// wsAuthAllSchemes verifies tokens, API keys and session cookies.
+func wsAuthAllSchemes() *appconfig.Auth {
+	cfg := wsAuth()
+	cfg.Mode = appconfig.AuthModeHS256
+	cfg.Secret = e2eWSSecret
+	cfg.APIKeys = []string{e2eWSAPIKey}
+	return cfg
+}
+
+// bearer is the header a machine caller sends: a token carrying scopes.
+func bearer(scopes ...string) http.Header {
+	GinkgoHelper()
+
+	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"sub":   "usr_token",
+		"exp":   time.Now().Add(e2eWSTokenLifetime).Unix(),
+		"scope": strings.Join(scopes, " "),
+	}).SignedString([]byte(e2eWSSecret))
+	Expect(err).NotTo(HaveOccurred())
+
+	headers := http.Header{}
+	headers.Set("Authorization", "Bearer "+token)
+	return headers
+}
+
+// apiKey is the header a server caller sends. Keys from the configuration carry
+// no scopes.
+func apiKey() http.Header {
+	headers := http.Header{}
+	headers.Set(appconfig.DefaultAPIKeyHeader, e2eWSAPIKey)
+	return headers
+}
+
+// sessionWith signs a browser in with the given scopes.
+func sessionWith(store sessionkit.Store, scopes ...string) http.Header {
+	GinkgoHelper()
+
+	session, err := store.Create(context.Background(), &sessionkit.Snapshot{Subject: "usr_1", Scopes: scopes}, false)
+	Expect(err).NotTo(HaveOccurred())
+	headers := http.Header{}
+	headers.Set("Cookie", e2eWSCookie+"="+session.ID)
+	return headers
+}
+
+// refusedWith dials and asserts the handshake was refused with status, before
+// any connection was opened.
+func refusedWith(server *httptest.Server, headers http.Header, opened <-chan openedAs, status int) {
+	GinkgoHelper()
+
+	conn, res, err := dial(server, headers)
+	if conn != nil {
+		_ = conn.Close()
+	}
+	Expect(err).To(HaveOccurred())
+	Expect(res).NotTo(BeNil())
+	Expect(res.StatusCode).To(Equal(status))
+	Consistently(opened).ShouldNot(Receive())
+}
+
+// openedFor dials and asserts the connection opened, returning who it opened as.
+func openedFor(server *httptest.Server, headers http.Header, opened <-chan openedAs) openedAs {
+	GinkgoHelper()
+
+	conn, res, err := dial(server, headers)
+	Expect(err).NotTo(HaveOccurred())
+	DeferCleanup(func() { _ = conn.Close() })
+	Expect(res.StatusCode).To(Equal(http.StatusSwitchingProtocols))
+	var seen openedAs
+	Eventually(opened).Should(Receive(&seen))
+	return seen
+}
+
+// Before the upgrade, while the handshake is an HTTP request: a refused caller
+// gets the 401 or 403 an HTTP client already knows how to handle, and no
+// connection is ever opened.
+var _ = Describe("a WebSocket upgrade to a channel that requires a caller", func() {
+	var (
+		server *httptest.Server
+		store  sessionkit.Store
+		opened <-chan openedAs
+	)
+	serve := func(security *wskit.SecuritySpec) {
+		server, store, opened = serveChannel(wsAuthAllSchemes(), middleware.ParseOrigins(e2eWSOrigin), security)
+		DeferCleanup(server.Close)
+	}
+
+	Describe("declaring nothing", func() {
+		BeforeEach(func() { serve(nil) })
+
+		It("refuses an anonymous handshake with 401", func() {
+			refusedWith(server, http.Header{}, opened, http.StatusUnauthorized)
+		})
+
+		// On a public channel a dead cookie is just an anonymous caller; here
+		// that is a caller the channel does not admit.
+		It("refuses a cookie that no longer resolves with 401", func() {
+			headers := http.Header{}
+			headers.Set("Cookie", e2eWSCookie+"=an-id-that-was-never-issued")
+
+			refusedWith(server, headers, opened, http.StatusUnauthorized)
+		})
+
+		It("opens a connection for a caller with a session", func() {
+			Expect(openedFor(server, sessionWith(store), opened).principal.Scheme).To(Equal(authkit.SchemeSession))
+		})
+
+		It("opens a connection for a caller with a token", func() {
+			Expect(openedFor(server, bearer(), opened).principal.Scheme).To(Equal(authkit.SchemeJWT))
+		})
+
+		It("opens a connection for a caller with an API key", func() {
+			Expect(openedFor(server, apiKey(), opened).principal.Scheme).To(Equal(authkit.SchemeAPIKey))
+		})
+	})
+
+	Describe("requiring a scope", func() {
+		BeforeEach(func() { serve(&wskit.SecuritySpec{Scopes: []string{"things:read"}}) })
+
+		It("refuses an anonymous handshake with 401", func() {
+			refusedWith(server, http.Header{}, opened, http.StatusUnauthorized)
+		})
+
+		It("refuses a session without the scope with 403", func() {
+			refusedWith(server, sessionWith(store), opened, http.StatusForbidden)
+		})
+
+		It("opens a connection for a session with the scope", func() {
+			openedFor(server, sessionWith(store, "things:read"), opened)
+		})
+
+		It("refuses a token without the scope with 403", func() {
+			refusedWith(server, bearer(), opened, http.StatusForbidden)
+		})
+
+		It("opens a connection for a token with the scope", func() {
+			openedFor(server, bearer("things:read"), opened)
+		})
+
+		// Keys from the configuration carry no scopes at all.
+		It("refuses an API key without the scope with 403", func() {
+			refusedWith(server, apiKey(), opened, http.StatusForbidden)
+		})
+	})
+
+	Describe("accepting only API keys", func() {
+		BeforeEach(func() { serve(&wskit.SecuritySpec{Schemes: []string{authkit.SchemeAPIKey}}) })
+
+		It("opens a connection for an API key", func() {
+			openedFor(server, apiKey(), opened)
+		})
+
+		It("refuses a token with 403", func() {
+			refusedWith(server, bearer(), opened, http.StatusForbidden)
+		})
+
+		It("refuses a session with 403", func() {
+			refusedWith(server, sessionWith(store), opened, http.StatusForbidden)
 		})
 	})
 })

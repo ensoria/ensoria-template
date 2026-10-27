@@ -80,6 +80,25 @@ var _ = Describe("checkAuthConfiguration", func() {
 		})
 	})
 
+	// The same reasoning as a resource check: authorize lets a public request
+	// past before it reads the conditions, so they would never apply.
+	Describe("a public endpoint stating a condition", func() {
+		It("stops the application on a scope, naming the endpoint and how to fix it", func() {
+			err := checkAuthConfiguration(moduleWith(&restkit.SecuritySpec{Public: true, Scopes: []string{"orders:read"}}), verifiesNothing)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("GET /things/0"))
+			Expect(err.Error()).To(ContainSubstring("drop Public"))
+		})
+
+		It("stops the application on a scheme", func() {
+			err := checkAuthConfiguration(moduleWith(&restkit.SecuritySpec{Public: true, Schemes: []string{authkit.SchemeJWT}}), tokensOnly)
+
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("GET /things/0"))
+		})
+	})
+
 	It("refuses an application whose endpoints need a caller it cannot verify", func() {
 		err := checkAuthConfiguration(moduleWith(nil), verifiesNothing)
 
@@ -124,15 +143,19 @@ var _ = Describe("checkAuthConfiguration", func() {
 			Expect(checkAuthConfiguration(moduleWith(apiKeyOnly), keysOnly)).To(Succeed())
 		})
 
-		// A public endpoint is served without any credential, so naming a
-		// scheme on it cannot lock anyone out.
+		// A public endpoint is served without any credential, so a scheme named
+		// on it locks nobody out — and is never applied either. It is refused as
+		// that contradiction, not reported as a credential nothing verifies.
 		//
 		// The set also holds an endpoint that needs a caller, otherwise the
 		// check would stop before ever looking at the schemes.
-		It("is ignored on a public endpoint", func() {
+		It("is refused on a public endpoint as a contradiction, not as an unverifiable kind", func() {
 			public := &restkit.SecuritySpec{Public: true, Schemes: []string{authkit.SchemeAPIKey}}
 
-			Expect(checkAuthConfiguration(moduleWith(public, nil), tokensOnly)).To(Succeed())
+			err := checkAuthConfiguration(moduleWith(public, nil), tokensOnly)
+
+			Expect(err).To(MatchError(ContainSubstring("drop Public")))
+			Expect(err).NotTo(MatchError(ContainSubstring("which nothing verifies")))
 		})
 	})
 

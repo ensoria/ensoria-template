@@ -219,6 +219,10 @@ type BehaviorSpec struct {
 type SecuritySpec struct {
 	// Public serves the endpoint without any caller. This is the only way to
 	// open an endpoint, and it has to be written down.
+	//
+	// A public endpoint states no condition: Schemes, Scopes and Resource are
+	// never checked for one, so the startup checks refuse an endpoint that
+	// declares Public alongside any of them.
 	Public bool
 	// Schemes limits which credentials are accepted (authkit.SchemeJWT,
 	// authkit.SchemeAPIKey). Empty accepts any scheme the application verifies.

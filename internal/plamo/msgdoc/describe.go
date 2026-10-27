@@ -196,7 +196,6 @@ func wsBehavior(declared wskit.BehaviorSpec) *Behavior {
 		SideEffects:   declared.SideEffects,
 		Idempotent:    declared.Idempotent,
 		Preconditions: declared.Preconditions,
-		Scopes:        declared.Scopes,
 		Ordering:      declared.Ordering,
 	}
 }

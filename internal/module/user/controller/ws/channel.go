@@ -53,6 +53,10 @@ func (c *Channel) Declare() *wskit.Channel {
 		Summary:     "User real-time channel",
 		Description: "Demonstrates the typed message catalog: the client sends user.echo and the server answers with user.echo_reply.",
 		Task:        "demo realtime",
+		// Anyone may connect, anonymous callers included: this is the echo
+		// demonstration. A channel that declares nothing requires a verified
+		// caller, so opening one has to be written down, as it is here.
+		Security: &wskit.SecuritySpec{Public: true},
 		Behavior: wskit.BehaviorSpec{
 			SideEffects:   []string{"none"},
 			Idempotent:    new(true),

@@ -150,17 +150,9 @@ type Behavior struct {
 	// Idempotent states whether redelivering the same message is safe. nil is
 	// undeclared — which matters more here than over HTTP, since at-least-once
 	// brokers redeliver whether or not the handler is ready for it.
-	Idempotent    *bool    `json:"idempotent,omitempty"`
-	Preconditions []string `json:"preconditions,omitempty"`
-	// Scopes are the permissions a caller must hold to use this channel. Only
-	// WebSocket channels fill it: a broker operation has no gate to describe
-	// (consumers authorize nothing; see plamo/initiator).
-	//
-	// TODO: remove it once WebSocket channels state the scopes they require in
-	// a declaration that is enforced; until then it documents a requirement
-	// nothing checks.
-	Scopes   []string      `json:"scopes,omitempty"`
-	Delivery *DeliverySpec `json:"delivery,omitempty"`
+	Idempotent    *bool         `json:"idempotent,omitempty"`
+	Preconditions []string      `json:"preconditions,omitempty"`
+	Delivery      *DeliverySpec `json:"delivery,omitempty"`
 	// Ordering states what order guarantee the operation relies on
 	// ("per-partition by user id", "none").
 	Ordering string `json:"ordering,omitempty"`
