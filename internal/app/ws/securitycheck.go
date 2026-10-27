@@ -9,9 +9,9 @@ import (
 	"github.com/ensoria/ensoria-template/internal/plamo/wskit"
 )
 
-// checkChannelSecurity reports a set of channels whose declarations cannot be
-// served as written. It is the WebSocket counterpart of the HTTP startup check,
-// and refuses the same three things:
+// checkChannelSecurity reports the channels whose declarations cannot be served
+// as written. It is the WebSocket counterpart of the HTTP startup check, and
+// refuses the same three things, in this order:
 //
 //   - a public channel that also states a scheme or a scope, which it never
 //     checks: it would admit everyone while declaring that it does not;
@@ -24,54 +24,83 @@ import (
 // the configuration, for the reason the HTTP check gives: a key store supplied
 // by application code never appears in the configuration.
 func checkChannelSecurity(modules []*wskit.Module, verifier authkit.Verifier) error {
-	var contradictory, needCaller []string
-	for _, m := range modules {
-		security := m.Security()
-		if security.Contradictory() {
-			contradictory = append(contradictory, m.RuntimeModule().Path)
-		}
-		if security.RequiresCaller() {
-			needCaller = append(needCaller, m.RuntimeModule().Path)
-		}
-	}
-	if len(contradictory) > 0 {
+	// First, because it is about the declarations alone. The checks below ask
+	// whether the configuration can serve what is declared, and an application
+	// whose channels are all public would skip them at the early return.
+	if paths := channelsWhere(modules, (*wskit.SecuritySpec).Contradictory); len(paths) > 0 {
 		return fmt.Errorf("WebSocket channels %s are declared public and also require a scheme or a scope, "+
 			"which a public channel never checks: drop Public to require them, or drop Schemes and Scopes to admit everyone",
-			quoteList(contradictory))
+			quoteList(paths))
 	}
-	if len(needCaller) == 0 {
+
+	paths := channelsWhere(modules, (*wskit.SecuritySpec).RequiresCaller)
+	if len(paths) == 0 {
 		return nil
 	}
 
-	var verifiable []string
-	if verifier != nil {
-		verifiable = verifier.Schemes()
-	}
+	verifiable := verifiableSchemes(verifier)
 	if len(verifiable) == 0 {
 		return fmt.Errorf("WebSocket channels %s require an authenticated caller but nothing can verify one: "+
 			"set AUTH_MODE and AUTH_SECRET (or AUTH_JWKS_URL), AUTH_API_KEYS (or a key store of your own), "+
 			"or AUTH_SESSION_STORE, or declare the channels public with Channel.Security",
-			quoteList(needCaller))
+			quoteList(paths))
 	}
 
-	var unverifiable []string
-	for _, m := range modules {
-		security := m.Security()
-		if security == nil || security.Public {
-			continue
-		}
-		for _, scheme := range security.Schemes {
-			if !slices.Contains(verifiable, scheme) {
-				unverifiable = append(unverifiable, fmt.Sprintf("%s (%q)", m.RuntimeModule().Path, scheme))
-			}
-		}
-	}
-	if len(unverifiable) > 0 {
+	if unverifiable := unverifiableSchemes(modules, verifiable); len(unverifiable) > 0 {
 		return fmt.Errorf("WebSocket channels accept only a credential nothing verifies: %s (available: %s): "+
 			"configure it, or widen Channel.Security.Schemes",
 			strings.Join(unverifiable, ", "), quoteList(verifiable))
 	}
 	return nil
+}
+
+// channelsWhere returns the paths of the channels whose declaration passes
+// test, in the order the modules were given. test is handed nil for a channel
+// that declares nothing, which the SecuritySpec methods read as "requires a
+// caller".
+func channelsWhere(modules []*wskit.Module, test func(*wskit.SecuritySpec) bool) []string {
+	var paths []string
+	for _, m := range modules {
+		if test(m.Security()) {
+			paths = append(paths, m.RuntimeModule().Path)
+		}
+	}
+	return paths
+}
+
+// verifiableSchemes returns the kinds of credential the application can
+// verify. Having no verifier at all means it can verify none.
+func verifiableSchemes(verifier authkit.Verifier) []string {
+	if verifier == nil {
+		return nil
+	}
+	return verifier.Schemes()
+}
+
+// unverifiableSchemes names each kind of credential a channel accepts only
+// that is missing from verifiable, as `"/ws/path" ("apiKey")`, in the order
+// the modules declare them.
+func unverifiableSchemes(modules []*wskit.Module, verifiable []string) []string {
+	var unverifiable []string
+	for _, m := range modules {
+		for _, scheme := range limitedSchemes(m.Security()) {
+			if !slices.Contains(verifiable, scheme) {
+				unverifiable = append(unverifiable, fmt.Sprintf("%q (%q)", m.RuntimeModule().Path, scheme))
+			}
+		}
+	}
+	return unverifiable
+}
+
+// limitedSchemes returns the kinds of credential a declaration limits its
+// channel to. It is nil both for a channel that declares nothing, which
+// accepts any kind the application verifies, and for a public one, which
+// accepts no credential in particular.
+func limitedSchemes(security *wskit.SecuritySpec) []string {
+	if security == nil || security.Public {
+		return nil
+	}
+	return security.Schemes
 }
 
 // quoteList renders names for an error message. An empty list reads as "none"

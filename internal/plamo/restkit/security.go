@@ -1,7 +1,9 @@
 package restkit
 
 import (
+	"iter"
 	"net/http"
+	"slices"
 
 	"github.com/ensoria/ensoria-template/internal/plamo/authkit"
 	"github.com/ensoria/rest/pkg/rest"
@@ -41,22 +43,10 @@ func authorize(security *SecuritySpec, r *rest.Request) *rest.Response {
 // The application uses it at startup to catch the combination that would
 // otherwise refuse every request: endpoints that need a caller, and no
 // configured way to verify one.
-//
-// Controllers that are not typed endpoints are not counted: they never reach the
-// adapter, so no declaration applies to them.
 func RequiresAuthentication(modules []*rest.Module) bool {
-	for _, m := range modules {
-		if m == nil {
-			continue
-		}
-		for _, route := range routesOf(m) {
-			doc, ok := route.controller.(Documented)
-			if !ok {
-				continue
-			}
-			if security := doc.EndpointDoc().Security; security == nil || !security.Public {
-				return true
-			}
+	for _, security := range endpointsOf(modules) {
+		if !security.Public {
+			return true
 		}
 	}
 	return false
@@ -76,19 +66,9 @@ func RequiresAuthentication(modules []*rest.Module) bool {
 // arrives.
 func PublicResourceChecks(modules []*rest.Module) []string {
 	var conflicts []string
-	for _, m := range modules {
-		if m == nil {
-			continue
-		}
-		for _, route := range routesOf(m) {
-			doc, ok := route.controller.(Documented)
-			if !ok {
-				continue
-			}
-			security := doc.EndpointDoc().Security
-			if security != nil && security.Public && security.Resource != nil {
-				conflicts = append(conflicts, route.method+" "+m.Path)
-			}
+	for name, security := range endpointsOf(modules) {
+		if security.Public && security.Resource != nil {
+			conflicts = append(conflicts, name)
 		}
 	}
 	return conflicts
@@ -105,42 +85,12 @@ func PublicResourceChecks(modules []*rest.Module) []string {
 // is why the application refuses to start on it rather than serve it.
 func PublicWithConditions(modules []*rest.Module) []string {
 	var conflicts []string
-	for _, m := range modules {
-		if m == nil {
-			continue
-		}
-		for _, route := range routesOf(m) {
-			doc, ok := route.controller.(Documented)
-			if !ok {
-				continue
-			}
-			security := doc.EndpointDoc().Security
-			if security != nil && security.Public && (len(security.Schemes) > 0 || len(security.Scopes) > 0) {
-				conflicts = append(conflicts, route.method+" "+m.Path)
-			}
+	for name, security := range endpointsOf(modules) {
+		if security.Public && (len(security.Schemes) > 0 || len(security.Scopes) > 0) {
+			conflicts = append(conflicts, name)
 		}
 	}
 	return conflicts
-}
-
-// route pairs a controller with the method it answers, which a rest.Module
-// keeps as separate fields. The method is part of naming an endpoint: a path on
-// its own does not identify one.
-type route struct {
-	method     string
-	controller rest.Controller
-}
-
-// routesOf lists what a module answers, in a fixed order so that a startup
-// failure names the same endpoint first on every run.
-func routesOf(m *rest.Module) []route {
-	return []route{
-		{http.MethodGet, m.Get},
-		{http.MethodPost, m.Post},
-		{http.MethodPut, m.Put},
-		{http.MethodPatch, m.Patch},
-		{http.MethodDelete, m.Delete},
-	}
 }
 
 // DeclaredSchemes returns every credential kind the given modules require, in
@@ -152,27 +102,69 @@ func routesOf(m *rest.Module) []route {
 // than on the first request.
 func DeclaredSchemes(modules []*rest.Module) []string {
 	var schemes []string
-	seen := map[string]bool{}
-	for _, m := range modules {
-		if m == nil {
+	for _, security := range endpointsOf(modules) {
+		// A public endpoint requires no credential, whatever it lists.
+		if security.Public {
 			continue
 		}
-		for _, route := range routesOf(m) {
-			doc, ok := route.controller.(Documented)
-			if !ok {
-				continue
-			}
-			security := doc.EndpointDoc().Security
-			if security == nil || security.Public {
-				continue
-			}
-			for _, scheme := range security.Schemes {
-				if !seen[scheme] {
-					seen[scheme] = true
-					schemes = append(schemes, scheme)
-				}
+		for _, scheme := range security.Schemes {
+			if !slices.Contains(schemes, scheme) {
+				schemes = append(schemes, scheme)
 			}
 		}
 	}
 	return schemes
+}
+
+// endpointsOf yields every typed endpoint in modules as its name ("GET /order")
+// and its declaration, in a fixed order so that a startup failure names the
+// same endpoint first on every run. The method is part of the name: a path on
+// its own does not identify an endpoint.
+//
+// An endpoint that declares nothing is yielded with the empty declaration,
+// which means the same thing — a verified caller is required, and nothing
+// else is — so that callers never have to tell the two apart.
+//
+// Controllers that are not typed endpoints are skipped: they never reach the
+// adapter, so no declaration applies to them.
+func endpointsOf(modules []*rest.Module) iter.Seq2[string, *SecuritySpec] {
+	return func(yield func(string, *SecuritySpec) bool) {
+		for _, m := range modules {
+			if m == nil {
+				continue
+			}
+			for _, route := range routesOf(m) {
+				doc, ok := route.controller.(Documented)
+				if !ok {
+					continue
+				}
+				security := doc.EndpointDoc().Security
+				if security == nil {
+					security = &SecuritySpec{}
+				}
+				if !yield(route.method+" "+m.Path, security) {
+					return
+				}
+			}
+		}
+	}
+}
+
+// route pairs a controller with the method it answers, which a rest.Module
+// keeps as separate fields.
+type route struct {
+	method     string
+	controller rest.Controller
+}
+
+// routesOf lists what a module answers, in the fixed order endpointsOf
+// promises.
+func routesOf(m *rest.Module) []route {
+	return []route{
+		{http.MethodGet, m.Get},
+		{http.MethodPost, m.Post},
+		{http.MethodPut, m.Put},
+		{http.MethodPatch, m.Patch},
+		{http.MethodDelete, m.Delete},
+	}
 }

@@ -25,6 +25,14 @@ func guarded(security *restkit.SecuritySpec) rest.Controller {
 	return restkit.NewController(ep)
 }
 
+// untypedController answers without being a typed endpoint, so no declaration
+// applies to it (test helper).
+type untypedController struct{}
+
+func (untypedController) Handle(*rest.Request) *rest.Response {
+	return &rest.Response{Code: http.StatusOK}
+}
+
 // callerRequest builds a request already carrying a verified caller, the way the
 // authentication middleware leaves it (test helper).
 func callerRequest(p *authkit.Principal) *rest.Request {
@@ -178,6 +186,24 @@ var _ = Describe("RequiresAuthentication", func() {
 	It("reports false for modules with no endpoints at all", func() {
 		Expect(restkit.RequiresAuthentication(nil)).To(BeFalse())
 	})
+
+	It("counts an endpoint on any method, not only GET", func() {
+		modules := []*rest.Module{{
+			Path:   "/things",
+			Get:    guarded(&restkit.SecuritySpec{Public: true}),
+			Delete: guarded(nil),
+		}}
+
+		Expect(restkit.RequiresAuthentication(modules)).To(BeTrue())
+	})
+
+	// A controller that is not a typed endpoint never reaches the adapter, so
+	// no declaration applies to it.
+	It("does not count a controller that is not a typed endpoint, nor a nil module", func() {
+		modules := []*rest.Module{nil, {Path: "/legacy", Get: untypedController{}}}
+
+		Expect(restkit.RequiresAuthentication(modules)).To(BeFalse())
+	})
 })
 
 var _ = Describe("PublicWithConditions", func() {
@@ -202,5 +228,45 @@ var _ = Describe("PublicWithConditions", func() {
 
 	It("finds nothing when no public endpoint states a condition", func() {
 		Expect(restkit.PublicWithConditions([]*rest.Module{moduleOf("/b", &restkit.SecuritySpec{Public: true})})).To(BeEmpty())
+	})
+
+	// A path on its own does not identify an endpoint.
+	It("names an endpoint by its method as well as its path", func() {
+		modules := []*rest.Module{{
+			Path:   "/a",
+			Get:    guarded(&restkit.SecuritySpec{Public: true}),
+			Delete: guarded(&restkit.SecuritySpec{Public: true, Scopes: []string{"orders:write"}}),
+		}}
+
+		Expect(restkit.PublicWithConditions(modules)).To(Equal([]string{"DELETE /a"}))
+	})
+})
+
+var _ = Describe("DeclaredSchemes", func() {
+	moduleOf := func(path string, security *restkit.SecuritySpec) *rest.Module {
+		return &rest.Module{Path: path, Get: guarded(security)}
+	}
+
+	It("lists every kind of credential required, once each, in the order first declared", func() {
+		modules := []*rest.Module{
+			moduleOf("/a", &restkit.SecuritySpec{Schemes: []string{authkit.SchemeAPIKey, authkit.SchemeJWT}}),
+			moduleOf("/b", &restkit.SecuritySpec{Schemes: []string{authkit.SchemeJWT, authkit.SchemeSession}}),
+		}
+
+		Expect(restkit.DeclaredSchemes(modules)).To(Equal([]string{
+			authkit.SchemeAPIKey, authkit.SchemeJWT, authkit.SchemeSession,
+		}))
+	})
+
+	// A public endpoint requires nothing, whatever else it states, and an
+	// undeclared one accepts any kind the application verifies.
+	It("leaves out public and undeclared endpoints, and controllers that are not typed endpoints", func() {
+		modules := []*rest.Module{
+			moduleOf("/public", &restkit.SecuritySpec{Public: true, Schemes: []string{authkit.SchemeAPIKey}}),
+			moduleOf("/undeclared", nil),
+			{Path: "/legacy", Get: untypedController{}},
+		}
+
+		Expect(restkit.DeclaredSchemes(modules)).To(BeEmpty())
 	})
 })

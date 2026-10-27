@@ -244,51 +244,12 @@ var _ = Describe("CreateWSRouter and the channel's declaration", func() {
 		Expect(ranChannelMiddleware).To(BeTrue())
 	})
 
-	Describe("the startup checks", func() {
-		It("refuses a channel that needs a caller in an application that can verify none", func() {
-			_, err := wsApp.CreateWSRouter([]*wskit.Module{wskit.NewModule(&wskit.Channel{Path: "/ws/one"})}, verifierFor{}, sameOriginOnly, nil, nil)
+	// The rules themselves are specified with checkChannelSecurity; this is
+	// only that a router is never built around declarations they refuse.
+	It("refuses to build a router for a channel that cannot be served as declared", func() {
+		router, err := wsApp.CreateWSRouter([]*wskit.Module{wskit.NewModule(&wskit.Channel{Path: "/ws/one"})}, verifierFor{}, sameOriginOnly, nil, nil)
 
-			Expect(err).To(MatchError(ContainSubstring("/ws/one")))
-		})
-
-		It("accepts public channels in an application that can verify nothing", func() {
-			module := wskit.NewModule(&wskit.Channel{Path: "/ws/one", Security: &wskit.SecuritySpec{Public: true}})
-
-			_, err := wsApp.CreateWSRouter([]*wskit.Module{module}, verifierFor{}, sameOriginOnly, nil, nil)
-
-			Expect(err).NotTo(HaveOccurred())
-		})
-
-		// Requiring a kind of credential nothing verifies closes the channel
-		// to everyone.
-		It("refuses a channel that accepts only a kind of credential nothing verifies", func() {
-			module := wskit.NewModule(&wskit.Channel{Path: "/ws/one", Security: &wskit.SecuritySpec{Schemes: []string{authkit.SchemeAPIKey}}})
-
-			_, err := wsApp.CreateWSRouter([]*wskit.Module{module}, sessionsOnly, sameOriginOnly, nil, nil)
-
-			Expect(err).To(MatchError(ContainSubstring(authkit.SchemeAPIKey)))
-			Expect(err).To(MatchError(ContainSubstring("/ws/one")))
-		})
-
-		// A public channel admits everyone before its conditions are read, so
-		// they would never apply: it fails open.
-		DescribeTable("refuses a public channel that also states a condition",
-			func(security *wskit.SecuritySpec) {
-				module := wskit.NewModule(&wskit.Channel{Path: "/ws/one", Security: security})
-
-				_, err := wsApp.CreateWSRouter([]*wskit.Module{module}, sessionsOnly, sameOriginOnly, nil, nil)
-
-				Expect(err).To(MatchError(ContainSubstring("/ws/one")))
-				Expect(err).To(MatchError(ContainSubstring("drop Public")))
-			},
-			Entry("a scope", &wskit.SecuritySpec{Public: true, Scopes: []string{"things:read"}}),
-			Entry("a scheme", &wskit.SecuritySpec{Public: true, Schemes: []string{authkit.SchemeSession}}),
-		)
-
-		It("checks raw channels the same way", func() {
-			_, err := wsApp.CreateWSRouter([]*wskit.Module{wskit.Raw(wsconfig.NewDefaultModule("/ws/raw"), nil)}, verifierFor{}, sameOriginOnly, nil, nil)
-
-			Expect(err).To(MatchError(ContainSubstring("/ws/raw")))
-		})
+		Expect(err).To(MatchError(ContainSubstring("/ws/one")))
+		Expect(router).To(BeNil())
 	})
 })
