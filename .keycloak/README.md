@@ -131,9 +131,14 @@ Keycloak imports this file **once**, into its own storage. Editing it afterwards
 changes nothing. To import again:
 
 ```bash
-docker compose --profile keycloak down -v   # -v drops the realm storage
-docker compose --profile keycloak up -d
+docker compose --profile keycloak down -v ensoria-ensoria-template-keycloak   # -v drops the realm storage
+docker compose --profile keycloak up -d ensoria-ensoria-template-keycloak
 ```
+
+⚠ Name the service. `down -v` without one deletes every named volume in the
+project — the databases', the object store's and the broker's included — not
+only the realm storage. With the service named, it removes the Keycloak
+container and its `keycloak-data` volume and nothing else.
 
 Changes made through the admin console (http://localhost:8081, `admin` /
 `admin`) live in that storage and are lost the same way. Export them back into

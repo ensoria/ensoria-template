@@ -166,8 +166,13 @@ services:
   # is configured to expect rather than a container hostname it cannot resolve.
   #
   # --import-realm reads .keycloak/*.json on first start only. Once the realm
-  # exists, editing that file changes nothing; `docker compose down -v` drops the
-  # volume so the next start imports again.
+  # exists, editing that file changes nothing; dropping this service's volume
+  # makes the next start import again:
+  #
+  #   docker compose --profile keycloak down -v ensoria-ensoria-template-keycloak
+  #
+  # ⚠ Name the service: `down -v` without one deletes every named volume in the
+  # project, the databases' included.
   #
   # See "Developing against Keycloak" in README.md for the settings to put in
   # internal/config/.env and how to get a token.

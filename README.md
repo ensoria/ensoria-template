@@ -1276,9 +1276,13 @@ chose, which is what a real deployment records as the session's owner.
 Restore `AUTH_MODE=hs256` and `AUTH_SECRET`, and stop the container:
 
 ```sh
-docker compose --profile keycloak down     # keep the realm
-docker compose --profile keycloak down -v  # drop it, so the JSON is imported again
+docker compose --profile keycloak down ensoria-ensoria-template-keycloak     # keep the realm
+docker compose --profile keycloak down -v ensoria-ensoria-template-keycloak  # drop it, so the JSON is imported again
 ```
+
+⚠ Name the service. Without it, `down` stops every container in the project,
+and `-v` deletes every named volume in it — the databases', the object store's
+and the broker's included — not only the realm.
 
 
 ### 検証は宣言するだけ
