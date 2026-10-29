@@ -47,6 +47,23 @@ type incoming struct {
 	Data json.RawMessage `json:"data"`
 }
 
+// MessageTypeOf reads the type a received frame names, without the payload it
+// carries. It is "" for a frame that is not an envelope or names no type.
+//
+// It is for code around the dispatcher — an OnMessage middleware writing a
+// record, say — that needs to say which message arrived without repeating what
+// it said. The type is whatever the client wrote: it is not checked against the
+// channel's catalog.
+func MessageTypeOf(frame []byte) string {
+	var envelope struct {
+		Type string `json:"type"`
+	}
+	if err := json.Unmarshal(frame, &envelope); err != nil {
+		return ""
+	}
+	return envelope.Type
+}
+
 // outgoing is one envelope being sent.
 type outgoing struct {
 	Type string `json:"type"`
