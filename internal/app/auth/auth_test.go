@@ -7,6 +7,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	schedulerhttp "github.com/ensoria/ensoria-template/internal/app/scheduler/api/controller/http"
+	workerhttp "github.com/ensoria/ensoria-template/internal/app/worker/api/controller/http"
 	"github.com/ensoria/ensoria-template/internal/plamo/authkit"
 )
 
@@ -251,5 +253,17 @@ var _ = Describe("the development key store", func() {
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(verifier.Schemes()).To(ContainElement(authkit.SchemeAPIKey))
+	})
+})
+
+// The scope names are written out here rather than imported from the admin
+// endpoints, so that this package does not come to depend on them. This is
+// what notices when the two drift apart.
+var _ = Describe("the operator scopes", func() {
+	It("are the ones the worker's and the scheduler's admin endpoints declare", func() {
+		Expect(operatorScopes()).To(ConsistOf(
+			workerhttp.ScopeJobsRead, workerhttp.ScopeJobsWrite,
+			schedulerhttp.ScopeTasksRead, schedulerhttp.ScopeTasksWrite,
+		))
 	})
 })

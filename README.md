@@ -282,6 +282,11 @@ for `orders:write`, without `admin` appearing in that endpoint's declaration:
 | `orders:write` | `orders:write` | 200 |
 | `orders:read` | `orders:read` | **403** |
 
+The worker's and the scheduler's admin scopes (`worker.jobs:*`,
+`scheduler.tasks:*`) are deliberately not in `admin`'s row: operating the
+background machinery is a different role from administering the application's
+data. List them there if your admin is also the operator.
+
 Chains work — give `manager` a row of its own and `admin: {"manager"}` reaches
 everything `manager` reaches — because the alternative is copying the
 right-hand side upwards, and a copy nobody updates leaves "`admin` without what
@@ -783,7 +788,7 @@ return authkit.NewVerifier(params.Auth, apikey.NewDBKeyStore(repo))
 
 | キー | `sub` | スコープ | 出どころ |
 |---|---|---|---|
-| `AUTH_API_KEYS` に並べたキー（同梱キーを含む） | `local-dev` | `orders:read` `orders:write` `users:read` `users:write` `announcements:write` | 設定。**ローカルでキーを足せばそのまま使えます** |
+| `AUTH_API_KEYS` に並べたキー（同梱キーを含む） | `local-dev` | `orders:read` `orders:write` `users:read` `users:write` `announcements:write` `worker.jobs:read` `worker.jobs:write` `scheduler.tasks:read` `scheduler.tasks:write` | 設定。**ローカルでキーを足せばそのまま使えます** |
 | `ensoria-local-development-payment-provider-key` | `payment-provider` | `orders:write` **のみ** | スタブの中だけ。設定には**入っていません** |
 
 2つ目は `POST /order/payment-callback` のためにあります。このエンドポイントは

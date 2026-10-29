@@ -17,7 +17,7 @@ here instead.
 ## ⚠ You have to keep the scope list in step with your code
 
 **This is the one part of the file a project must maintain.** The client scopes
-named `users:read`, `orders:read`, `admin:jobs:write` and so on are the
+named `users:read`, `orders:read`, `worker.jobs:write` and so on are the
 permissions *this template's example endpoints and WebSocket messages* declare:
 
 ```go

@@ -17,13 +17,26 @@ var _ = Describe("the application's scope policy", func() {
 		Expect(expander).NotTo(BeNil())
 	})
 
-	It("lets admin stand for every permission the endpoints and messages declare", func() {
+	It("lets admin stand for every permission the application's endpoints and messages declare", func() {
 		expander, err := NewScopeExpander()
 		Expect(err).NotTo(HaveOccurred())
 
 		caller := (&authkit.Principal{Scopes: []string{"admin"}}).WithScopeExpander(expander)
 
-		Expect(caller.SatisfiesScopes(devScopes())).To(BeTrue())
+		Expect(caller.SatisfiesScopes(applicationScopes())).To(BeTrue())
+	})
+
+	// ⚠ Deliberate: operating the worker and the scheduler is a different role
+	// from administering the application's data, so admin is not given it.
+	It("does not let admin stand for the worker's or the scheduler's permissions", func() {
+		expander, err := NewScopeExpander()
+		Expect(err).NotTo(HaveOccurred())
+
+		caller := (&authkit.Principal{Scopes: []string{"admin"}}).WithScopeExpander(expander)
+
+		for _, scope := range operatorScopes() {
+			Expect(caller.SatisfiesScopes([]string{scope})).To(BeFalse(), scope)
+		}
 	})
 
 	// ⚠ Deliberate: the README teaches the difference between "authenticated"
@@ -56,7 +69,7 @@ var _ = Describe("the application's scope policy", func() {
 
 			caller := (&authkit.Principal{Scopes: []string{"admin"}}).WithScopeExpander(expander)
 
-			Expect(caller.SatisfiesScopes(devScopes())).To(BeTrue())
+			Expect(caller.SatisfiesScopes(applicationScopes())).To(BeTrue())
 		})
 	})
 })

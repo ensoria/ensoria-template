@@ -34,7 +34,7 @@ var _ = Describe("task inspection endpoints", func() {
 		// Reading is a separate scope from changing, so the read scope alone
 		// has to be enough here.
 		It("serves a caller holding only the read scope", func() {
-			res := list(callerWith("admin:tasks:read"))
+			res := list(callerWith("scheduler.tasks:read"))
 
 			Expect(res.Code).To(Equal(nethttp.StatusOK))
 		})

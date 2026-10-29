@@ -55,14 +55,29 @@ const (
 
 // TODO: 最終的なテンプレートとしては調整する
 // 全体でスコープをそもそも、`orders`や`users`のようなリソース単位で分け内容にするか?
-// devScopes returns every permission the template's endpoints and WebSocket
-// messages declare, which is what the configured keys are given locally so that
-// any of them can be tried.
+// devScopes returns every permission the template declares, the application's
+// and the operator's, which is what the configured keys are given locally so
+// that anything can be tried.
 //
-// It is a function rather than a package-level slice so that a caller cannot
+// These are functions rather than package-level slices so that a caller cannot
 // append to the one copy everyone reads.
 func devScopes() []string {
+	return append(applicationScopes(), operatorScopes()...)
+}
+
+// applicationScopes returns the permissions the application's own endpoints
+// and WebSocket messages declare. They are what admin stands for in the scope
+// policy.
+func applicationScopes() []string {
 	return []string{"orders:read", "orders:write", "users:read", "users:write", "announcements:write"}
+}
+
+// operatorScopes returns the permissions the worker's and the scheduler's admin
+// endpoints declare. They operate the application's background machinery
+// rather than its data, and admin does not stand for them (see
+// scopeImplications).
+func operatorScopes() []string {
+	return []string{"worker.jobs:read", "worker.jobs:write", "scheduler.tasks:read", "scheduler.tasks:write"}
 }
 
 // NewVerifier builds the verifier described by the configuration for the given

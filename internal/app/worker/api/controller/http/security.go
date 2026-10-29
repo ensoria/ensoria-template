@@ -1,8 +1,13 @@
 package http
 
-// FIXME: 他とスコープの定義が違うため、共通化する
-// 他は、`user:read` のように、`:`1つで区切るのに対し、ここは `admin:jobs:read` のように `:`2つで区切っている
 // Scopes required by the worker admin endpoints.
+//
+// The names read <component>.<resource>:<action>. An application's own scopes
+// read <resource>:<action> ("orders:read"), and "jobs" is a common enough word
+// that an application may well have a module of that name; prefixing the
+// component that owns the resource keeps "may read the application's jobs" and
+// "may read the worker's jobs" from ever being the same permission, while the
+// action still follows the one colon every other scope has.
 //
 // Reading job state and changing it are separate scopes so that an operator
 // dashboard can be granted the first without the second.
@@ -11,8 +16,8 @@ package http
 // which clients may reach them at all. The scopes here decide what a caller
 // that did reach them is allowed to do.
 const (
-	ScopeJobsRead  = "admin:jobs:read"
-	ScopeJobsWrite = "admin:jobs:write"
+	ScopeJobsRead  = "worker.jobs:read"
+	ScopeJobsWrite = "worker.jobs:write"
 )
 
 // Error codes returned by the worker admin endpoints.

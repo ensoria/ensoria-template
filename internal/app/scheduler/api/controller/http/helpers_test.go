@@ -91,7 +91,7 @@ func adminCaller() *authkit.Principal {
 	return &authkit.Principal{
 		Subject: "svc_ops",
 		Scheme:  authkit.SchemeJWT,
-		Scopes:  []string{"admin:tasks:read", "admin:tasks:write"},
+		Scopes:  []string{"scheduler.tasks:read", "scheduler.tasks:write"},
 	}
 }
 

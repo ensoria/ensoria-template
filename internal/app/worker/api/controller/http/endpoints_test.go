@@ -21,7 +21,7 @@ func adminCaller() *authkit.Principal {
 	return &authkit.Principal{
 		Subject: "svc_ops",
 		Scheme:  authkit.SchemeJWT,
-		Scopes:  []string{"admin:jobs:read", "admin:jobs:write"},
+		Scopes:  []string{"worker.jobs:read", "worker.jobs:write"},
 	}
 }
 
@@ -84,7 +84,7 @@ var _ = Describe("worker admin endpoints", func() {
 		// Reading job state does not grant the right to retry or discard.
 		DescribeTable("refuse a caller holding only the read scope",
 			func(build func() rest.Controller, method, body string) {
-				res := call(build(), method, body, callerWith("admin:jobs:read"), "job_1")
+				res := call(build(), method, body, callerWith("worker.jobs:read"), "job_1")
 
 				Expect(res.Code).To(Equal(nethttp.StatusForbidden))
 				Expect(errorCode(res)).To(Equal(restkit.ForbiddenCode))
@@ -107,7 +107,7 @@ var _ = Describe("worker admin endpoints", func() {
 			q := newFakeQueue().withQueued("job_1")
 			ctrl := restkit.NewController(workerhttp.NewJobStatus(workerWith(q)))
 
-			res := call(ctrl, nethttp.MethodGet, noBody, callerWith("admin:jobs:read"), "job_1")
+			res := call(ctrl, nethttp.MethodGet, noBody, callerWith("worker.jobs:read"), "job_1")
 
 			Expect(res.Code).To(Equal(nethttp.StatusOK))
 		})

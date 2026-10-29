@@ -33,6 +33,13 @@ import "github.com/ensoria/ensoria-template/internal/plamo/authkit"
 // by GET /order. Adding the implication here would make that example stop
 // demonstrating anything. Add it in a real project if it is what you mean.
 //
+// ⚠ Also deliberately absent: the worker's and the scheduler's scopes
+// (worker.jobs:*, scheduler.tasks:*). They operate the background machinery —
+// re-running a dead job, pausing a task — which is a different role from
+// administering the application's data, and granting one is an operational
+// decision of its own. List them in admin's row if your admin is also the
+// operator.
+//
 // An empty table is valid and means no expansion at all, which is what a
 // deployment whose identity provider already issues the full set of scopes
 // wants.

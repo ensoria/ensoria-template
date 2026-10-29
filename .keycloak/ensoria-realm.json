@@ -74,7 +74,7 @@
       }
     },
     {
-      "name": "admin:jobs:read",
+      "name": "worker.jobs:read",
       "description": "Read the worker's jobs",
       "protocol": "openid-connect",
       "attributes": {
@@ -83,7 +83,7 @@
       }
     },
     {
-      "name": "admin:jobs:write",
+      "name": "worker.jobs:write",
       "description": "Enqueue or cancel a job",
       "protocol": "openid-connect",
       "attributes": {
@@ -92,7 +92,7 @@
       }
     },
     {
-      "name": "admin:tasks:read",
+      "name": "scheduler.tasks:read",
       "description": "Read the scheduler's tasks",
       "protocol": "openid-connect",
       "attributes": {
@@ -101,7 +101,7 @@
       }
     },
     {
-      "name": "admin:tasks:write",
+      "name": "scheduler.tasks:write",
       "description": "Run or pause a scheduled task",
       "protocol": "openid-connect",
       "attributes": {
@@ -136,10 +136,10 @@
         "orders:read",
         "orders:write",
         "announcements:write",
-        "admin:jobs:read",
-        "admin:jobs:write",
-        "admin:tasks:read",
-        "admin:tasks:write"
+        "worker.jobs:read",
+        "worker.jobs:write",
+        "scheduler.tasks:read",
+        "scheduler.tasks:write"
       ],
       "protocolMappers": [
         {

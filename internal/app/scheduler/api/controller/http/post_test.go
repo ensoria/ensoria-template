@@ -38,7 +38,7 @@ var _ = Describe("task control endpoints", func() {
 
 		// Reading task state does not grant the right to change it.
 		It("refuses a caller holding only the read scope", func() {
-			res := pause(`{"reason":"maintenance"}`, callerWith("admin:tasks:read"), taskName)
+			res := pause(`{"reason":"maintenance"}`, callerWith("scheduler.tasks:read"), taskName)
 
 			Expect(res.Code).To(Equal(nethttp.StatusForbidden))
 			Expect(errorCode(res)).To(Equal(restkit.ForbiddenCode))
