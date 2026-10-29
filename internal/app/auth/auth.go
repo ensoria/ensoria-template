@@ -55,13 +55,14 @@ const (
 
 // TODO: 最終的なテンプレートとしては調整する
 // 全体でスコープをそもそも、`orders`や`users`のようなリソース単位で分け内容にするか?
-// devScopes returns every permission the template's endpoints declare, which is
-// what the configured keys are given locally so that any endpoint can be tried.
+// devScopes returns every permission the template's endpoints and WebSocket
+// messages declare, which is what the configured keys are given locally so that
+// any of them can be tried.
 //
 // It is a function rather than a package-level slice so that a caller cannot
 // append to the one copy everyone reads.
 func devScopes() []string {
-	return []string{"orders:read", "orders:write", "users:read", "users:write"}
+	return []string{"orders:read", "orders:write", "users:read", "users:write", "announcements:write"}
 }
 
 // NewVerifier builds the verifier described by the configuration for the given

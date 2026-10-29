@@ -65,6 +65,15 @@
       }
     },
     {
+      "name": "announcements:write",
+      "description": "Announce something to everyone on the user WebSocket channel",
+      "protocol": "openid-connect",
+      "attributes": {
+        "include.in.token.scope": "true",
+        "display.on.consent.screen": "false"
+      }
+    },
+    {
       "name": "admin:jobs:read",
       "description": "Read the worker's jobs",
       "protocol": "openid-connect",
@@ -126,6 +135,7 @@
         "users:write",
         "orders:read",
         "orders:write",
+        "announcements:write",
         "admin:jobs:read",
         "admin:jobs:write",
         "admin:tasks:read",

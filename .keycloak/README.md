@@ -18,10 +18,11 @@ here instead.
 
 **This is the one part of the file a project must maintain.** The client scopes
 named `users:read`, `orders:read`, `admin:jobs:write` and so on are the
-permissions *this template's example endpoints* declare:
+permissions *this template's example endpoints and WebSocket messages* declare:
 
 ```go
 Security: &restkit.SecuritySpec{Scopes: []string{"users:read"}},
+Security: &wskit.MessageSecurity{Scopes: []string{"announcements:write"}},
 ```
 
 They are not framework vocabulary and nothing derives them from the code. When

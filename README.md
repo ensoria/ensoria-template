@@ -268,7 +268,7 @@ for which others:
 
 ```go
 var scopeImplications = map[string][]string{
-	"admin": {"orders:read", "orders:write", "users:read", "users:write"},
+	"admin": {"orders:read", "orders:write", "users:read", "users:write", "announcements:write"},
 }
 ```
 
@@ -278,7 +278,7 @@ for `orders:write`, without `admin` appearing in that endpoint's declaration:
 
 | Caller holds | Effectively holds | Endpoint requires `orders:write` |
 |---|---|---|
-| `admin` | `admin`, `orders:read`, `orders:write`, `users:read`, `users:write` | 200 |
+| `admin` | `admin`, `orders:read`, `orders:write`, `users:read`, `users:write`, `announcements:write` | 200 |
 | `orders:write` | `orders:write` | 200 |
 | `orders:read` | `orders:read` | **403** |
 
@@ -783,7 +783,7 @@ return authkit.NewVerifier(params.Auth, apikey.NewDBKeyStore(repo))
 
 | キー | `sub` | スコープ | 出どころ |
 |---|---|---|---|
-| `AUTH_API_KEYS` に並べたキー（同梱キーを含む） | `local-dev` | `orders:read` `orders:write` `users:read` `users:write` | 設定。**ローカルでキーを足せばそのまま使えます** |
+| `AUTH_API_KEYS` に並べたキー（同梱キーを含む） | `local-dev` | `orders:read` `orders:write` `users:read` `users:write` `announcements:write` | 設定。**ローカルでキーを足せばそのまま使えます** |
 | `ensoria-local-development-payment-provider-key` | `payment-provider` | `orders:write` **のみ** | スタブの中だけ。設定には**入っていません** |
 
 2つ目は `POST /order/payment-callback` のためにあります。このエンドポイントは
@@ -1195,7 +1195,7 @@ docker compose --profile keycloak up -d
 It imports [.keycloak/ensoria-realm.json](.keycloak/ensoria-realm.json) on first
 start: a realm named `ensoria`, a public client `ensoria-frontend`, a user
 `alice` / `alice`, and one client scope per permission the template's endpoints
-declare. [.keycloak/README.md](.keycloak/README.md) explains what is in it and
+and WebSocket messages declare. [.keycloak/README.md](.keycloak/README.md) explains what is in it and
 why — including two mappers without which Keycloak's defaults produce a token
 this application refuses.
 

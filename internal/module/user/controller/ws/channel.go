@@ -32,10 +32,10 @@ const (
 // channelDescription is the longer explanation of the channel.
 const channelDescription = "Demonstrates the typed message catalog: the client sends user.echo and the server " +
 	"answers with user.echo_reply. Anyone may connect and echo; user.whoami needs a signed-in caller, " +
-	"and user.announce a caller holding users:write."
+	"and user.announce a caller holding announcements:write."
 
 // announceScope is what a caller needs to send an announcement.
-const announceScope = "users:write"
+const announceScope = "announcements:write"
 
 // LogTypeAnnouncementUndelivered labels an announcement that did not reach
 // every connection on the channel, because some of them were going away.
@@ -126,8 +126,8 @@ func (c *Channel) Declare() *wskit.Channel {
 				Security: &wskit.MessageSecurity{},
 			}, c.handleWhoAmI),
 			// Anyone connected hears an announcement; only a caller holding
-			// users:write may make one. A scope the application's policy lets
-			// stand for it counts too, so admin may announce as well.
+			// announcements:write may make one. A scope the application's
+			// policy lets stand for it counts too, so admin may announce as well.
 			wskit.Receive[dto.UserAnnounce](AnnounceMessage, wskit.ReceiveOpts{
 				Summary: "Announce something to everyone on the channel",
 				FieldDocs: map[string]string{

@@ -29,18 +29,18 @@ const (
 
 // The API keys the specs connect with, each standing for a different caller.
 const (
-	keyNoScopes = "key-no-scopes"
-	keyWriter   = "key-users-write"
-	keyAdmin    = "key-admin"
+	keyNoScopes  = "key-no-scopes"
+	keyAnnouncer = "key-announcer"
+	keyAdmin     = "key-admin"
 )
 
 // callers is the key store behind those keys. keyAdmin holds admin alone, so
-// it reaches users:write only through the template's scope policy.
+// it reaches announcements:write only through the template's scope policy.
 var callers = authkit.KeyStoreFunc(func(_ context.Context, key string) (*authkit.Principal, error) {
 	scopes := map[string][]string{
-		keyNoScopes: nil,
-		keyWriter:   {"users:write"},
-		keyAdmin:    {"admin"},
+		keyNoScopes:  nil,
+		keyAnnouncer: {"announcements:write"},
+		keyAdmin:     {"admin"},
 	}
 	held, ok := scopes[key]
 	if !ok {
@@ -153,7 +153,7 @@ var _ = Describe("the /ws/user channel", func() {
 		})
 	})
 
-	Describe("for a signed-in caller without users:write", func() {
+	Describe("for a signed-in caller without announcements:write", func() {
 		It("says who the caller is", func() {
 			conn := connect(server, keyNoScopes)
 
@@ -177,7 +177,7 @@ var _ = Describe("the /ws/user channel", func() {
 	Describe("an announcement", func() {
 		It("reaches every connection on the channel, anonymous listeners included", func() {
 			listener := connect(server, "")
-			announcer := connect(server, keyWriter)
+			announcer := connect(server, keyAnnouncer)
 
 			send(announcer, announce)
 
@@ -188,8 +188,8 @@ var _ = Describe("the /ws/user channel", func() {
 			}
 		})
 
-		// The template's policy lets admin stand for users:write. A message
-		// judged without that policy would refuse admin quietly.
+		// The template's policy lets admin stand for announcements:write. A
+		// message judged without that policy would refuse admin quietly.
 		It("is accepted from a caller holding only admin", func() {
 			announcer := connect(server, keyAdmin)
 

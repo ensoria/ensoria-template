@@ -17,7 +17,7 @@ var _ = Describe("the application's scope policy", func() {
 		Expect(expander).NotTo(BeNil())
 	})
 
-	It("lets admin stand for every permission the endpoints declare", func() {
+	It("lets admin stand for every permission the endpoints and messages declare", func() {
 		expander, err := NewScopeExpander()
 		Expect(err).NotTo(HaveOccurred())
 

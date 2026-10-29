@@ -37,7 +37,7 @@ import "github.com/ensoria/ensoria-template/internal/plamo/authkit"
 // deployment whose identity provider already issues the full set of scopes
 // wants.
 var scopeImplications = map[string][]string{
-	"admin": {"orders:read", "orders:write", "users:read", "users:write"},
+	"admin": {"orders:read", "orders:write", "users:read", "users:write", "announcements:write"},
 }
 
 // ScopeImplicationTable returns the policy as written.
