@@ -107,3 +107,74 @@ var _ = Describe("SecuritySpec", func() {
 		)
 	})
 })
+
+var _ = Describe("MessageSecurity", func() {
+	jwtCaller := func(scopes ...string) *authkit.Principal {
+		return &authkit.Principal{Subject: "usr_1", Scheme: authkit.SchemeJWT, Scopes: scopes}
+	}
+
+	// ⚠ The opposite of a channel's nil, which requires a caller. A message's
+	// declaration can only add to the channel's — a connection exists only once
+	// the channel's conditions were met — so declaring nothing adds nothing.
+	Describe("a message with no declaration", func() {
+		var security *wskit.MessageSecurity
+
+		It("adds nothing, admitting even an anonymous caller", func() {
+			Expect(security.Decide(nil)).To(Equal(wskit.Allowed))
+			Expect(security.Decide(jwtCaller())).To(Equal(wskit.Allowed))
+		})
+
+		It("requires no caller", func() {
+			Expect(security.RequiresCaller()).To(BeFalse())
+		})
+	})
+
+	// The way to say "signed in" on a channel that admits anonymous callers.
+	Describe("an empty declaration", func() {
+		signedIn := &wskit.MessageSecurity{}
+
+		It("refuses an anonymous caller as unauthenticated", func() {
+			Expect(signedIn.Decide(nil)).To(Equal(wskit.Unauthenticated))
+		})
+
+		It("admits any verified caller", func() {
+			Expect(signedIn.Decide(jwtCaller())).To(Equal(wskit.Allowed))
+		})
+
+		It("requires a caller", func() {
+			Expect(signedIn.RequiresCaller()).To(BeTrue())
+		})
+	})
+
+	Describe("required scopes", func() {
+		needsWrite := &wskit.MessageSecurity{Scopes: []string{"things:write"}}
+
+		It("refuses an anonymous caller as unauthenticated", func() {
+			Expect(needsWrite.Decide(nil)).To(Equal(wskit.Unauthenticated))
+		})
+
+		It("refuses a caller without the scope as forbidden", func() {
+			Expect(needsWrite.Decide(jwtCaller("things:read"))).To(Equal(wskit.Forbidden))
+		})
+
+		It("admits a caller with the scope", func() {
+			Expect(needsWrite.Decide(jwtCaller("things:write"))).To(Equal(wskit.Allowed))
+		})
+
+		It("requires every scope listed, not any of them", func() {
+			both := &wskit.MessageSecurity{Scopes: []string{"things:read", "things:write"}}
+
+			Expect(both.Decide(jwtCaller("things:write"))).To(Equal(wskit.Forbidden))
+			Expect(both.Decide(jwtCaller("things:read", "things:write"))).To(Equal(wskit.Allowed))
+		})
+
+		It("counts what the caller's scopes imply", func() {
+			expander, err := authkit.NewScopeImplications(map[string][]string{"admin": {"things:write"}})
+			Expect(err).NotTo(HaveOccurred())
+
+			admin := jwtCaller("admin").WithScopeExpander(expander)
+
+			Expect(needsWrite.Decide(admin)).To(Equal(wskit.Allowed))
+		})
+	})
+})

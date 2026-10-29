@@ -1,6 +1,7 @@
 package ws_test
 
 import (
+	"context"
 	"fmt"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -10,12 +11,20 @@ import (
 	"github.com/ensoria/ensoria-template/internal/plamo/authkit"
 	"github.com/ensoria/ensoria-template/internal/plamo/wskit"
 	"github.com/ensoria/websocket/pkg/wsconfig"
+	"github.com/ensoria/websocket/pkg/wsevent"
 )
 
 // channel builds a typed channel module on path with the given declaration
 // (test helper).
 func channel(path string, security *wskit.SecuritySpec) *wskit.Module {
 	return wskit.NewModule(&wskit.Channel{Path: path, Security: security})
+}
+
+// receiver declares a message with the given security and a handler that does
+// nothing (test helper).
+func receiver(name string, security *wskit.MessageSecurity) *wskit.Receiver {
+	return wskit.Receive[struct{}](name, wskit.ReceiveOpts{Security: security},
+		func(context.Context, *wsevent.Message, *struct{}) error { return nil })
 }
 
 var _ = Describe("checkChannelSecurity", func() {
@@ -110,6 +119,34 @@ var _ = Describe("checkChannelSecurity", func() {
 			modules := []*wskit.Module{channel("/ws/public", public)}
 
 			Expect(wsApp.CheckChannelSecurity(modules, verifierFor{})).To(Succeed())
+		})
+	})
+
+	// A message can require a caller on a channel that does not, and in an
+	// application that can verify nobody, that message refuses everyone.
+	Describe("messages that need a caller in an application that can verify none", func() {
+		publicWith := func(receivers ...*wskit.Receiver) *wskit.Module {
+			return wskit.NewModule(&wskit.Channel{Path: "/ws/public", Security: public, Receive: receivers})
+		}
+
+		It("are refused, each named with its channel, and only they are", func() {
+			module := publicWith(
+				receiver("test.open", nil),
+				receiver("test.signed_in", &wskit.MessageSecurity{}),
+				receiver("test.write", &wskit.MessageSecurity{Scopes: []string{"things:write"}}),
+			)
+
+			err := wsApp.CheckChannelSecurity([]*wskit.Module{module}, verifierFor{})
+
+			Expect(err).To(MatchError(ContainSubstring(`"test.signed_in" on "/ws/public", "test.write" on "/ws/public"`)))
+			Expect(err).To(MatchError(ContainSubstring("nothing can verify")))
+			Expect(err).NotTo(MatchError(ContainSubstring("test.open")))
+		})
+
+		It("are accepted when something can verify a caller", func() {
+			module := publicWith(receiver("test.signed_in", &wskit.MessageSecurity{}))
+
+			Expect(wsApp.CheckChannelSecurity([]*wskit.Module{module}, sessionsOnly)).To(Succeed())
 		})
 	})
 

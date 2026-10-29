@@ -89,8 +89,9 @@ func serveChannel(cfg *appconfig.Auth, origins *middleware.Origins, security *ws
 
 	// nil is the scope policy. This file drives a real connection to fix that a
 	// caller reaches the lifecycle handlers at all; whether that caller carries
-	// the policy is fixed in internal/middleware (AuthUpgrade), and no channel
-	// declares a scope yet for it to make a difference to.
+	// the policy is fixed in internal/middleware (AuthUpgrade), and the specs of
+	// the user module's channel drive a message that only an implied scope
+	// reaches.
 	router := mustRouter(wsApp.CreateWSRouter([]*wskit.Module{wskit.NewModule(channel)}, verifier, origins, nil, nil))
 	mux := http.NewServeMux()
 	router.Register(mux)

@@ -68,6 +68,12 @@ const (
 	// CodeUnknownMessageType means no message of that name is declared on this
 	// channel.
 	CodeUnknownMessageType = "unknown_message_type"
+	// CodeUnauthenticated means the message needs a verified caller and the
+	// connection has none: sign in and connect again.
+	CodeUnauthenticated = "unauthenticated"
+	// CodeForbidden means the caller is known but lacks a scope the message
+	// requires: sending it again will not help.
+	CodeForbidden = "forbidden"
 )
 
 // Messages shown with the codes above when the failure carries no message of
@@ -76,6 +82,8 @@ const (
 	msgNotParsable        = "message is not a valid envelope"
 	msgValidationFailed   = "message payload is invalid"
 	msgUnknownMessageType = "unknown message type"
+	msgUnauthenticated    = "authentication is required"
+	msgForbidden          = "this operation is not allowed for the caller"
 )
 
 // ErrorPayload is the body of the error message, mirroring the error envelope
@@ -119,8 +127,14 @@ type BehaviorSpec struct {
 	Ordering string
 }
 
-// MessageOpts declares the documentation and validation of one message.
-type MessageOpts struct {
+// ReceiveOpts declares one message a client sends: its documentation, its
+// validation, and who may send it.
+//
+// It shares every field but Security with SendOpts. The two are separate types,
+// rather than one, so that Security cannot be written on a sent message: nothing
+// enforces a condition there, and "only callers holding this scope get it" would
+// read as a promise while every connection on the channel received the message.
+type ReceiveOpts struct {
 	// Summary is the one-line description of the message.
 	Summary string
 	// Description is the longer explanation.
@@ -128,8 +142,30 @@ type MessageOpts struct {
 	// FieldDocs gives the meaning of individual payload fields, keyed by field
 	// path in dot / bracket notation.
 	FieldDocs map[string]string
-	// BodyRules validates the payload. On a received message a violation stops
-	// it before the handler runs; on a sent message it stops the send.
+	// BodyRules validates the payload. A violation stops the message before the
+	// handler runs.
+	BodyRules []*rule.RuleSet
+	// When states how a reader tells this message from the others on the
+	// channel. It defaults to the envelope discriminator, so it only needs
+	// setting when something further distinguishes the message.
+	When string
+	// Security adds conditions for sending this message, on top of the
+	// channel's. nil adds none — unlike Channel.Security, where nil requires a
+	// caller. See MessageSecurity.
+	Security *MessageSecurity
+}
+
+// SendOpts declares one message the server sends: its documentation and its
+// validation. The fields mean what they mean on ReceiveOpts.
+type SendOpts struct {
+	// Summary is the one-line description of the message.
+	Summary string
+	// Description is the longer explanation.
+	Description string
+	// FieldDocs gives the meaning of individual payload fields, keyed by field
+	// path in dot / bracket notation.
+	FieldDocs map[string]string
+	// BodyRules validates the payload. A violation stops the send.
 	BodyRules []*rule.RuleSet
 	// When states how a reader tells this message from the others on the
 	// channel. It defaults to the envelope discriminator, so it only needs

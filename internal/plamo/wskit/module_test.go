@@ -13,8 +13,10 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/ensoria/ensoria-template/internal/plamo/authkit"
 	"github.com/ensoria/ensoria-template/internal/plamo/vkit"
 	"github.com/ensoria/ensoria-template/internal/plamo/wskit"
+	"github.com/ensoria/rest/pkg/rest"
 	"github.com/ensoria/validator/pkg/rule"
 	"github.com/ensoria/websocket/pkg/wsconfig"
 	"github.com/ensoria/websocket/pkg/wserror"
@@ -33,7 +35,7 @@ type echo struct {
 }
 
 // reply is the declared server-to-client message.
-var reply = wskit.Send[echo]("test.echo_reply", wskit.MessageOpts{Summary: "Echo reply"})
+var reply = wskit.Send[echo]("test.echo_reply", wskit.SendOpts{Summary: "Echo reply"})
 
 // envelope is the decoded wire form, for asserting on what actually crossed.
 type envelope struct {
@@ -93,7 +95,7 @@ func echoChannel(adjust func(*wskit.Channel)) *wskit.Module {
 	channel := &wskit.Channel{
 		Path: testPath,
 		Receive: []*wskit.Receiver{
-			wskit.Receive[echo]("test.echo", wskit.MessageOpts{
+			wskit.Receive[echo]("test.echo", wskit.ReceiveOpts{
 				BodyRules: []*rule.RuleSet{
 					{Field: "message", Rules: []rule.Rule{vkit.Required()}},
 				},
@@ -129,7 +131,7 @@ var _ = Describe("dispatch", func() {
 		var got *echo
 		module := echoChannel(func(c *wskit.Channel) {
 			c.Receive = []*wskit.Receiver{
-				wskit.Receive[echo]("test.echo", wskit.MessageOpts{},
+				wskit.Receive[echo]("test.echo", wskit.ReceiveOpts{},
 					func(ctx context.Context, event *wsevent.Message, msg *echo) error {
 						got = msg
 						return reply.Send(ctx, event.Conn, msg)
@@ -151,7 +153,7 @@ var _ = Describe("dispatch", func() {
 		// data member is the natural way to write it.
 		module := echoChannel(func(c *wskit.Channel) {
 			c.Receive = []*wskit.Receiver{
-				wskit.Receive[struct{}]("test.ping", wskit.MessageOpts{},
+				wskit.Receive[struct{}]("test.ping", wskit.ReceiveOpts{},
 					func(ctx context.Context, event *wsevent.Message, _ *struct{}) error {
 						return reply.Send(ctx, event.Conn, &echo{Message: "pong"})
 					}),
@@ -219,7 +221,7 @@ var _ = Describe("dispatch", func() {
 			called := false
 			module := echoChannel(func(c *wskit.Channel) {
 				c.Receive = []*wskit.Receiver{
-					wskit.Receive[echo]("test.echo", wskit.MessageOpts{
+					wskit.Receive[echo]("test.echo", wskit.ReceiveOpts{
 						BodyRules: []*rule.RuleSet{
 							{Field: "message", Rules: []rule.Rule{vkit.Required()}},
 						},
@@ -253,7 +255,7 @@ var _ = Describe("dispatch", func() {
 	It("closes the connection when the handler itself fails", func() {
 		module := echoChannel(func(c *wskit.Channel) {
 			c.Receive = []*wskit.Receiver{
-				wskit.Receive[echo]("test.echo", wskit.MessageOpts{},
+				wskit.Receive[echo]("test.echo", wskit.ReceiveOpts{},
 					func(context.Context, *wsevent.Message, *echo) error {
 						return errors.New("downstream unavailable")
 					}),
@@ -269,6 +271,127 @@ var _ = Describe("dispatch", func() {
 		Expect(cli.SetReadDeadline(time.Now().Add(testTimeout))).To(Succeed())
 		_, _, err := cli.ReadMessage()
 		Expect(err).To(HaveOccurred())
+	})
+})
+
+// asCaller makes every handshake to the channel arrive as caller, the way the
+// authentication guard leaves it before the upgrade. nil leaves it anonymous.
+func asCaller(caller *authkit.Principal) func(*wsconfig.Module) {
+	return func(m *wsconfig.Module) {
+		m.Heartbeat.Disable = true
+		if caller == nil {
+			return
+		}
+		m.AddHTTPMiddleware(func(r *rest.Request) *rest.Response {
+			r.SetContext(authkit.WithPrincipal(r.Context(), caller))
+			return nil
+		})
+	}
+}
+
+var _ = Describe("dispatch of a message that declares security", func() {
+	jwtCaller := func(scopes ...string) *authkit.Principal {
+		return &authkit.Principal{Subject: "usr_1", Scheme: authkit.SchemeJWT, Scopes: scopes}
+	}
+
+	var handled bool
+
+	// guarded serves test.echo, open to whoever connected, next to test.write,
+	// which needs a caller holding things:write. The channel declares nothing,
+	// so these specs are only about the message's own declaration.
+	guarded := func(caller *authkit.Principal) (*websocket.Conn, func()) {
+		handled = false
+		module := echoChannel(func(c *wskit.Channel) {
+			c.Receive = append(c.Receive, wskit.Receive[echo]("test.write", wskit.ReceiveOpts{
+				Security: &wskit.MessageSecurity{Scopes: []string{"things:write"}},
+				BodyRules: []*rule.RuleSet{
+					{Field: "message", Rules: []rule.Rule{vkit.Required()}},
+				},
+			}, func(ctx context.Context, event *wsevent.Message, msg *echo) error {
+				handled = true
+				return reply.Send(ctx, event.Conn, msg)
+			}))
+			c.Configure = asCaller(caller)
+		})
+		return serve(module, nil)
+	}
+
+	It("refuses an anonymous caller as unauthenticated, naming the message, and keeps the connection", func() {
+		cli, cleanup := guarded(nil)
+		defer cleanup()
+
+		send(cli, `{"type":"test.write","data":{"message":"hi"}}`)
+
+		payload := errorPayload(cli)
+		Expect(payload.Code).To(Equal(wskit.CodeUnauthenticated))
+		Expect(payload.MessageType).To(Equal("test.write"))
+		Expect(handled).To(BeFalse())
+
+		// A refused message is the client asking for something it may not
+		// have, not a broken client: the rest of the channel stays usable.
+		send(cli, `{"type":"test.echo","data":{"message":"still here"}}`)
+		Expect(nextEnvelope(cli).Type).To(Equal("test.echo_reply"))
+	})
+
+	It("refuses a caller without the scope as forbidden and keeps the connection", func() {
+		cli, cleanup := guarded(jwtCaller("things:read"))
+		defer cleanup()
+
+		send(cli, `{"type":"test.write","data":{"message":"hi"}}`)
+
+		payload := errorPayload(cli)
+		Expect(payload.Code).To(Equal(wskit.CodeForbidden))
+		Expect(payload.MessageType).To(Equal("test.write"))
+		Expect(handled).To(BeFalse())
+
+		send(cli, `{"type":"test.echo","data":{"message":"still here"}}`)
+		Expect(nextEnvelope(cli).Type).To(Equal("test.echo_reply"))
+	})
+
+	It("hands the message to a caller with the scope", func() {
+		cli, cleanup := guarded(jwtCaller("things:write"))
+		defer cleanup()
+
+		send(cli, `{"type":"test.write","data":{"message":"hi"}}`)
+
+		Expect(nextEnvelope(cli).Type).To(Equal("test.echo_reply"))
+		Expect(handled).To(BeTrue())
+	})
+
+	// A caller holding only admin must meet a message asking for what admin
+	// stands for. Judging without the caller's scope policy would refuse such
+	// a caller quietly, which is the failure that goes unnoticed.
+	It("counts what the caller's scopes imply", func() {
+		expander, err := authkit.NewScopeImplications(map[string][]string{"admin": {"things:write"}})
+		Expect(err).NotTo(HaveOccurred())
+		cli, cleanup := guarded(jwtCaller("admin").WithScopeExpander(expander))
+		defer cleanup()
+
+		send(cli, `{"type":"test.write","data":{"message":"hi"}}`)
+
+		Expect(nextEnvelope(cli).Type).To(Equal("test.echo_reply"))
+	})
+
+	// A caller who may not send the message must not learn its rules from a
+	// validation failure, so the refusal comes first — as it does over HTTP.
+	It("judges the caller before the payload is decoded or validated", func() {
+		cli, cleanup := guarded(nil)
+		defer cleanup()
+
+		send(cli, `{"type":"test.write","data":{"message":""}}`)
+
+		payload := errorPayload(cli)
+		Expect(payload.Code).To(Equal(wskit.CodeUnauthenticated))
+		Expect(payload.FieldErrors).To(BeEmpty())
+	})
+
+	It("leaves the other messages on the channel to the channel's declaration alone", func() {
+		cli, cleanup := guarded(nil)
+		defer cleanup()
+
+		send(cli, `{"type":"test.echo","data":{"message":"hi"}}`)
+
+		Expect(nextEnvelope(cli).Type).To(Equal("test.echo_reply"))
 	})
 })
 
@@ -343,7 +466,7 @@ var _ = Describe("NewModule", func() {
 		var errorPhase wserror.ErrorType
 		module := echoChannel(func(c *wskit.Channel) {
 			c.Receive = []*wskit.Receiver{
-				wskit.Receive[echo]("test.echo", wskit.MessageOpts{},
+				wskit.Receive[echo]("test.echo", wskit.ReceiveOpts{},
 					func(context.Context, *wsevent.Message, *echo) error {
 						return errors.New("downstream unavailable")
 					}),
@@ -366,6 +489,13 @@ var _ = Describe("NewModule", func() {
 
 		Eventually(func() wserror.ErrorType { return errorPhase }).
 			Should(Equal(wserror.OnMessageMiddleware))
+	})
+
+	It("keeps the declared receivers, for the startup checks to read", func() {
+		module := echoChannel(nil)
+
+		Expect(module.Receivers()).To(HaveLen(1))
+		Expect(module.Receivers()[0].Name()).To(Equal("test.echo"))
 	})
 
 	It("keeps the declared path on the runtime module", func() {
@@ -420,6 +550,10 @@ var _ = Describe("Raw", func() {
 		Expect(doc.Untyped).To(BeTrue())
 		Expect(doc.Receive).To(BeEmpty())
 		Expect(doc.Send).To(BeEmpty())
+	})
+
+	It("has no receivers, since its messages are not known", func() {
+		Expect(wskit.Raw(wsconfig.NewDefaultModule("/ws/legacy"), nil).Receivers()).To(BeEmpty())
 	})
 
 	It("serves the module it was given, untouched", func() {

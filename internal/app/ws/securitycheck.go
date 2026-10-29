@@ -9,14 +9,19 @@ import (
 	"github.com/ensoria/ensoria-template/internal/plamo/wskit"
 )
 
-// checkChannelSecurity reports the channels whose declarations cannot be served
-// as written. It is the WebSocket counterpart of the HTTP startup check, and
-// refuses the same three things, in this order:
+// howToVerify lists the configuration that lets the application verify a
+// caller, for the errors that find it cannot.
+const howToVerify = "set AUTH_MODE and AUTH_SECRET (or AUTH_JWKS_URL), AUTH_API_KEYS (or a key store of your own), " +
+	"or AUTH_SESSION_STORE"
+
+// checkChannelSecurity reports the channels and messages whose declarations
+// cannot be served as written. It is the WebSocket counterpart of the HTTP
+// startup check, and refuses the same three things, in this order:
 //
 //   - a public channel that also states a scheme or a scope, which it never
 //     checks: it would admit everyone while declaring that it does not;
-//   - a channel that needs a caller in an application that can verify none,
-//     which would refuse every handshake with nothing to say why;
+//   - a channel, or a message, that needs a caller in an application that can
+//     verify none, which would refuse everyone with nothing to say why;
 //   - a channel that accepts only kinds of credential nothing verifies, which
 //     closes it to everyone.
 //
@@ -24,32 +29,41 @@ import (
 // the configuration, for the reason the HTTP check gives: a key store supplied
 // by application code never appears in the configuration.
 func checkChannelSecurity(modules []*wskit.Module, verifier authkit.Verifier) error {
-	// First, because it is about the declarations alone. The checks below ask
-	// whether the configuration can serve what is declared, and an application
-	// whose channels are all public would skip them at the early return.
+	// First, because it is about the declarations alone: it holds whatever the
+	// configuration can verify, which is what the checks below ask about.
 	if paths := contradictoryChannels(modules); len(paths) > 0 {
 		return fmt.Errorf("WebSocket channels %s are declared public and also require a scheme or a scope, "+
 			"which a public channel never checks: drop Public to require them, or drop Schemes and Scopes to admit everyone",
 			quoteList(paths))
 	}
 
-	paths := channelsRequiringCaller(modules)
-	if len(paths) == 0 {
-		return nil
-	}
-
 	verifiable := verifiableSchemes(verifier)
 	if len(verifiable) == 0 {
-		return fmt.Errorf("WebSocket channels %s require an authenticated caller but nothing can verify one: "+
-			"set AUTH_MODE and AUTH_SECRET (or AUTH_JWKS_URL), AUTH_API_KEYS (or a key store of your own), "+
-			"or AUTH_SESSION_STORE, or declare the channels public with Channel.Security",
-			quoteList(paths))
+		return checkNothingNeedsCaller(modules)
 	}
 
 	if unverifiable := unverifiableSchemes(modules, verifiable); len(unverifiable) > 0 {
 		return fmt.Errorf("WebSocket channels accept only a credential nothing verifies: %s (available: %s): "+
 			"configure it, or widen Channel.Security.Schemes",
 			strings.Join(unverifiable, ", "), quoteList(verifiable))
+	}
+	return nil
+}
+
+// checkNothingNeedsCaller refuses, in an application that can verify no
+// caller, every channel and every message that needs one: they would refuse
+// everyone. The channels are reported first, since a channel nobody can open
+// makes its messages moot.
+func checkNothingNeedsCaller(modules []*wskit.Module) error {
+	if paths := channelsRequiringCaller(modules); len(paths) > 0 {
+		return fmt.Errorf("WebSocket channels %s require an authenticated caller but nothing can verify one: "+
+			"%s, or declare the channels public with Channel.Security",
+			quoteList(paths), howToVerify)
+	}
+	if messages := messagesRequiringCaller(modules); len(messages) > 0 {
+		return fmt.Errorf("WebSocket messages %s require an authenticated caller but nothing can verify one: "+
+			"%s, or drop ReceiveOpts.Security from them",
+			strings.Join(messages, ", "), howToVerify)
 	}
 	return nil
 }
@@ -77,6 +91,21 @@ func channelsRequiringCaller(modules []*wskit.Module) []string {
 		}
 	}
 	return paths
+}
+
+// messagesRequiringCaller names the received messages whose declaration
+// admits only a verified caller, as `"user.whoami" on "/ws/user"`, in the
+// order the modules declare them.
+func messagesRequiringCaller(modules []*wskit.Module) []string {
+	var messages []string
+	for _, m := range modules {
+		for _, r := range m.Receivers() {
+			if r.Security().RequiresCaller() {
+				messages = append(messages, fmt.Sprintf("%q on %q", r.Name(), m.RuntimeModule().Path))
+			}
+		}
+	}
+	return messages
 }
 
 // verifiableSchemes returns the kinds of credential the application can

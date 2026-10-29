@@ -2,6 +2,7 @@ package wskit_test
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -19,7 +20,7 @@ var _ = Describe("Sender", func() {
 	// anything reaches the wire.
 
 	It("refuses to send a payload that breaks its declared rules", func() {
-		sender := wskit.Send[echo]("test.echo_reply", wskit.MessageOpts{
+		sender := wskit.Send[echo]("test.echo_reply", wskit.SendOpts{
 			BodyRules: []*rule.RuleSet{
 				{Field: "message", Rules: []rule.Rule{vkit.Required()}},
 			},
@@ -35,7 +36,7 @@ var _ = Describe("Sender", func() {
 	})
 
 	It("does not write once the connection context is canceled", func() {
-		sender := wskit.Send[echo]("test.echo_reply", wskit.MessageOpts{})
+		sender := wskit.Send[echo]("test.echo_reply", wskit.SendOpts{})
 		ctx, cancel := context.WithCancel(context.Background())
 		cancel()
 
@@ -45,7 +46,7 @@ var _ = Describe("Sender", func() {
 	})
 
 	It("applies the same checks to a broadcast", func() {
-		sender := wskit.Send[echo]("test.echo_reply", wskit.MessageOpts{
+		sender := wskit.Send[echo]("test.echo_reply", wskit.SendOpts{
 			BodyRules: []*rule.RuleSet{
 				{Field: "message", Rules: []rule.Rule{vkit.Required()}},
 			},
@@ -55,14 +56,14 @@ var _ = Describe("Sender", func() {
 	})
 
 	It("reports the name it was declared with", func() {
-		Expect(wskit.Send[echo]("test.echo_reply", wskit.MessageOpts{}).Name()).
+		Expect(wskit.Send[echo]("test.echo_reply", wskit.SendOpts{}).Name()).
 			To(Equal("test.echo_reply"))
 	})
 })
 
 var _ = Describe("MessageDoc", func() {
 	It("carries a sender's declaration", func() {
-		sender := wskit.Send[echo]("test.echo_reply", wskit.MessageOpts{
+		sender := wskit.Send[echo]("test.echo_reply", wskit.SendOpts{
 			Summary:     "Echo reply",
 			Description: "Longer explanation",
 			FieldDocs:   map[string]string{"message": "the echoed text"},
@@ -81,7 +82,7 @@ var _ = Describe("MessageDoc", func() {
 		rules := []*rule.RuleSet{
 			{Field: "message", Rules: []rule.Rule{vkit.Required()}},
 		}
-		receiver := wskit.Receive[echo]("test.echo", wskit.MessageOpts{
+		receiver := wskit.Receive[echo]("test.echo", wskit.ReceiveOpts{
 			Summary:   "Echo request",
 			BodyRules: rules,
 		}, func(context.Context, *wsevent.Message, *echo) error { return nil })
@@ -94,17 +95,66 @@ var _ = Describe("MessageDoc", func() {
 		Expect(doc.BodyRules).To(HaveLen(1))
 	})
 
+	It("carries a receiver's security declaration", func() {
+		security := &wskit.MessageSecurity{Scopes: []string{"things:write"}}
+		receiver := wskit.Receive[echo]("test.echo", wskit.ReceiveOpts{Security: security},
+			func(context.Context, *wsevent.Message, *echo) error { return nil })
+
+		Expect(receiver.Security()).To(BeIdenticalTo(security))
+		Expect(receiver.MessageDoc().Security).To(BeIdenticalTo(security))
+	})
+
+	It("carries no security declaration for a sender, which has none to make", func() {
+		Expect(wskit.Send[echo]("test.echo_reply", wskit.SendOpts{}).MessageDoc().Security).To(BeNil())
+	})
+
 	It("explains the discriminator by default, since that is what tells messages apart", func() {
-		doc := wskit.Send[echo]("test.echo_reply", wskit.MessageOpts{}).MessageDoc()
+		doc := wskit.Send[echo]("test.echo_reply", wskit.SendOpts{}).MessageDoc()
 
 		Expect(doc.When).To(Equal(`type is "test.echo_reply"`))
 	})
 
 	It("keeps a declared When, for a message the envelope alone does not identify", func() {
-		doc := wskit.Send[echo]("test.echo_reply", wskit.MessageOpts{
+		doc := wskit.Send[echo]("test.echo_reply", wskit.SendOpts{
 			When: "the echoed text was truncated",
 		}).MessageDoc()
 
 		Expect(doc.When).To(Equal("the echoed text was truncated"))
+	})
+})
+
+var _ = Describe("ReceiveOpts and SendOpts", func() {
+	fieldsOf := func(t reflect.Type) []string {
+		fields := make([]string, 0, t.NumField())
+		for f := range t.Fields() {
+			fields = append(fields, fmt.Sprintf("%s %s", f.Name, f.Type))
+		}
+		return fields
+	}
+
+	// Both directions describe a message the same way, so a field added to one
+	// and forgotten on the other would make the documentation of the two
+	// directions drift apart without anything failing.
+	It("share every field but Security, with the same types in the same order", func() {
+		receive := fieldsOf(reflect.TypeFor[wskit.ReceiveOpts]())
+		withoutSecurity := make([]string, 0, len(receive))
+		for _, f := range receive {
+			if f != fmt.Sprintf("Security %s", reflect.TypeFor[*wskit.MessageSecurity]()) {
+				withoutSecurity = append(withoutSecurity, f)
+			}
+		}
+
+		Expect(fieldsOf(reflect.TypeFor[wskit.SendOpts]())).To(Equal(withoutSecurity))
+	})
+
+	// A condition written on a sent message would read as "only these callers
+	// receive it" while nothing enforced it: everyone would. Not having the
+	// field makes writing it a compile error instead.
+	It("give Security to a received message only", func() {
+		_, onReceive := reflect.TypeFor[wskit.ReceiveOpts]().FieldByName("Security")
+		_, onSend := reflect.TypeFor[wskit.SendOpts]().FieldByName("Security")
+
+		Expect(onReceive).To(BeTrue())
+		Expect(onSend).To(BeFalse())
 	})
 })

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/ensoria/ensoria-template/internal/plamo/authkit"
 	"github.com/ensoria/ensoria-template/internal/plamo/vkit"
 	"github.com/ensoria/validator/pkg/verr"
 	"github.com/ensoria/websocket/pkg/wsconfig"
@@ -39,10 +40,11 @@ type Channel struct {
 	//
 	// This is where OnMessage handling is written. wskit installs a single
 	// OnMessage on the underlying wsconfig.Module: it parses the envelope, looks
-	// the message up by its type, decodes and validates the payload, and then
-	// calls the handler passed to the matching Receive. So the handle function
-	// given to Receive is what ultimately runs as OnMessage — one per message
-	// name, instead of one handler switching over raw bytes.
+	// the message up by its type, checks the caller against the message's
+	// Security, decodes and validates the payload, and then calls the handler
+	// passed to the matching Receive. So the handle function given to Receive
+	// is what ultimately runs as OnMessage — one per message name, instead of
+	// one handler switching over raw bytes.
 	//
 	// A message whose type is not declared here never reaches application code:
 	// the client gets an unknown_message_type error and the connection stays
@@ -95,9 +97,10 @@ type Channel struct {
 // Its fields are unexported and it is only built by NewModule or Raw, so a
 // Channel cannot be registered in the DI group by mistake.
 type Module struct {
-	runtime  *wsconfig.Module
-	security *SecuritySpec
-	doc      *ModuleDoc
+	runtime   *wsconfig.Module
+	security  *SecuritySpec
+	receivers []*Receiver
+	doc       *ModuleDoc
 }
 
 // ModuleDoc is the non-generic view of one channel that msgdoc reads.
@@ -135,7 +138,12 @@ func NewModule(channel *Channel) *Module {
 	// Installed last: whatever Configure did, messages go through the catalog.
 	runtime.OnMessage = dispatch(receivers)
 
-	return &Module{runtime: runtime, security: channel.Security, doc: channelDoc(channel)}
+	return &Module{
+		runtime:   runtime,
+		security:  channel.Security,
+		receivers: channel.Receive,
+		doc:       channelDoc(channel),
+	}
 }
 
 // Raw wraps a hand-built wsconfig.Module so it can sit in the same DI group.
@@ -166,6 +174,10 @@ func (m *Module) ModuleDoc() *ModuleDoc { return m.doc }
 // verified caller). The router checks it before every upgrade.
 func (m *Module) Security() *SecuritySpec { return m.security }
 
+// Receivers are the messages a client may send on the channel, each with its
+// own Security. A raw channel has none: its messages are not known.
+func (m *Module) Receivers() []*Receiver { return m.receivers }
+
 // channelDoc builds the documentation view of a declared channel.
 func channelDoc(channel *Channel) *ModuleDoc {
 	doc := &ModuleDoc{
@@ -188,10 +200,11 @@ func channelDoc(channel *Channel) *ModuleDoc {
 }
 
 // dispatch builds the OnMessage handler: parse the envelope, find the declared
-// message, decode and validate the payload, then call its handler.
+// message, judge the caller against it, decode and validate the payload, then
+// call its handler.
 //
-// A message the client got wrong is answered with an error message and the
-// connection stays open. One connection carries many messages, and dropping all
+// A message the client got wrong — or may not send — is answered with an error
+// message and the connection stays open. One connection carries many messages, and dropping all
 // of them because one was malformed would turn a client-side bug into a
 // reconnect loop. An error from the handler itself is different: it is returned
 // unchanged, and the library closes the connection.
@@ -214,11 +227,37 @@ func dispatch(receivers map[string]*Receiver) wsconfig.OnMessageHandler {
 			})
 		}
 
+		// Before the payload is decoded: a caller who may not send the message
+		// must not learn its rules from a validation failure. Telling such a
+		// caller the type exists gives nothing away, since the catalog is
+		// published.
+		if refusal := refusalOf(ctx, receiver.Security(), envelope.Type); refusal != nil {
+			return replyError(event, refusal)
+		}
+
 		vErrs, err := receiver.handle(ctx, event, payloadOf(envelope))
 		if vErrs.HasErrors() {
 			return replyError(event, validationPayload(event, envelope.Type, vErrs))
 		}
 		return err
+	}
+}
+
+// refusalOf judges the caller on ctx against a message's declaration, and
+// returns the error to answer with, or nil to let the message through.
+//
+// The caller is read from the message's own ctx rather than remembered from
+// the handshake, so what is judged is whatever the OnMessage middlewares put
+// there — the same caller the handler then reads.
+func refusalOf(ctx context.Context, security *MessageSecurity, messageType string) *ErrorPayload {
+	caller, _ := authkit.PrincipalFrom(ctx)
+	switch security.Decide(caller) {
+	case Unauthenticated:
+		return &ErrorPayload{Code: CodeUnauthenticated, Message: msgUnauthenticated, MessageType: messageType}
+	case Forbidden:
+		return &ErrorPayload{Code: CodeForbidden, Message: msgForbidden, MessageType: messageType}
+	default:
+		return nil
 	}
 }
 

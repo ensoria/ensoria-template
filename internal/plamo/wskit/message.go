@@ -24,6 +24,9 @@ type MessageDoc struct {
 	MsgType   reflect.Type
 	BodyRules []*rule.RuleSet
 	When      string
+	// Security is who may send the message, as declared. Only a received
+	// message has one; nil adds nothing to the channel's declaration.
+	Security *MessageSecurity
 }
 
 // DocumentedMessage is satisfied by every declared message, in either
@@ -41,7 +44,7 @@ type DocumentedMessage interface {
 type Receiver struct {
 	name    string
 	msgType reflect.Type
-	opts    MessageOpts
+	opts    ReceiveOpts
 	// handle decodes the payload and calls the typed handler. The type parameter
 	// is closed over here, which is what lets a channel hold receivers for
 	// different payload types in a single slice.
@@ -54,16 +57,17 @@ type Receiver struct {
 
 // Receive declares a message the client may send, and the handler that takes it.
 //
-//	wskit.Receive[dto.UserEcho]("user.echo", wskit.MessageOpts{
+//	wskit.Receive[dto.UserEcho]("user.echo", wskit.ReceiveOpts{
 //	    Summary:   "Echo request",
 //	    BodyRules: []*rule.RuleSet{{Field: "message", Rules: []rule.Rule{vkit.Required()}}},
 //	}, func(ctx context.Context, event *wsevent.Message, msg *dto.UserEcho) error {
 //	    return reply.Send(ctx, event.Conn, &dto.UserEchoReply{Message: msg.Message})
 //	})
 //
-// The handler receives the decoded, validated payload. event still carries the
-// connection and session, for replying and for reading the handshake.
-func Receive[Msg any](name string, opts MessageOpts, handle func(ctx context.Context, event *wsevent.Message, msg *Msg) error) *Receiver {
+// The handler receives the decoded, validated payload, and only from a caller
+// opts.Security admits. event still carries the connection and session, for
+// replying and for reading the handshake.
+func Receive[Msg any](name string, opts ReceiveOpts, handle func(ctx context.Context, event *wsevent.Message, msg *Msg) error) *Receiver {
 	return &Receiver{
 		name:    name,
 		msgType: reflect.TypeFor[Msg](),
@@ -81,9 +85,22 @@ func Receive[Msg any](name string, opts MessageOpts, handle func(ctx context.Con
 // Name is the envelope discriminator this receiver answers to.
 func (r *Receiver) Name() string { return r.name }
 
+// Security is who may send the message (nil adds nothing to the channel's
+// declaration). The dispatcher checks it before the payload is decoded.
+func (r *Receiver) Security() *MessageSecurity { return r.opts.Security }
+
 // MessageDoc exposes the declaration for msgdoc.
 func (r *Receiver) MessageDoc() *MessageDoc {
-	return messageDoc(r.name, r.msgType, r.opts)
+	return &MessageDoc{
+		Name:        r.name,
+		Summary:     r.opts.Summary,
+		Description: r.opts.Description,
+		FieldDocs:   r.opts.FieldDocs,
+		MsgType:     r.msgType,
+		BodyRules:   r.opts.BodyRules,
+		When:        whenOf(r.name, r.opts.When),
+		Security:    r.opts.Security,
+	}
 }
 
 // Sender is the declared, typed way to send one message to a client.
@@ -93,13 +110,13 @@ func (r *Receiver) MessageDoc() *MessageDoc {
 // assembled in one place instead of at every call site.
 type Sender[Msg any] struct {
 	name string
-	opts MessageOpts
+	opts SendOpts
 }
 
 // Send declares a message the server sends, and returns the sender used to send
 // it.
 //
-//	var reply = wskit.Send[dto.UserEchoReply]("user.echo_reply", wskit.MessageOpts{
+//	var reply = wskit.Send[dto.UserEchoReply]("user.echo_reply", wskit.SendOpts{
 //	    Summary: "Echo reply",
 //	})
 //
@@ -107,7 +124,7 @@ type Sender[Msg any] struct {
 // handler, from OnOpen, or from a background goroutine broadcasting to a
 // session. Register the same value in the channel's Send catalog, so the message
 // is declared exactly once.
-func Send[Msg any](name string, opts MessageOpts) *Sender[Msg] {
+func Send[Msg any](name string, opts SendOpts) *Sender[Msg] {
 	return &Sender[Msg]{name: name, opts: opts}
 }
 
@@ -116,7 +133,15 @@ func (s *Sender[Msg]) Name() string { return s.name }
 
 // MessageDoc exposes the declaration for msgdoc.
 func (s *Sender[Msg]) MessageDoc() *MessageDoc {
-	return messageDoc(s.name, reflect.TypeFor[Msg](), s.opts)
+	return &MessageDoc{
+		Name:        s.name,
+		Summary:     s.opts.Summary,
+		Description: s.opts.Description,
+		FieldDocs:   s.opts.FieldDocs,
+		MsgType:     reflect.TypeFor[Msg](),
+		BodyRules:   s.opts.BodyRules,
+		When:        whenOf(s.name, s.opts.When),
+	}
 }
 
 // Send validates the message, wraps it in the envelope and writes it to conn.
@@ -167,21 +192,12 @@ func describeFailures(errs verr.ValidationErrors) string {
 	return out
 }
 
-// messageDoc builds the documentation view shared by both directions.
-// When defaults to the envelope discriminator, which is how a reader actually
-// tells the messages on a channel apart.
-func messageDoc(name string, msgType reflect.Type, opts MessageOpts) *MessageDoc {
-	when := opts.When
-	if when == "" {
-		when = fmt.Sprintf("%s is %q", EnvelopeTypeField, name)
+// whenOf is the When a message is documented with: the declared one, or else
+// the envelope discriminator, which is how a reader actually tells the
+// messages on a channel apart.
+func whenOf(name, declared string) string {
+	if declared != "" {
+		return declared
 	}
-	return &MessageDoc{
-		Name:        name,
-		Summary:     opts.Summary,
-		Description: opts.Description,
-		FieldDocs:   opts.FieldDocs,
-		MsgType:     msgType,
-		BodyRules:   opts.BodyRules,
-		When:        when,
-	}
+	return fmt.Sprintf("%s is %q", EnvelopeTypeField, name)
 }

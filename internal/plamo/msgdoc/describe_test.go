@@ -180,11 +180,11 @@ var _ = Describe("DescribeChannel", func() {
 			Path:    "/ws/user",
 			Summary: "User real-time channel",
 			Receive: []*wskit.Receiver{
-				wskit.Receive[userCreated]("user.echo", wskit.MessageOpts{Summary: "Echo request"},
+				wskit.Receive[userCreated]("user.echo", wskit.ReceiveOpts{Summary: "Echo request"},
 					func(context.Context, *wsevent.Message, *userCreated) error { return nil }),
 			},
 			Send: []wskit.DocumentedMessage{
-				wskit.Send[userCreated]("user.echo_reply", wskit.MessageOpts{Summary: "Echo reply"}),
+				wskit.Send[userCreated]("user.echo_reply", wskit.SendOpts{Summary: "Echo reply"}),
 			},
 		}
 		if adjust != nil {
