@@ -25,3 +25,23 @@ var _ = Describe("MessageTypeOf", func() {
 		Entry("a type that is not a string", `{"type":42}`),
 	)
 })
+
+var _ = Describe("ErrorCodes", func() {
+	// The generated document lists them, so a code a client can receive and
+	// the document does not explain is a client left guessing.
+	It("explains every code the error message can carry, once each", func() {
+		var codes []string
+		for _, c := range wskit.ErrorCodes() {
+			Expect(c.Meaning).NotTo(BeEmpty(), c.Code)
+			codes = append(codes, c.Code)
+		}
+
+		Expect(codes).To(ConsistOf(
+			wskit.CodeNotParsable,
+			wskit.CodeValidationFailed,
+			wskit.CodeUnknownMessageType,
+			wskit.CodeUnauthenticated,
+			wskit.CodeForbidden,
+		))
+	})
+})

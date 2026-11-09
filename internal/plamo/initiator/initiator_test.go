@@ -168,3 +168,27 @@ var _ = Describe("From", func() {
 		Expect(level).To(BeEquivalentTo(3))
 	})
 })
+
+var _ = Describe("Kinds", func() {
+	// The generated document lists the values the header may carry, from here,
+	// so a kind added without being listed would be a value a consumer was
+	// never told about.
+	It("lists every kind, in the order they are declared", func() {
+		Expect(initiator.Kinds()).To(Equal([]initiator.Kind{
+			initiator.KindAppUser,
+			initiator.KindUser,
+			initiator.KindServiceAccount,
+			initiator.KindAPIKey,
+			initiator.KindSystem,
+			initiator.KindUnauthenticated,
+			initiator.KindUnknown,
+		}))
+	})
+
+	It("hands out a copy, so a caller cannot change the list", func() {
+		kinds := initiator.Kinds()
+		kinds[0] = "edited"
+
+		Expect(initiator.Kinds()[0]).To(Equal(initiator.KindAppUser))
+	})
+})

@@ -76,15 +76,13 @@ func CreateWSRouter(
 		return nil, err
 	}
 
+	deps := &upgradeGuardDeps{origins: origins, verifier: verifier, scopes: scopes, claims: claims, watch: watch}
 	runtime := make([]*wsconfig.Module, 0, len(modules))
 	for _, m := range modules {
 		rm := m.RuntimeModule()
-		guards := []rest.Handler{
-			middleware.UpgradeOrigin(origins),
-			middleware.AuthUpgrade(verifier, scopes, claims),
-			middleware.ChannelSecurity(m.Security()),
-			// Last, so that only a handshake every check admitted is followed.
-			watch.Track(),
+		guards := make([]rest.Handler, 0, len(upgradeGuardChain))
+		for _, g := range upgradeGuardChain {
+			guards = append(guards, g.Build(deps, m))
 		}
 		rm.HTTPMiddlewares = append(guards, rm.HTTPMiddlewares...)
 		watch.Install(rm, m.Security())
@@ -94,6 +92,74 @@ func CreateWSRouter(
 	return &wsrouter.Router{
 		Modules: runtime,
 	}, nil
+}
+
+// The names the generated document gives the handlers every handshake passes
+// before the upgrade.
+const (
+	GuardUpgradeOrigin   = "upgrade-origin"
+	GuardAuthUpgrade     = "auth-upgrade"
+	GuardChannelSecurity = "channel-security"
+	GuardCallerWatch     = "caller-watch"
+)
+
+// upgradeGuard is one handler every handshake passes before the upgrade, with
+// the name the generated document gives it.
+type upgradeGuard struct {
+	Name  string
+	Build func(d *upgradeGuardDeps, m *wskit.Module) rest.Handler
+}
+
+// upgradeGuardDeps is what the guards are built from.
+type upgradeGuardDeps struct {
+	origins  *middleware.Origins
+	verifier authkit.Verifier
+	scopes   authkit.ScopeExpander
+	claims   *initiator.ClaimSet
+	watch    *wskit.CallerWatch
+}
+
+// upgradeGuardChain is what runs on every handshake, in order. The order is
+// the point of keeping it in one list:
+//
+//   - the origin check first, so a handshake from another site is refused
+//     before the session store is asked about the cookie it carried;
+//   - the credential check, then the channel's declaration, which reads the
+//     caller the credential check found;
+//   - the caller watch last, so that only a handshake every check admitted is
+//     followed for the life of its connection.
+var upgradeGuardChain = []upgradeGuard{
+	{
+		Name:  GuardUpgradeOrigin,
+		Build: func(d *upgradeGuardDeps, _ *wskit.Module) rest.Handler { return middleware.UpgradeOrigin(d.origins) },
+	},
+	{
+		Name: GuardAuthUpgrade,
+		Build: func(d *upgradeGuardDeps, _ *wskit.Module) rest.Handler {
+			return middleware.AuthUpgrade(d.verifier, d.scopes, d.claims)
+		},
+	},
+	{
+		Name: GuardChannelSecurity,
+		Build: func(_ *upgradeGuardDeps, m *wskit.Module) rest.Handler {
+			return middleware.ChannelSecurity(m.Security())
+		},
+	},
+	{
+		Name:  GuardCallerWatch,
+		Build: func(d *upgradeGuardDeps, _ *wskit.Module) rest.Handler { return d.watch.Track() },
+	},
+}
+
+// UpgradeGuardNames names, in order, what runs on every handshake before the
+// upgrade. The generated documentation reads it, which is why it is derived
+// from the chain rather than kept beside it. A fresh slice is returned.
+func UpgradeGuardNames() []string {
+	names := make([]string, 0, len(upgradeGuardChain))
+	for _, g := range upgradeGuardChain {
+		names = append(names, g.Name)
+	}
+	return names
 }
 
 // NewTrustedOrigins reads which origins this deployment calls its own frontend.

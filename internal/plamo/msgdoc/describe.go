@@ -2,6 +2,7 @@ package msgdoc
 
 import (
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -85,7 +86,12 @@ func DescribePublication(doc *mbkit.PublicationDoc, protocol string, serverNames
 // A channel with no message in a direction produces no operation for it: a send
 // operation with an empty catalog would claim the server pushes messages when
 // it never does.
-func DescribeChannel(doc *wskit.ModuleDoc, serverNames []string) []*OperationSpec {
+//
+// Both directions carry the channel's declaration of who may connect, since
+// both run on the one connection it guards. verifiable names the kinds of
+// credential the application verifies, which is what a channel accepts when it
+// limits itself to none.
+func DescribeChannel(doc *wskit.ModuleDoc, serverNames []string, verifiable []string) []*OperationSpec {
 	if doc.Untyped {
 		// Nothing is known beyond the path. The channel still appears, so the
 		// reader learns it exists; the renderer shows TODO for its messages.
@@ -95,6 +101,7 @@ func DescribeChannel(doc *wskit.ModuleDoc, serverNames []string) []*OperationSpe
 			Channel:     channelOf(doc, serverNames),
 			Summary:     doc.Summary,
 			Description: doc.Description,
+			Security:    operationSecurity(doc.Security, verifiable),
 			Untyped:     true,
 		}}
 	}
@@ -106,7 +113,38 @@ func DescribeChannel(doc *wskit.ModuleDoc, serverNames []string) []*OperationSpe
 	if messages := channelMessages(doc.Send, doc.Path); len(messages) > 0 {
 		operations = append(operations, wsOperation(doc, ActionSend, messages, serverNames))
 	}
+	for _, op := range operations {
+		op.Security = operationSecurity(doc.Security, verifiable)
+	}
 	return operations
+}
+
+// operationSecurity resolves a channel's declaration into who may connect.
+//
+// A public channel lists nothing to present. Any other channel requires a
+// caller, verified with the kinds it limits itself to — or, when it names
+// none, with any kind the application verifies.
+func operationSecurity(declared *wskit.SecuritySpec, verifiable []string) *OperationSecurity {
+	if declared != nil && declared.Public {
+		return &OperationSecurity{Public: true}
+	}
+	security := &OperationSecurity{Schemes: slices.Clone(verifiable)}
+	if declared != nil {
+		if len(declared.Schemes) > 0 {
+			security.Schemes = slices.Clone(declared.Schemes)
+		}
+		security.Scopes = slices.Clone(declared.Scopes)
+	}
+	return security
+}
+
+// messageSecurity describes what one received message asks of its sender, or
+// nil when it asks nothing beyond the channel.
+func messageSecurity(declared *wskit.MessageSecurity) *MessageSecurity {
+	if declared == nil {
+		return nil
+	}
+	return &MessageSecurity{RequiresCaller: true, Scopes: slices.Clone(declared.Scopes)}
 }
 
 // wsOperation builds one direction of a WebSocket channel.
@@ -146,6 +184,7 @@ func channelMessages(docs []*wskit.MessageDoc, path string) []*MessageSpec {
 			ContentType: rest.MediaTypeJSON,
 			Payload:     payloadSchema(d.MsgType, d.BodyRules, d.FieldDocs, path),
 			When:        d.When,
+			Security:    messageSecurity(d.Security),
 		})
 	}
 	return messages

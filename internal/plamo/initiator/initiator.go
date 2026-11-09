@@ -45,6 +45,7 @@ package initiator
 import (
 	"context"
 	"maps"
+	"slices"
 
 	"github.com/ensoria/ensoria-template/internal/plamo/authkit"
 )
@@ -79,6 +80,24 @@ const (
 	// KindUnknown is work whose origin is not known.
 	KindUnknown Kind = "unknown"
 )
+
+// kinds is every Kind, in the order declared above.
+var kinds = []Kind{
+	KindAppUser,
+	KindUser,
+	KindServiceAccount,
+	KindAPIKey,
+	KindSystem,
+	KindUnauthenticated,
+	KindUnknown,
+}
+
+// Kinds lists every value a Kind can take, in the order they are declared. The
+// generated document reads it to say what the header may carry. A copy is
+// returned, so that a caller cannot edit the list.
+func Kinds() []Kind {
+	return slices.Clone(kinds)
+}
 
 // Initiator is who started a piece of work. Read it with From.
 //

@@ -31,6 +31,30 @@ const (
 	CloseForbidden wsconn.CloseCode = 4403
 )
 
+// CloseCodeDoc is one close code with what it means and what a client should
+// do on receiving it, for the generated document.
+type CloseCodeDoc struct {
+	Code         wsconn.CloseCode
+	Meaning      string
+	ClientAction string
+}
+
+// CloseCodes lists the codes the watch ends a connection with.
+func CloseCodes() []*CloseCodeDoc {
+	return []*CloseCodeDoc{
+		{
+			Code:         CloseCredentialInvalid,
+			Meaning:      "The credential the connection was opened with is no longer valid: a token expired, a session was signed out or ended, a key was removed.",
+			ClientAction: "Authenticate again — refresh the token or sign in — and then reconnect.",
+		},
+		{
+			Code:         CloseForbidden,
+			Meaning:      "The caller is still who they were, but no longer meets the channel's conditions: a scope it requires was taken away.",
+			ClientAction: "Do not reconnect on your own: the connection is refused the same way until the caller's permissions change.",
+		},
+	}
+}
+
 // The reasons sent with those codes. They say what happened and nothing
 // about the caller.
 const (

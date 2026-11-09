@@ -93,6 +93,25 @@ const (
 	CodeForbidden = "forbidden"
 )
 
+// CodeDoc is one error code with what it means, for the generated document.
+type CodeDoc struct {
+	Code    string
+	Meaning string
+}
+
+// ErrorCodes lists every code the error message can carry, with what it means.
+// It sits next to the codes so that one added without an explanation is
+// noticed here rather than by a client meeting it.
+func ErrorCodes() []*CodeDoc {
+	return []*CodeDoc{
+		{Code: CodeNotParsable, Meaning: "The frame was not a JSON envelope naming a type, or its payload was not JSON."},
+		{Code: CodeValidationFailed, Meaning: "The payload broke the message's declared rules; field_errors names the fields."},
+		{Code: CodeUnknownMessageType, Meaning: "No message of that type is declared on this channel."},
+		{Code: CodeUnauthenticated, Meaning: "The message needs a signed-in caller and the connection has none: sign in and connect again."},
+		{Code: CodeForbidden, Meaning: "The caller lacks a scope the message requires: sending it again will not help."},
+	}
+}
+
 // Messages shown with the codes above when the failure carries no message of
 // its own.
 const (

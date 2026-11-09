@@ -187,3 +187,80 @@ var _ = Describe("undeclared versus explicitly none", func() {
 		Expect(rawJSON(&msgdoc.MessagingSpec{})).To(HaveKey("operations"))
 	})
 })
+
+// The JSON keys are the whole contract with encli's mirror: a key spelt
+// differently there is a field that silently never arrives.
+var _ = Describe("the security and conventions a spec carries", func() {
+	It("writes each under the key the mirror reads", func() {
+		spec := &msgdoc.MessagingSpec{
+			Servers: []*msgdoc.ServerSpec{{
+				Name:     "broker",
+				Security: []*msgdoc.ServerSecurity{{Kind: msgdoc.ServerAuthUserPassword, Description: "broker account"}},
+			}},
+			Operations: []*msgdoc.OperationSpec{{
+				Action:   msgdoc.ActionReceive,
+				Protocol: msgdoc.ProtocolWebSocket,
+				Channel:  &msgdoc.ChannelSpec{Address: "/ws/user"},
+				Security: &msgdoc.OperationSecurity{Schemes: []string{"jwt"}, Scopes: []string{"users:read"}},
+				Messages: []*msgdoc.MessageSpec{{
+					Name:     "user.announce",
+					Security: &msgdoc.MessageSecurity{RequiresCaller: true, Scopes: []string{"announcements:write"}},
+				}},
+			}},
+			Conventions: &msgdoc.Conventions{
+				ScopeImplications: map[string][]string{"admin": {"users:read"}},
+				Initiator:         &msgdoc.InitiatorConvention{Headers: []string{"ce_authtype"}, Description: "who started it"},
+				WebSocket: &msgdoc.WebSocketConvention{
+					Authentication: "at the handshake",
+					Error: &msgdoc.ErrorMessageConvention{
+						MessageType: "error",
+						Codes:       []*msgdoc.CodeMeaning{{Code: "forbidden", Meaning: "no"}},
+					},
+					Recheck: &msgdoc.RecheckConvention{
+						Interval:    "5m0s",
+						Description: "asked again",
+						CloseCodes:  []*msgdoc.CloseCodeMeaning{{Code: 4401, Meaning: "gone", ClientAction: "sign in"}},
+					},
+				},
+			},
+		}
+
+		raw := rawJSON(spec)
+
+		server := raw["servers"].([]any)[0].(map[string]any)
+		Expect(server["security"]).To(Equal([]any{map[string]any{"kind": "userPassword", "description": "broker account"}}))
+
+		op := raw["operations"].([]any)[0].(map[string]any)
+		Expect(op["security"]).To(Equal(map[string]any{"schemes": []any{"jwt"}, "scopes": []any{"users:read"}}))
+		message := op["messages"].([]any)[0].(map[string]any)
+		Expect(message["security"]).To(Equal(map[string]any{"requires_caller": true, "scopes": []any{"announcements:write"}}))
+
+		conventions := raw["conventions"].(map[string]any)
+		Expect(conventions["scope_implications"]).To(Equal(map[string]any{"admin": []any{"users:read"}}))
+		Expect(conventions["initiator"]).To(Equal(map[string]any{"headers": []any{"ce_authtype"}, "description": "who started it"}))
+		ws := conventions["websocket"].(map[string]any)
+		Expect(ws["authentication"]).To(Equal("at the handshake"))
+		Expect(ws["error"]).To(Equal(map[string]any{
+			"message_type": "error",
+			"codes":        []any{map[string]any{"code": "forbidden", "meaning": "no"}},
+		}))
+		Expect(ws["recheck"]).To(Equal(map[string]any{
+			"interval":    "5m0s",
+			"description": "asked again",
+			"close_codes": []any{map[string]any{"code": float64(4401), "meaning": "gone", "client_action": "sign in"}},
+		}))
+	})
+
+	// A public operation states that it is public, so a reader does not
+	// mistake "no schemes listed" for "nobody wrote it down".
+	It("says an operation is public rather than leaving its schemes empty", func() {
+		op := rawJSON(&msgdoc.OperationSpec{
+			Action:   msgdoc.ActionReceive,
+			Protocol: msgdoc.ProtocolWebSocket,
+			Channel:  &msgdoc.ChannelSpec{Address: "/ws/user"},
+			Security: &msgdoc.OperationSecurity{Public: true},
+		})
+
+		Expect(op["security"]).To(Equal(map[string]any{"public": true}))
+	})
+})

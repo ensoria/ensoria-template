@@ -6,10 +6,13 @@ import (
 	"reflect"
 	"strings"
 
+	"github.com/ensoria/config/pkg/appconfig"
 	"github.com/ensoria/config/pkg/registry"
 	assets "github.com/ensoria/ensoria-template"
 	"github.com/ensoria/ensoria-template/internal/app/apiinfo"
+	authApp "github.com/ensoria/ensoria-template/internal/app/auth"
 	httpdto "github.com/ensoria/ensoria-template/internal/app/http/dto"
+	wsApp "github.com/ensoria/ensoria-template/internal/app/ws"
 	inframb "github.com/ensoria/ensoria-template/internal/infra/mb"
 	"github.com/ensoria/ensoria-template/internal/plamo/apidoc"
 	"github.com/ensoria/ensoria-template/internal/plamo/dikit"
@@ -60,26 +63,44 @@ func BuildMessaging(envVal *string) (*msgdoc.MessagingSpec, error) {
 		brokerServers = []string{brokerServerName}
 	}
 
+	// Every broker message carries the headers that say who started the work
+	// it belongs to, whichever way it travels.
+	headers := initiatorHeaderSchema(authApp.InitiatorClaimNames())
+	// Read once here, with the registry known to be filled, and handed on:
+	// the builders below can then be exercised without one.
+	params, err := registry.ModuleParams("default")
+	if err != nil {
+		params = nil
+	}
+
 	var operations []*msgdoc.OperationSpec
 	for _, sub := range declared.Subscriptions {
-		operations = append(operations, msgdoc.DescribeSubscription(
-			sub.SubscriptionDoc(), protocol, brokerServers))
+		operations = append(operations, withHeaders(msgdoc.DescribeSubscription(
+			sub.SubscriptionDoc(), protocol, brokerServers), headers))
 	}
 	for _, pub := range declared.Publications {
-		operations = append(operations, msgdoc.DescribePublication(
-			pub.PublicationDoc(), protocol, brokerServers))
+		operations = append(operations, withHeaders(msgdoc.DescribePublication(
+			pub.PublicationDoc(), protocol, brokerServers), headers))
 	}
 	for _, channel := range declared.Channels {
 		operations = append(operations, msgdoc.DescribeChannel(
-			channel.ModuleDoc(), []string{wsServerName})...)
+			channel.ModuleDoc(), []string{wsServerName}, verifiableSchemes(params))...)
 	}
 
 	spec := msgdoc.Build(operations)
 	spec.Info = apiinfo.MessagingInfo()
 	spec.Perspective = Perspective
 	spec.Servers = buildServers(envVal, broker)
-	spec.Conventions = buildMessagingConventions()
+	spec.Conventions = buildMessagingConventions(params)
 	return spec, nil
+}
+
+// withHeaders puts the header schema on every message of a broker operation.
+func withHeaders(op *msgdoc.OperationSpec, headers *apidoc.Schema) *msgdoc.OperationSpec {
+	for _, m := range op.Messages {
+		m.Headers = headers
+	}
+	return op
 }
 
 // messagingModules is what the DI groups yield.
@@ -181,6 +202,7 @@ func brokerServer(broker *mb.Config, env string) *msgdoc.ServerSpec {
 		Host:        host,
 		Environment: env,
 		Description: fmt.Sprintf("%s broker used by this application", broker.Type),
+		Security:    brokerSecurity(broker),
 	}
 }
 
@@ -201,7 +223,11 @@ func splitBrokerURL(raw string) (protocol, host string) {
 
 // buildMessagingConventions collects the rules that hold across the whole
 // messaging surface, so they are stated once instead of on every operation.
-func buildMessagingConventions() *msgdoc.Conventions {
+//
+// params is the configuration being described, or nil when it could not be
+// read; what depends on it (the credential kinds, the recheck interval) is then
+// left out rather than guessed.
+func buildMessagingConventions(params *appconfig.Parameters) *msgdoc.Conventions {
 	conv := &msgdoc.Conventions{
 		Envelopes: []*msgdoc.EnvelopeSpec{{
 			Protocol:     msgdoc.ProtocolWebSocket,
@@ -215,13 +241,21 @@ func buildMessagingConventions() *msgdoc.Conventions {
 				wskit.EnvelopePayloadField: map[string]any{"message": "hello"},
 			},
 		}},
-		DeliveryDefaults:  brokerDefaults(),
-		GlobalMiddlewares: []string{"auth-upgrade"},
+		DeliveryDefaults: brokerDefaults(),
+		// Taken from the chain the router builds rather than restated here, so
+		// the two cannot say different things.
+		GlobalMiddlewares: wsApp.UpgradeGuardNames(),
 		CommonError:       apidoc.CommonErrorSchema(reflect.TypeOf(httpdto.Error{})),
+		// The scope policy the running application enforces. It is not
+		// configuration, so it does not wait for the registry below.
+		ScopeImplications: authApp.ScopeImplicationTable(),
+		Initiator:         initiatorConvention(),
+		WebSocket:         websocketConvention(0),
 	}
 
-	if params, err := registry.ModuleParams("default"); err == nil {
+	if params != nil {
 		conv.SecuritySchemes = securitySchemes(params.Auth)
+		conv.WebSocket = websocketConvention(params.Auth.WebSocket.RecheckInterval)
 	}
 	return conv
 }

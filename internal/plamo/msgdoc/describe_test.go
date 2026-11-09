@@ -14,6 +14,7 @@ import (
 	"github.com/ensoria/ensoria-template/internal/plamo/wskit"
 	"github.com/ensoria/mb/pkg/mb"
 	"github.com/ensoria/validator/pkg/rule"
+	"github.com/ensoria/websocket/pkg/wsconfig"
 	"github.com/ensoria/websocket/pkg/wsevent"
 )
 
@@ -194,7 +195,7 @@ var _ = Describe("DescribeChannel", func() {
 	}
 
 	It("splits the channel into one operation per direction", func() {
-		operations := msgdoc.DescribeChannel(wsChannel(nil), []string{"websocket"})
+		operations := msgdoc.DescribeChannel(wsChannel(nil), []string{"websocket"}, nil)
 
 		Expect(operations).To(HaveLen(2))
 		Expect(operations[0].Action).To(Equal(msgdoc.ActionReceive))
@@ -210,7 +211,7 @@ var _ = Describe("DescribeChannel", func() {
 	})
 
 	It("records how a reader tells the messages on a channel apart", func() {
-		operations := msgdoc.DescribeChannel(wsChannel(nil), nil)
+		operations := msgdoc.DescribeChannel(wsChannel(nil), nil, nil)
 
 		Expect(operations[0].Messages[0].When).To(Equal(`type is "user.echo"`))
 	})
@@ -218,7 +219,7 @@ var _ = Describe("DescribeChannel", func() {
 	It("omits a direction the channel never uses", func() {
 		receiveOnly := wsChannel(func(c *wskit.Channel) { c.Send = nil })
 
-		operations := msgdoc.DescribeChannel(receiveOnly, nil)
+		operations := msgdoc.DescribeChannel(receiveOnly, nil, nil)
 
 		// A send operation with an empty catalog would claim the server pushes
 		// messages when it never does.
@@ -229,14 +230,14 @@ var _ = Describe("DescribeChannel", func() {
 	It("lifts path parameters out of the address", func() {
 		parameterized := wsChannel(func(c *wskit.Channel) { c.Path = "/ws/rooms/{roomId}" })
 
-		operations := msgdoc.DescribeChannel(parameterized, nil)
+		operations := msgdoc.DescribeChannel(parameterized, nil, nil)
 
 		Expect(operations[0].Channel.Parameters).To(HaveLen(1))
 		Expect(operations[0].Channel.Parameters[0].Name).To(Equal("roomId"))
 	})
 
 	It("gives a WebSocket channel no delivery section", func() {
-		operations := msgdoc.DescribeChannel(wsChannel(nil), nil)
+		operations := msgdoc.DescribeChannel(wsChannel(nil), nil, nil)
 
 		// A socket has no redelivery, acknowledgement or consumer group, so
 		// there is nothing to describe rather than defaults to invent.
@@ -246,7 +247,7 @@ var _ = Describe("DescribeChannel", func() {
 	It("still lists a raw channel, marked untyped", func() {
 		raw := &wskit.ModuleDoc{Path: "/ws/legacy", Untyped: true}
 
-		operations := msgdoc.DescribeChannel(raw, nil)
+		operations := msgdoc.DescribeChannel(raw, nil, nil)
 
 		// A reachable channel missing from the document is worse than one the
 		// reader can see is undocumented.
@@ -254,6 +255,88 @@ var _ = Describe("DescribeChannel", func() {
 		Expect(operations[0].Untyped).To(BeTrue())
 		Expect(operations[0].Channel.Address).To(Equal("/ws/legacy"))
 		Expect(operations[0].Messages).To(BeEmpty())
+	})
+})
+
+var _ = Describe("DescribeChannel's security", func() {
+	verifiable := []string{"jwt", "apiKey", "session"}
+
+	channelWith := func(security *wskit.SecuritySpec, receive ...*wskit.Receiver) *wskit.ModuleDoc {
+		if receive == nil {
+			receive = []*wskit.Receiver{
+				wskit.Receive[userCreated]("user.echo", wskit.ReceiveOpts{},
+					func(context.Context, *wsevent.Message, *userCreated) error { return nil }),
+			}
+		}
+		return wskit.NewModule(&wskit.Channel{
+			Path:     "/ws/user",
+			Security: security,
+			Receive:  receive,
+			Send:     []wskit.DocumentedMessage{wskit.Send[userCreated]("user.echo_reply", wskit.SendOpts{})},
+		}).ModuleDoc()
+	}
+
+	// A channel that declares nothing requires a caller, verified any way the
+	// application can verify one.
+	It("lists every kind the application verifies for a channel that declares nothing", func() {
+		operations := msgdoc.DescribeChannel(channelWith(nil), nil, verifiable)
+
+		for _, op := range operations {
+			Expect(op.Security).To(Equal(&msgdoc.OperationSecurity{Schemes: verifiable}))
+		}
+	})
+
+	It("lists only the kinds a channel limits itself to, with its scopes", func() {
+		security := &wskit.SecuritySpec{Schemes: []string{"session"}, Scopes: []string{"users:read"}}
+
+		operations := msgdoc.DescribeChannel(channelWith(security), nil, verifiable)
+
+		for _, op := range operations {
+			Expect(op.Security).To(Equal(&msgdoc.OperationSecurity{Schemes: []string{"session"}, Scopes: []string{"users:read"}}))
+		}
+	})
+
+	// Listing schemes for a public channel would read as "a credential is
+	// required", which is exactly what it is not.
+	It("states that a public channel is public, listing no schemes", func() {
+		operations := msgdoc.DescribeChannel(channelWith(&wskit.SecuritySpec{Public: true}), nil, verifiable)
+
+		for _, op := range operations {
+			Expect(op.Security).To(Equal(&msgdoc.OperationSecurity{Public: true}))
+		}
+	})
+
+	It("describes a raw channel's declaration as well", func() {
+		raw := wskit.Raw(wsconfig.NewDefaultModule("/ws/raw"), &wskit.SecuritySpec{Scopes: []string{"things:read"}}).ModuleDoc()
+
+		operations := msgdoc.DescribeChannel(raw, nil, verifiable)
+
+		Expect(operations[0].Security).To(Equal(&msgdoc.OperationSecurity{Schemes: verifiable, Scopes: []string{"things:read"}}))
+	})
+
+	Describe("a received message's own declaration", func() {
+		noop := func(context.Context, *wsevent.Message, *userCreated) error { return nil }
+
+		It("is written on the message, which requires a caller even on a public channel", func() {
+			doc := channelWith(&wskit.SecuritySpec{Public: true},
+				wskit.Receive[userCreated]("user.open", wskit.ReceiveOpts{}, noop),
+				wskit.Receive[userCreated]("user.signed_in", wskit.ReceiveOpts{Security: &wskit.MessageSecurity{}}, noop),
+				wskit.Receive[userCreated]("user.write", wskit.ReceiveOpts{Security: &wskit.MessageSecurity{Scopes: []string{"things:write"}}}, noop),
+			)
+
+			receive := msgdoc.DescribeChannel(doc, nil, verifiable)[0]
+
+			Expect(receive.Messages[0].Security).To(BeNil())
+			Expect(receive.Messages[1].Security).To(Equal(&msgdoc.MessageSecurity{RequiresCaller: true}))
+			Expect(receive.Messages[2].Security).To(Equal(&msgdoc.MessageSecurity{RequiresCaller: true, Scopes: []string{"things:write"}}))
+		})
+
+		It("is never written on a sent message, which has none to make", func() {
+			send := msgdoc.DescribeChannel(channelWith(nil), nil, verifiable)[1]
+
+			Expect(send.Action).To(Equal(msgdoc.ActionSend))
+			Expect(send.Messages[0].Security).To(BeNil())
+		})
 	})
 })
 

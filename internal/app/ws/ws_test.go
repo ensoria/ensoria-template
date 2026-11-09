@@ -266,3 +266,24 @@ var _ = Describe("CreateWSRouter and the channel's declaration", func() {
 		Expect(router).To(BeNil())
 	})
 })
+
+var _ = Describe("UpgradeGuardNames", func() {
+	// The generated document lists what runs on every handshake. A name left
+	// out understates what the application does, and a name outliving its
+	// handler promises a check that no longer runs.
+	It("names what runs on every handshake before the upgrade, in the order it runs", func() {
+		Expect(wsApp.UpgradeGuardNames()).To(Equal([]string{
+			wsApp.GuardUpgradeOrigin,
+			wsApp.GuardAuthUpgrade,
+			wsApp.GuardChannelSecurity,
+			wsApp.GuardCallerWatch,
+		}))
+	})
+
+	It("hands out a slice the caller may change", func() {
+		names := wsApp.UpgradeGuardNames()
+		names[0] = "edited"
+
+		Expect(wsApp.UpgradeGuardNames()[0]).To(Equal(wsApp.GuardUpgradeOrigin))
+	})
+})

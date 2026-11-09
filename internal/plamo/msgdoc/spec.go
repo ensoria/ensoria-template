@@ -64,7 +64,41 @@ type ServerSpec struct {
 	// ("local", "production"), so several environments can be listed at once.
 	Environment string `json:"environment,omitempty"`
 	Description string `json:"description,omitempty"`
+	// Security is how a client authenticates to the server: the kind of
+	// credential only, never the credential. Empty means none is needed.
+	//
+	// It is set on a broker, so that a team wanting to produce to it learns how
+	// to connect from the document alone. The application's own WebSocket
+	// server carries none: who may connect differs from channel to channel, so
+	// it is stated on each operation (OperationSpec.Security), and stating it
+	// here would read as applying to the public channels as well.
+	Security []*ServerSecurity `json:"security,omitempty"`
 }
+
+// ServerSecurity is one way of authenticating to a server.
+type ServerSecurity struct {
+	// Kind is one of the ServerAuth* constants.
+	Kind        string `json:"kind"`
+	Description string `json:"description,omitempty"`
+}
+
+// The kinds of credential a broker may require. The first four are the kinds
+// AsyncAPI has a name for, spelt as it spells them; the last two have none, and
+// a renderer for AsyncAPI carries them in an extension instead.
+const (
+	// ServerAuthUserPassword is a user name and password (RabbitMQ, NATS).
+	ServerAuthUserPassword = "userPassword"
+	// ServerAuthPlain is SASL PLAIN (Kafka, Redpanda).
+	ServerAuthPlain = "plain"
+	// ServerAuthScramSHA256 is SASL SCRAM-SHA-256 (Kafka, Redpanda).
+	ServerAuthScramSHA256 = "scramSha256"
+	// ServerAuthScramSHA512 is SASL SCRAM-SHA-512 (Kafka, Redpanda).
+	ServerAuthScramSHA512 = "scramSha512"
+	// ServerAuthToken is a token presented to the broker (NATS).
+	ServerAuthToken = "token"
+	// ServerAuthAWSIAM is AWS credentials authorized by IAM (SQS, SNS, Kinesis).
+	ServerAuthAWSIAM = "awsIam"
+)
 
 // OperationSpec is one direction of one channel: what this application sends to
 // it, or receives from it.
@@ -87,12 +121,32 @@ type OperationSpec struct {
 	Task     string   `json:"task,omitempty"`
 	AlsoRead []string `json:"also_read,omitempty"`
 	Related  []string `json:"related,omitempty"`
+	// Security is who may use the operation. For a WebSocket operation it is
+	// who may open the connection the operation runs on, as the channel
+	// declared it. nil for a broker operation, whose access is the broker's
+	// (ServerSpec.Security).
+	Security *OperationSecurity `json:"security,omitempty"`
 	// Untyped marks an operation declared through a raw handler or a raw
 	// wsconfig.Module, where no payload type is known. It is the messaging
 	// equivalent of apidoc's untyped controller: the operation still appears, so
 	// the reader learns the channel exists, but the renderer shows TODO for its
 	// messages instead of silently omitting it.
 	Untyped bool `json:"untyped,omitempty"`
+}
+
+// OperationSecurity is who may open the connection an operation runs on, as
+// the channel declared it (wskit.SecuritySpec), with the kinds of credential
+// resolved against what the application verifies.
+type OperationSecurity struct {
+	// Public is true when anyone may connect, anonymous callers included. A
+	// public operation lists no schemes and no scopes.
+	Public bool `json:"public,omitempty"`
+	// Schemes names the kinds of credential accepted, by their name in
+	// Conventions.SecuritySchemes: the ones the channel limits itself to, or
+	// every kind the application verifies when it does not.
+	Schemes []string `json:"schemes,omitempty"`
+	// Scopes are the permissions the caller must hold — all of them.
+	Scopes []string `json:"scopes,omitempty"`
 }
 
 // ChannelSpec is the addressable thing messages flow through: a broker topic or
@@ -136,6 +190,21 @@ type MessageSpec struct {
 	// channel ("envelope type is user.echo"). Only meaningful when the operation
 	// carries more than one message.
 	When string `json:"when,omitempty"`
+	// Security is what sending this message asks of the caller, on top of the
+	// operation's. Only a message a client sends can carry one; nil adds
+	// nothing.
+	Security *MessageSecurity `json:"security,omitempty"`
+}
+
+// MessageSecurity is what one received message asks of its sender, on top of
+// what the channel asks of the connection (wskit.MessageSecurity).
+type MessageSecurity struct {
+	// RequiresCaller is always true: any declaration requires a verified
+	// caller, even on a public channel. It is written out so that a reader of
+	// the document does not have to know that.
+	RequiresCaller bool `json:"requires_caller"`
+	// Scopes are the permissions the caller must also hold — all of them.
+	Scopes []string `json:"scopes,omitempty"`
 }
 
 // Behavior holds the facts about an operation that no type can express.
@@ -211,14 +280,79 @@ type Conventions struct {
 	// DeliveryDefaults are the broker defaults every subscription inherits
 	// unless it overrides them, keyed by the Delivery* constants.
 	DeliveryDefaults map[string]string `json:"delivery_defaults,omitempty"`
-	// GlobalMiddlewares names what runs on every connection before any handler
-	// (the WebSocket upgrade credential check, for one).
+	// GlobalMiddlewares names, in order, what runs on every WebSocket handshake
+	// before the upgrade.
 	GlobalMiddlewares []string `json:"global_middlewares,omitempty"`
 	// SecuritySchemes are the credential kinds a client may present, reused from
 	// apidoc so HTTP and messaging describe the same schemes the same way.
 	SecuritySchemes []apidoc.SecurityScheme `json:"security_schemes,omitempty"`
 	// CommonError is the error payload shape shared across the surface.
 	CommonError *apidoc.Schema `json:"common_error,omitempty"`
+	// ScopeImplications maps a scope to the scopes it stands for: the
+	// application's policy. Without it a document misleads rather than merely
+	// leaves something out — a channel asking for orders:write says nothing
+	// about admin, so a reader holding admin would conclude they cannot use it.
+	ScopeImplications map[string][]string `json:"scope_implications,omitempty"`
+	// Initiator describes the headers every broker message carries to say who
+	// started the work it belongs to.
+	Initiator *InitiatorConvention `json:"initiator,omitempty"`
+	// WebSocket states what holds for every WebSocket channel.
+	WebSocket *WebSocketConvention `json:"websocket,omitempty"`
+}
+
+// InitiatorConvention describes, once for the whole surface, the headers that
+// say who started the work a broker message belongs to. Each message's header
+// schema describes the fields; this says what they are and are not.
+type InitiatorConvention struct {
+	// Headers names the headers, in the order they are described.
+	Headers     []string `json:"headers"`
+	Description string   `json:"description"`
+}
+
+// WebSocketConvention states what holds for every WebSocket channel: how a
+// connection is authenticated, what the server answers a message it cannot
+// handle with, and how a connection is ended when its credential stops holding.
+type WebSocketConvention struct {
+	// Authentication explains how a client presents a credential at the
+	// handshake, and how a refusal looks.
+	Authentication string                  `json:"authentication,omitempty"`
+	Error          *ErrorMessageConvention `json:"error,omitempty"`
+	Recheck        *RecheckConvention      `json:"recheck,omitempty"`
+}
+
+// ErrorMessageConvention is the message the server sends back when it cannot
+// handle a received one.
+type ErrorMessageConvention struct {
+	// MessageType is the envelope type the error is sent as.
+	MessageType string         `json:"message_type"`
+	Payload     *apidoc.Schema `json:"payload,omitempty"`
+	// Codes lists every code the payload can carry, with what it means.
+	Codes []*CodeMeaning `json:"codes,omitempty"`
+}
+
+// CodeMeaning is one code with what it means.
+type CodeMeaning struct {
+	Code    string `json:"code"`
+	Meaning string `json:"meaning"`
+}
+
+// RecheckConvention explains how a live connection is kept from outliving the
+// credential it was opened with.
+type RecheckConvention struct {
+	// Interval is how often a session's or an API key's connection is asked
+	// about again, as a Go duration ("5m0s").
+	Interval    string `json:"interval,omitempty"`
+	Description string `json:"description,omitempty"`
+	// CloseCodes are the codes such a connection is ended with.
+	CloseCodes []*CloseCodeMeaning `json:"close_codes,omitempty"`
+}
+
+// CloseCodeMeaning is one close code, what it means, and what a client should
+// do on receiving it.
+type CloseCodeMeaning struct {
+	Code         int    `json:"code"`
+	Meaning      string `json:"meaning"`
+	ClientAction string `json:"client_action,omitempty"`
 }
 
 // EnvelopeSpec describes the fixed wrapper a protocol puts around every payload.

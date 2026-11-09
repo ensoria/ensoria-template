@@ -420,3 +420,18 @@ var _ = Describe("CallerWatch", func() {
 		})
 	})
 })
+
+var _ = Describe("CloseCodes", func() {
+	// A client has to act differently on the two: one reconnects after
+	// authenticating again, the other should not reconnect at all.
+	It("explains both codes the watch ends a connection with, and what a client should do", func() {
+		var codes []int
+		for _, c := range wskit.CloseCodes() {
+			Expect(c.Meaning).NotTo(BeEmpty(), "%d", c.Code)
+			Expect(c.ClientAction).NotTo(BeEmpty(), "%d", c.Code)
+			codes = append(codes, int(c.Code))
+		}
+
+		Expect(codes).To(Equal([]int{int(wskit.CloseCredentialInvalid), int(wskit.CloseForbidden)}))
+	})
+})
