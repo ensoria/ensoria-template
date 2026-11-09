@@ -1,6 +1,7 @@
 package middleware_test
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -19,16 +20,21 @@ import (
 // verifierStub answers with whatever the test wants, so the middleware can be
 // exercised without minting real tokens.
 type verifierStub struct {
-	principal *authkit.Principal
-	discard   []*http.Cookie
-	err       error
+	principal  *authkit.Principal
+	credential *authkit.Credential
+	discard    []*http.Cookie
+	err        error
 }
 
 func (v verifierStub) Verify(*rest.Request) (*authkit.VerifyResult, error) {
 	if v.err != nil {
 		return nil, v.err
 	}
-	return &authkit.VerifyResult{Principal: v.principal, Discard: v.discard}, nil
+	return &authkit.VerifyResult{Principal: v.principal, Credential: v.credential, Discard: v.discard}, nil
+}
+
+func (verifierStub) Recheck(context.Context, *authkit.Credential) (*authkit.Principal, error) {
+	return nil, authkit.ErrInvalidCredential
 }
 
 func (verifierStub) Schemes() []string { return []string{authkit.SchemeJWT} }
@@ -249,6 +255,23 @@ var _ = Describe("authentication middleware", func() {
 			p, ok := authkit.PrincipalFrom(r.Context())
 			Expect(ok).To(BeTrue())
 			Expect(p.Subject).To(Equal("usr_1"))
+		})
+
+		// A connection lasts long after the handshake, so it needs what the
+		// caller was verified with — to end when that credential does.
+		It("carries the credential the caller was verified with into the connection", func() {
+			credential := authkit.SessionCredential("session-id")
+			guard := middleware.AuthUpgrade(verifierStub{
+				principal:  &authkit.Principal{Subject: "usr_1", Scheme: authkit.SchemeSession},
+				credential: credential,
+			}, nil, nil)
+			r := authRequest()
+
+			Expect(guard(r)).To(BeNil())
+
+			found, ok := authkit.CredentialFrom(r.Context())
+			Expect(ok).To(BeTrue())
+			Expect(found).To(BeIdenticalTo(credential))
 		})
 
 		// The other half of the single attachment point. A connection is opened

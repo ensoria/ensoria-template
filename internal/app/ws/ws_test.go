@@ -1,6 +1,7 @@
 package ws_test
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -25,6 +26,10 @@ func (rejectingVerifier) Verify(*rest.Request) (*authkit.VerifyResult, error) {
 }
 
 func (rejectingVerifier) Schemes() []string { return []string{authkit.SchemeJWT} }
+
+func (rejectingVerifier) Recheck(context.Context, *authkit.Credential) (*authkit.Principal, error) {
+	return nil, authkit.ErrInvalidCredential
+}
 
 func upgradeRequest() *rest.Request {
 	return rest.NewRequest(httptest.NewRequest(http.MethodGet, "/ws/things", nil))
@@ -58,6 +63,10 @@ func (allowingVerifier) Verify(*rest.Request) (*authkit.VerifyResult, error) {
 
 func (allowingVerifier) Schemes() []string { return []string{authkit.SchemeSession} }
 
+func (allowingVerifier) Recheck(context.Context, *authkit.Credential) (*authkit.Principal, error) {
+	return nil, authkit.ErrInvalidCredential
+}
+
 var _ = Describe("CreateWSRouter", func() {
 	It("keeps the modules it was given", func() {
 		modules := []*wskit.Module{
@@ -69,7 +78,7 @@ var _ = Describe("CreateWSRouter", func() {
 		// refused, and no policy means a caller is judged on the scopes their
 		// credential literally carries. That the policy reaches a connection at
 		// all is fixed in internal/middleware (AuthUpgrade).
-		router, err := wsApp.CreateWSRouter(modules, rejectingVerifier{}, sameOriginOnly, nil, nil)
+		router, err := wsApp.CreateWSRouter(modules, rejectingVerifier{}, sameOriginOnly, nil, nil, nil)
 
 		Expect(err).NotTo(HaveOccurred())
 		Expect(router.Modules).To(HaveLen(2))
@@ -86,7 +95,7 @@ var _ = Describe("CreateWSRouter", func() {
 			wskit.Raw(wsconfig.NewDefaultModule("/ws/two"), nil),
 		}
 
-		mustRouter(wsApp.CreateWSRouter(modules, rejectingVerifier{}, sameOriginOnly, nil, nil))
+		mustRouter(wsApp.CreateWSRouter(modules, rejectingVerifier{}, sameOriginOnly, nil, nil, nil))
 
 		for _, module := range modules {
 			m := module.RuntimeModule()
@@ -113,7 +122,7 @@ var _ = Describe("CreateWSRouter", func() {
 			wskit.Raw(wsconfig.NewDefaultModule("/ws/two"), nil),
 		}
 
-		mustRouter(wsApp.CreateWSRouter(modules, allowingVerifier{}, middleware.ParseOrigins("https://app.example.test"), nil, nil))
+		mustRouter(wsApp.CreateWSRouter(modules, allowingVerifier{}, middleware.ParseOrigins("https://app.example.test"), nil, nil, nil))
 
 		for _, module := range modules {
 			m := module.RuntimeModule()
@@ -136,7 +145,7 @@ var _ = Describe("CreateWSRouter", func() {
 	It("checks the origin before it checks the credential", func() {
 		modules := []*wskit.Module{wskit.NewModule(&wskit.Channel{Path: "/ws/one"})}
 
-		mustRouter(wsApp.CreateWSRouter(modules, rejectingVerifier{}, middleware.ParseOrigins(""), nil, nil))
+		mustRouter(wsApp.CreateWSRouter(modules, rejectingVerifier{}, middleware.ParseOrigins(""), nil, nil, nil))
 
 		// Both guards would refuse this handshake. Whichever answers first is
 		// the one that ran first.
@@ -157,6 +166,10 @@ func (verifierFor) Verify(*rest.Request) (*authkit.VerifyResult, error) {
 
 func (v verifierFor) Schemes() []string { return v }
 
+func (verifierFor) Recheck(context.Context, *authkit.Credential) (*authkit.Principal, error) {
+	return nil, authkit.ErrInvalidCredential
+}
+
 // runGuards runs a module's pre-upgrade chain the way the WebSocket server
 // does: in order, stopping at the first refusal.
 func runGuards(module *wskit.Module, r *rest.Request) *rest.Response {
@@ -175,7 +188,7 @@ var _ = Describe("CreateWSRouter and the channel's declaration", func() {
 	// without a declaration must not be one anybody can open.
 	It("refuses an anonymous handshake to a channel that declares nothing, with 401", func() {
 		module := wskit.NewModule(&wskit.Channel{Path: "/ws/one"})
-		mustRouter(wsApp.CreateWSRouter([]*wskit.Module{module}, sessionsOnly, sameOriginOnly, nil, nil))
+		mustRouter(wsApp.CreateWSRouter([]*wskit.Module{module}, sessionsOnly, sameOriginOnly, nil, nil, nil))
 
 		res := runGuards(module, upgradeRequest())
 
@@ -185,7 +198,7 @@ var _ = Describe("CreateWSRouter and the channel's declaration", func() {
 
 	It("lets an anonymous handshake through to a public channel", func() {
 		module := wskit.NewModule(&wskit.Channel{Path: "/ws/one", Security: &wskit.SecuritySpec{Public: true}})
-		mustRouter(wsApp.CreateWSRouter([]*wskit.Module{module}, sessionsOnly, sameOriginOnly, nil, nil))
+		mustRouter(wsApp.CreateWSRouter([]*wskit.Module{module}, sessionsOnly, sameOriginOnly, nil, nil, nil))
 
 		Expect(runGuards(module, upgradeRequest())).To(BeNil())
 	})
@@ -195,7 +208,7 @@ var _ = Describe("CreateWSRouter and the channel's declaration", func() {
 	It("judges a raw channel by the declaration it was given, closed when it was given none", func() {
 		closed := wskit.Raw(wsconfig.NewDefaultModule("/ws/closed"), nil)
 		public := wskit.Raw(wsconfig.NewDefaultModule("/ws/public"), &wskit.SecuritySpec{Public: true})
-		mustRouter(wsApp.CreateWSRouter([]*wskit.Module{closed, public}, sessionsOnly, sameOriginOnly, nil, nil))
+		mustRouter(wsApp.CreateWSRouter([]*wskit.Module{closed, public}, sessionsOnly, sameOriginOnly, nil, nil, nil))
 
 		res := runGuards(closed, upgradeRequest())
 		Expect(res).NotTo(BeNil())
@@ -218,7 +231,7 @@ var _ = Describe("CreateWSRouter and the channel's declaration", func() {
 				})
 			},
 		})
-		mustRouter(wsApp.CreateWSRouter([]*wskit.Module{module}, rejectingVerifier{}, sameOriginOnly, nil, nil))
+		mustRouter(wsApp.CreateWSRouter([]*wskit.Module{module}, rejectingVerifier{}, sameOriginOnly, nil, nil, nil))
 
 		res := runGuards(module, upgradeRequest())
 
@@ -238,7 +251,7 @@ var _ = Describe("CreateWSRouter and the channel's declaration", func() {
 				})
 			},
 		})
-		mustRouter(wsApp.CreateWSRouter([]*wskit.Module{module}, sessionsOnly, sameOriginOnly, nil, nil))
+		mustRouter(wsApp.CreateWSRouter([]*wskit.Module{module}, sessionsOnly, sameOriginOnly, nil, nil, nil))
 
 		Expect(runGuards(module, upgradeRequest())).To(BeNil())
 		Expect(ranChannelMiddleware).To(BeTrue())
@@ -247,7 +260,7 @@ var _ = Describe("CreateWSRouter and the channel's declaration", func() {
 	// The rules themselves are specified with checkChannelSecurity; this is
 	// only that a router is never built around declarations they refuse.
 	It("refuses to build a router for a channel that cannot be served as declared", func() {
-		router, err := wsApp.CreateWSRouter([]*wskit.Module{wskit.NewModule(&wskit.Channel{Path: "/ws/one"})}, verifierFor{}, sameOriginOnly, nil, nil)
+		router, err := wsApp.CreateWSRouter([]*wskit.Module{wskit.NewModule(&wskit.Channel{Path: "/ws/one"})}, verifierFor{}, sameOriginOnly, nil, nil, nil)
 
 		Expect(err).To(MatchError(ContainSubstring("/ws/one")))
 		Expect(router).To(BeNil())

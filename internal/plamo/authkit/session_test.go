@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -27,6 +28,20 @@ type sessionStore struct {
 }
 
 func (s sessionStore) Lookup(context.Context, string) (*sessionkit.Session, error) {
+	return s.session, s.err
+}
+
+// changingStore is a session store whose answer a spec changes between a
+// verification and a recheck, and which remembers the ids it was asked about.
+type changingStore struct {
+	sessionkit.Store
+	session *sessionkit.Session
+	err     error
+	asked   []string
+}
+
+func (s *changingStore) Lookup(_ context.Context, id string) (*sessionkit.Session, error) {
+	s.asked = append(s.asked, id)
 	return s.session, s.err
 }
 
@@ -158,6 +173,62 @@ var _ = Describe("the session cookie", func() {
 
 			Expect(err).To(HaveOccurred())
 			Expect(result).To(BeNil(), "a failed verdict carries no instructions")
+		})
+	})
+
+	// The session keeps the claims of the token it was traded for, exp
+	// included. That exp is the token's, not the session's: a connection opened
+	// with the cookie must not end when the long-gone token would have.
+	It("keeps the session's id, with no expiry of its own even when the snapshot holds a token's exp", func() {
+		session := liveSession()
+		session.Snapshot.Claims["exp"] = float64(time.Now().Add(time.Minute).Unix())
+		v := verifierWith(sessionStore{session: session})
+
+		result, err := v.Verify(requestWithCookie("session-id", nil))
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.Credential.Scheme()).To(Equal(authkit.SchemeSession))
+		_, ok := result.Credential.Expires()
+		Expect(ok).To(BeFalse())
+	})
+
+	Describe("rechecked", func() {
+		var store *changingStore
+		var v authkit.Verifier
+		var credential *authkit.Credential
+
+		BeforeEach(func() {
+			store = &changingStore{session: liveSession()}
+			v = verifierWith(store)
+			result, err := v.Verify(requestWithCookie("session-id", nil))
+			Expect(err).NotTo(HaveOccurred())
+			credential = result.Credential
+		})
+
+		It("asks the store about the same session, and answers with its caller", func() {
+			principal, err := v.Recheck(context.Background(), credential)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(principal.Subject).To(Equal("usr_1"))
+			Expect(principal.Scheme).To(Equal(authkit.SchemeSession))
+			Expect(store.asked).To(Equal([]string{"session-id", "session-id"}))
+		})
+
+		It("is a bad credential once the session is gone: signed out, ended, or expired", func() {
+			store.session, store.err = nil, sessionkit.ErrSessionNotFound
+
+			_, err := v.Recheck(context.Background(), credential)
+
+			Expect(errors.Is(err, authkit.ErrInvalidCredential)).To(BeTrue())
+		})
+
+		It("is undecided while the store cannot be reached", func() {
+			store.session, store.err = nil, errStoreDown
+
+			_, err := v.Recheck(context.Background(), credential)
+
+			Expect(errors.Is(err, authkit.ErrCredentialUnavailable)).To(BeTrue())
+			Expect(errors.Is(err, authkit.ErrInvalidCredential)).To(BeFalse())
 		})
 	})
 

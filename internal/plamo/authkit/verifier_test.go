@@ -365,6 +365,138 @@ var _ = Describe("Verifier", func() {
 	})
 })
 
+// What a verification keeps so that a connection outliving the request can
+// ask about the credential again.
+var _ = Describe("the credential a verification keeps", func() {
+	It("keeps a token's expiry, read from its exp claim", func() {
+		verifier, err := authkit.NewVerifier(hs256Config, nil, nil)
+		Expect(err).NotTo(HaveOccurred())
+		exp := time.Now().Add(time.Hour).Truncate(time.Second)
+		c := claims()
+		c["exp"] = exp.Unix()
+
+		result, err := verifier.Verify(requestWith(bearer(signHS(c))))
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.Credential.Scheme()).To(Equal(authkit.SchemeJWT))
+		at, ok := result.Credential.Expires()
+		Expect(ok).To(BeTrue())
+		Expect(at.Equal(exp)).To(BeTrue(), "expires at %s, want %s", at, exp)
+	})
+
+	It("keeps an API key, which has no expiry of its own", func() {
+		verifier, err := authkit.NewVerifier(&appconfig.Auth{
+			APIKeyHeader: appconfig.DefaultAPIKeyHeader, APIKeys: []string{"key-one"},
+		}, nil, nil)
+		Expect(err).NotTo(HaveOccurred())
+
+		result, err := verifier.Verify(requestWith(map[string]string{appconfig.DefaultAPIKeyHeader: "key-one"}))
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.Credential.Scheme()).To(Equal(authkit.SchemeAPIKey))
+		_, ok := result.Credential.Expires()
+		Expect(ok).To(BeFalse())
+	})
+
+	It("keeps nothing for a request that carried no credential", func() {
+		verifier, err := authkit.NewVerifier(hs256Config, nil, nil)
+		Expect(err).NotTo(HaveOccurred())
+
+		result, err := verifier.Verify(requestWith(nil))
+
+		Expect(err).NotTo(HaveOccurred())
+		Expect(result.Credential).To(BeNil())
+	})
+})
+
+var _ = Describe("Recheck", func() {
+	Describe("an API key", func() {
+		// keys is a key store whose answers a spec changes between the
+		// verification and the recheck, the way a database's would.
+		var (
+			answer *authkit.Principal
+			failed error
+			asked  []string
+		)
+		var verifier authkit.Verifier
+
+		BeforeEach(func() {
+			answer = &authkit.Principal{Subject: "svc_1", Scheme: authkit.SchemeAPIKey, Scopes: []string{"jobs:run"}}
+			failed = nil
+			asked = nil
+			var err error
+			verifier, err = authkit.NewVerifier(
+				&appconfig.Auth{APIKeyHeader: appconfig.DefaultAPIKeyHeader},
+				authkit.KeyStoreFunc(func(_ context.Context, key string) (*authkit.Principal, error) {
+					asked = append(asked, key)
+					return answer, failed
+				}),
+				nil,
+			)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		verified := func() *authkit.Credential {
+			GinkgoHelper()
+			result, err := verifier.Verify(requestWith(map[string]string{appconfig.DefaultAPIKeyHeader: "the-key"}))
+			Expect(err).NotTo(HaveOccurred())
+			return result.Credential
+		}
+
+		It("asks the store about the same key, and answers with who it stands for now", func() {
+			credential := verified()
+			answer = &authkit.Principal{Subject: "svc_1", Scheme: authkit.SchemeAPIKey, Scopes: []string{"jobs:read"}}
+
+			principal, err := verifier.Recheck(context.Background(), credential)
+
+			Expect(err).NotTo(HaveOccurred())
+			Expect(principal.Scopes).To(Equal([]string{"jobs:read"}))
+			Expect(asked).To(Equal([]string{"the-key", "the-key"}))
+		})
+
+		It("is a bad credential once the store no longer knows the key", func() {
+			credential := verified()
+			answer, failed = nil, authkit.ErrKeyNotFound
+
+			_, err := verifier.Recheck(context.Background(), credential)
+
+			Expect(errors.Is(err, authkit.ErrInvalidCredential)).To(BeTrue())
+		})
+
+		// The same distinction Verify makes: a store that does not answer says
+		// nothing about the key.
+		It("is undecided while the store cannot answer", func() {
+			credential := verified()
+			answer, failed = nil, errors.New("connection refused")
+
+			_, err := verifier.Recheck(context.Background(), credential)
+
+			Expect(errors.Is(err, authkit.ErrCredentialUnavailable)).To(BeTrue())
+			Expect(errors.Is(err, authkit.ErrInvalidCredential)).To(BeFalse())
+		})
+	})
+
+	// Nothing can end a token before its exp, so there is nobody to ask: the
+	// expiry is the whole answer, and asking anyway is a mistake to report.
+	It("refuses to recheck a token", func() {
+		verifier, err := authkit.NewVerifier(hs256Config, nil, nil)
+		Expect(err).NotTo(HaveOccurred())
+
+		_, err = verifier.Recheck(context.Background(), authkit.TokenCredential(time.Now().Add(time.Hour)))
+
+		Expect(err).To(HaveOccurred())
+	})
+
+	It("refuses to recheck nothing", func() {
+		verifier, err := authkit.NewVerifier(hs256Config, nil, nil)
+		Expect(err).NotTo(HaveOccurred())
+
+		_, err = verifier.Recheck(context.Background(), nil)
+
+		Expect(err).To(HaveOccurred())
+	})
+})
+
 // jwksOf publishes one RSA public key as a JWK Set document (test helper).
 func jwksOf(key *rsa.PrivateKey, kid string) string {
 	n := base64.RawURLEncoding.EncodeToString(key.N.Bytes())

@@ -3,6 +3,7 @@ package ws
 import (
 	"fmt"
 
+	"github.com/ensoria/config/pkg/appconfig"
 	"github.com/ensoria/config/pkg/registry"
 	"github.com/ensoria/ensoria-template/internal/middleware"
 	"github.com/ensoria/ensoria-template/internal/plamo/authkit"
@@ -37,6 +38,14 @@ const defaultModule = "default"
 // served as written (see checkChannelSecurity), so the mistake stops the
 // process at startup rather than refusing every handshake.
 //
+// A connection is then kept from outliving the credential it was opened with
+// (wskit.CallerWatch): a token's connection ends at its exp, and a session's or
+// an API key's is asked about again every settings.RecheckInterval — ended
+// when the credential is gone, or when the caller no longer meets the channel.
+// Every OnMessage, OnClose and OnError sees the caller the latest recheck
+// found. Raw channels are watched the same way. Nil settings means the
+// configuration's defaults.
+//
 // The trusted origins are taken as an argument rather than read here, so that
 // the check can be exercised against an origin list a test chose.
 //
@@ -52,8 +61,18 @@ func CreateWSRouter(
 	origins *middleware.Origins,
 	scopes authkit.ScopeExpander,
 	claims *initiator.ClaimSet,
+	settings *appconfig.AuthWebSocket,
 ) (*wsrouter.Router, error) {
 	if err := checkChannelSecurity(modules, verifier); err != nil {
+		return nil, err
+	}
+
+	interval := appconfig.DefaultWebSocketRecheckInterval
+	if settings != nil {
+		interval = settings.RecheckInterval
+	}
+	watch, err := wskit.NewCallerWatch(verifier, scopes, interval)
+	if err != nil {
 		return nil, err
 	}
 
@@ -64,8 +83,11 @@ func CreateWSRouter(
 			middleware.UpgradeOrigin(origins),
 			middleware.AuthUpgrade(verifier, scopes, claims),
 			middleware.ChannelSecurity(m.Security()),
+			// Last, so that only a handshake every check admitted is followed.
+			watch.Track(),
 		}
 		rm.HTTPMiddlewares = append(guards, rm.HTTPMiddlewares...)
+		watch.Install(rm, m.Security())
 		runtime = append(runtime, rm)
 	}
 
@@ -87,6 +109,16 @@ func NewTrustedOrigins() (*middleware.Origins, error) {
 		return nil, fmt.Errorf("ws: reading the %s configuration: %w", defaultModule, err)
 	}
 	return middleware.ParseOrigins(params.CORS.AllowOrigin()), nil
+}
+
+// NewWebSocketSettings reads how live WebSocket connections are kept from
+// outliving their credentials (AUTH_WS_RECHECK_INTERVAL).
+func NewWebSocketSettings() (*appconfig.AuthWebSocket, error) {
+	params, err := registry.ModuleParams(defaultModule)
+	if err != nil {
+		return nil, fmt.Errorf("ws: reading the %s configuration: %w", defaultModule, err)
+	}
+	return params.Auth.WebSocket, nil
 }
 
 // InjectWSModules tags the first parameter as the WebSocket module group. The

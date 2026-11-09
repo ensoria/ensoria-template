@@ -78,6 +78,11 @@ func withDiscardedCookies(res *rest.Response, result *authkit.VerifyResult) *res
 // right after this: a channel that declares nothing requires a caller, and only
 // a public one admits an anonymous handshake.
 //
+// The caller and the credential it was verified with both ride into the
+// connection on its context. The router's caller watch (wskit.CallerWatch)
+// reads the credential to end the connection when it stops holding, and keeps
+// the caller current for the connection's handlers.
+//
 // ⚠ An upgrade that succeeds has nowhere to put a Set-Cookie: the WebSocket
 // library writes that response itself, and this handler is only consulted about
 // whether to refuse. So a browser that connected with a dead session cookie
@@ -132,6 +137,10 @@ func authenticate(
 		if result.Principal != nil {
 			caller := result.Principal.WithScopeExpander(scopes)
 			ctx = authkit.WithPrincipal(ctx, caller)
+			// What the caller was verified with goes along, for whatever
+			// outlives this request: a WebSocket connection asks about it again
+			// so as to end when it does. Its secret part stays unexported.
+			ctx = authkit.WithCredential(ctx, result.Credential)
 		}
 		r.SetContext(ctx)
 		return result, nil

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/MicahParks/jwkset"
 	"github.com/MicahParks/keyfunc/v3"
@@ -94,6 +95,10 @@ type VerifyResult struct {
 	// request deliberately, and answering 401 tells its owner what they need to
 	// know.
 	Discard []*http.Cookie
+	// Credential is what the caller was verified with, kept so that whatever
+	// outlives the request can ask about it again (see Verifier.Recheck). It is
+	// set whenever Principal is, and nil otherwise.
+	Credential *Credential
 }
 
 // Verifier turns the credentials on a request into a Principal.
@@ -110,6 +115,19 @@ type Verifier interface {
 	// be carried onto the response even when there is no Principal — that is
 	// the whole case it exists for.
 	Verify(r *rest.Request) (*VerifyResult, error)
+	// Recheck asks again about a credential Verify accepted earlier, and
+	// reports who it stands for now.
+	//
+	// It is for whatever outlives the request the credential arrived on — a
+	// WebSocket connection — and has to end when the credential does. The
+	// errors mean what they mean for Verify: ErrInvalidCredential when the
+	// store answered no (the key was removed; the session was signed out,
+	// ended or expired), ErrCredentialUnavailable when it did not answer.
+	//
+	// A token has nobody to ask: nothing ends one before its exp, which
+	// Credential.Expires reports. Asking about one is a mistake and is
+	// answered with an error that is neither of the two.
+	Recheck(ctx context.Context, credential *Credential) (*Principal, error)
 	// Schemes reports which kinds of credential this verifier can check, in a
 	// stable order (SchemeJWT, SchemeAPIKey, SchemeSession).
 	//
@@ -288,20 +306,34 @@ func jwksKeyfunc(cfg *appconfig.Auth) (jwt.Keyfunc, error) {
 // to be holding override what the caller actually asked for.
 func (v *verifier) Verify(r *rest.Request) (*VerifyResult, error) {
 	if token, ok := bearerToken(r); ok {
-		principal, err := v.verifyJWT(token)
+		principal, expires, err := v.verifyJWT(token)
 		if err != nil {
 			return nil, err
 		}
-		return &VerifyResult{Principal: principal}, nil
+		return &VerifyResult{Principal: principal, Credential: TokenCredential(expires)}, nil
 	}
 	if key, ok := r.Header(v.apiKeyHeader); ok && key != "" {
 		principal, err := v.verifyAPIKey(r.Context(), key)
 		if err != nil {
 			return nil, err
 		}
-		return &VerifyResult{Principal: principal}, nil
+		return &VerifyResult{Principal: principal, Credential: KeyCredential(key)}, nil
 	}
 	return v.verifySession(r)
+}
+
+// Recheck looks an API key or a session up again. See Verifier.Recheck.
+func (v *verifier) Recheck(ctx context.Context, credential *Credential) (*Principal, error) {
+	switch credential.Scheme() {
+	case SchemeAPIKey:
+		return v.verifyAPIKey(ctx, credential.secret)
+	case SchemeSession:
+		return v.lookupSession(ctx, credential.secret)
+	case SchemeJWT:
+		return nil, errors.New("authkit: a token is not rechecked: it holds until it expires (see Credential.Expires)")
+	default:
+		return nil, errors.New("authkit: there is no credential to recheck")
+	}
 }
 
 // verifySession resolves the session cookie, if there is one.
@@ -325,12 +357,12 @@ func (v *verifier) verifySession(r *rest.Request) (*VerifyResult, error) {
 		return &VerifyResult{}, nil
 	}
 
-	session, err := v.sessions.Lookup(r.Context(), id)
+	principal, err := v.lookupSession(r.Context(), id)
 	switch {
 	case err == nil:
-		return &VerifyResult{Principal: PrincipalOf(session.Snapshot)}, nil
+		return &VerifyResult{Principal: principal, Credential: SessionCredential(id)}, nil
 
-	case errors.Is(err, sessionkit.ErrSessionNotFound):
+	case errors.Is(err, ErrInvalidCredential):
 		// The store answered, and the session is gone. Take the cookie back.
 		loggear.Info("a request presented a session cookie that no longer resolves",
 			"type", LogTypeSessionRejected,
@@ -350,6 +382,24 @@ func (v *verifier) verifySession(r *rest.Request) (*VerifyResult, error) {
 			"method", r.Method(),
 			"path", r.Path(),
 			"error", err)
+		return nil, err
+	}
+}
+
+// lookupSession asks the store who a session belongs to now: the caller, or
+// ErrInvalidCredential when the store answered that the session is gone, or
+// ErrCredentialUnavailable when it did not answer.
+func (v *verifier) lookupSession(ctx context.Context, id string) (*Principal, error) {
+	if v.sessions == nil {
+		return nil, fmt.Errorf("%w: this application does not accept sessions", ErrInvalidCredential)
+	}
+	session, err := v.sessions.Lookup(ctx, id)
+	switch {
+	case err == nil:
+		return PrincipalOf(session.Snapshot), nil
+	case errors.Is(err, sessionkit.ErrSessionNotFound):
+		return nil, fmt.Errorf("%w: %w", ErrInvalidCredential, err)
+	default:
 		return nil, fmt.Errorf("%w: %w", ErrCredentialUnavailable, err)
 	}
 }
@@ -369,24 +419,30 @@ func bearerToken(r *rest.Request) (string, bool) {
 	return strings.TrimSpace(token), true
 }
 
-func (v *verifier) verifyJWT(token string) (*Principal, error) {
+// verifyJWT checks a token and returns its caller along with its expiry.
+func (v *verifier) verifyJWT(token string) (*Principal, time.Time, error) {
 	if v.jwtKeyfunc == nil {
-		return nil, fmt.Errorf("%w: this application does not accept tokens", ErrInvalidCredential)
+		return nil, time.Time{}, fmt.Errorf("%w: this application does not accept tokens", ErrInvalidCredential)
 	}
 	if token == "" {
-		return nil, fmt.Errorf("%w: the Authorization header is not a bearer token", ErrInvalidCredential)
+		return nil, time.Time{}, fmt.Errorf("%w: the Authorization header is not a bearer token", ErrInvalidCredential)
 	}
 
 	parsed, err := jwt.Parse(token, v.jwtKeyfunc, v.parserOpts...)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", ErrInvalidCredential, err)
+		return nil, time.Time{}, fmt.Errorf("%w: %w", ErrInvalidCredential, err)
 	}
 
 	claims, ok := parsed.Claims.(jwt.MapClaims)
 	if !ok {
-		return nil, fmt.Errorf("%w: unexpected claims shape", ErrInvalidCredential)
+		return nil, time.Time{}, fmt.Errorf("%w: unexpected claims shape", ErrInvalidCredential)
 	}
 	subject, _ := claims.GetSubject()
+	// The parser options require exp, so a token that reached here has one.
+	expires, err := claims.GetExpirationTime()
+	if err != nil || expires == nil {
+		return nil, time.Time{}, fmt.Errorf("%w: the token has no usable exp", ErrInvalidCredential)
+	}
 
 	return &Principal{
 		Subject: subject,
@@ -402,7 +458,7 @@ func (v *verifier) verifyJWT(token string) (*Principal, error) {
 		// The registered claims (sub, exp, iss) stay in it, so a caller reading
 		// them through the accessors sees the same token the verifier judged.
 		Claims: Claims(claims),
-	}, nil
+	}, expires.Time, nil
 }
 
 // scopesOf reads the space-separated scope claim (RFC 8693).

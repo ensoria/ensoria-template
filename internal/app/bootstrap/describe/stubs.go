@@ -267,6 +267,12 @@ func (*stubVerifier) Verify(r *rest.Request) (*authkit.VerifyResult, error) {
 	return &authkit.VerifyResult{}, nil
 }
 
+// Recheck is never reached: Verify accepts nobody, so there is no credential
+// to ask about again.
+func (*stubVerifier) Recheck(context.Context, *authkit.Credential) (*authkit.Principal, error) {
+	return nil, authkit.ErrInvalidCredential
+}
+
 func (*stubVerifier) Schemes() []string { return nil }
 
 // stubPublish accepts every message and sends none.

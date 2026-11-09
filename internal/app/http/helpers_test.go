@@ -2,6 +2,7 @@ package http
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -24,6 +25,10 @@ func (rejectingVerifier) Verify(*rest.Request) (*authkit.VerifyResult, error) {
 
 func (rejectingVerifier) Schemes() []string { return []string{authkit.SchemeJWT} }
 
+func (rejectingVerifier) Recheck(context.Context, *authkit.Credential) (*authkit.Principal, error) {
+	return nil, authkit.ErrInvalidCredential
+}
+
 // anonymousVerifier reports that the request carried no credential.
 type anonymousVerifier struct{}
 
@@ -32,6 +37,10 @@ func (anonymousVerifier) Verify(*rest.Request) (*authkit.VerifyResult, error) {
 }
 
 func (anonymousVerifier) Schemes() []string { return []string{authkit.SchemeJWT} }
+
+func (anonymousVerifier) Recheck(context.Context, *authkit.Credential) (*authkit.Principal, error) {
+	return nil, authkit.ErrInvalidCredential
+}
 
 // chain composes the middlewares the way the pipeline does: the list runs
 // outside-in, so it is applied in reverse.

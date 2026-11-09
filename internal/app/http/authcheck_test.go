@@ -1,6 +1,7 @@
 package http
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 
@@ -40,6 +41,10 @@ func (verifierFor) Verify(*rest.Request) (*authkit.VerifyResult, error) {
 }
 
 func (v verifierFor) Schemes() []string { return v }
+
+func (verifierFor) Recheck(context.Context, *authkit.Credential) (*authkit.Principal, error) {
+	return nil, authkit.ErrInvalidCredential
+}
 
 var _ = Describe("checkAuthConfiguration", func() {
 	// An application verifying tokens only, and one verifying API keys only.

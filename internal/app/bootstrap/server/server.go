@@ -95,6 +95,9 @@ func Run(envVal *string) error {
 		// Which origins are this deployment's own frontend, resolved once and read
 		// by CORS, the cross-origin check and the WebSocket upgrade guard.
 		wsApp.NewTrustedOrigins,
+		// How often a live WebSocket connection's session or API key is looked
+		// up again, so that the connection ends when the credential does.
+		wsApp.NewWebSocketSettings,
 		httpApp.InjectHTTPModules(httpApp.CreateHTTPPipeline(envVal)),
 		wsApp.InjectWSModules(wsApp.CreateWSRouter),
 		mbApp.NewSubscribe,

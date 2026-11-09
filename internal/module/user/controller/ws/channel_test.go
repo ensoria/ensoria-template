@@ -61,7 +61,7 @@ func serveUserChannel() *httptest.Server {
 
 	channel := userws.NewChannel(nil, userws.NewOnOpen(nil))
 	router, err := wsApp.CreateWSRouter([]*wskit.Module{wskit.NewModule(channel.Declare())},
-		verifier, middleware.ParseOrigins(""), expander, nil)
+		verifier, middleware.ParseOrigins(""), expander, nil, nil)
 	Expect(err).NotTo(HaveOccurred())
 
 	mux := http.NewServeMux()

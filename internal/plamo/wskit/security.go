@@ -17,7 +17,9 @@ import "github.com/ensoria/ensoria-template/internal/plamo/authkit"
 //
 // The declaration is checked before the upgrade, while the handshake is still
 // an HTTP request, so a refused caller gets an HTTP 401 or 403 and no
-// connection is ever opened.
+// connection is ever opened. It goes on being checked while the connection
+// lasts: a caller who no longer meets it — a key that lost a scope — has the
+// connection ended with CloseForbidden (see CallerWatch).
 //
 // There is no resource rule here. Whether a caller may join this particular
 // room is decided by the channel itself — in a pre-upgrade middleware or in a

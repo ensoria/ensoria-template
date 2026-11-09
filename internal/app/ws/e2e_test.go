@@ -2,6 +2,7 @@ package ws_test
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -63,7 +64,10 @@ type openedAs struct {
 // handshake. That context is derived from the one the pre-upgrade middleware
 // enriched, and whether the enrichment survives the upgrade is the thing worth
 // checking — it is what lets a handler know who is on the other end.
-func serveChannel(cfg *appconfig.Auth, origins *middleware.Origins, security *wskit.SecuritySpec) (*httptest.Server, sessionkit.Store, <-chan openedAs) {
+//
+// settings is how live connections are rechecked; nil keeps the configuration's
+// default, which no spec here waits for.
+func serveChannel(cfg *appconfig.Auth, origins *middleware.Origins, security *wskit.SecuritySpec, settings *appconfig.AuthWebSocket) (*httptest.Server, sessionkit.Store, <-chan openedAs) {
 	GinkgoHelper()
 
 	sessionCfg, err := sessionkit.NewConfig(cfg.Session)
@@ -92,7 +96,7 @@ func serveChannel(cfg *appconfig.Auth, origins *middleware.Origins, security *ws
 	// the policy is fixed in internal/middleware (AuthUpgrade), and the specs of
 	// the user module's channel drive a message that only an implied scope
 	// reaches.
-	router := mustRouter(wsApp.CreateWSRouter([]*wskit.Module{wskit.NewModule(channel)}, verifier, origins, nil, nil))
+	router := mustRouter(wsApp.CreateWSRouter([]*wskit.Module{wskit.NewModule(channel)}, verifier, origins, nil, nil, settings))
 	mux := http.NewServeMux()
 	router.Register(mux)
 	return httptest.NewServer(mux), store, opened
@@ -128,7 +132,7 @@ var _ = Describe("a WebSocket upgrade", func() {
 	// the caller, the origin check, a dead cookie — on a channel that admits
 	// anonymous callers too. What a channel requiring a caller refuses is below.
 	BeforeEach(func() {
-		server, store, opened = serveChannel(wsAuth(), middleware.ParseOrigins(e2eWSOrigin), &wskit.SecuritySpec{Public: true})
+		server, store, opened = serveChannel(wsAuth(), middleware.ParseOrigins(e2eWSOrigin), &wskit.SecuritySpec{Public: true}, nil)
 	})
 	AfterEach(func() { server.Close() })
 
@@ -237,11 +241,16 @@ func wsAuthAllSchemes() *appconfig.Auth {
 
 // bearer is the header a machine caller sends: a token carrying scopes.
 func bearer(scopes ...string) http.Header {
+	return bearerUntil(time.Now().Add(e2eWSTokenLifetime), scopes...)
+}
+
+// bearerUntil is bearer with a token that expires at exp.
+func bearerUntil(exp time.Time, scopes ...string) http.Header {
 	GinkgoHelper()
 
 	token, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
 		"sub":   "usr_token",
-		"exp":   time.Now().Add(e2eWSTokenLifetime).Unix(),
+		"exp":   exp.Unix(),
 		"scope": strings.Join(scopes, " "),
 	}).SignedString([]byte(e2eWSSecret))
 	Expect(err).NotTo(HaveOccurred())
@@ -308,7 +317,7 @@ var _ = Describe("a WebSocket upgrade to a channel that requires a caller", func
 		opened <-chan openedAs
 	)
 	serve := func(security *wskit.SecuritySpec) {
-		server, store, opened = serveChannel(wsAuthAllSchemes(), middleware.ParseOrigins(e2eWSOrigin), security)
+		server, store, opened = serveChannel(wsAuthAllSchemes(), middleware.ParseOrigins(e2eWSOrigin), security, nil)
 		DeferCleanup(server.Close)
 	}
 
@@ -384,5 +393,83 @@ var _ = Describe("a WebSocket upgrade to a channel that requires a caller", func
 		It("refuses a session with 403", func() {
 			refusedWith(server, sessionWith(store), opened, http.StatusForbidden)
 		})
+	})
+})
+
+// A connection is authenticated once, at the handshake, and may then stay open
+// for hours: these are the ways it is kept from outliving the credential it was
+// opened with, through the real verifier and session store.
+var _ = Describe("a live WebSocket connection", func() {
+	// e2eWSRecheck is short so that a revocation is noticed within the spec.
+	const e2eWSRecheck = 100 * time.Millisecond
+
+	var (
+		server *httptest.Server
+		store  sessionkit.Store
+		opened <-chan openedAs
+	)
+	BeforeEach(func() {
+		server, store, opened = serveChannel(wsAuthAllSchemes(), middleware.ParseOrigins(e2eWSOrigin), nil,
+			&appconfig.AuthWebSocket{RecheckInterval: e2eWSRecheck})
+		DeferCleanup(server.Close)
+	})
+
+	// connected dials, waits for the connection to open, and returns it.
+	connected := func(headers http.Header) *websocket.Conn {
+		GinkgoHelper()
+		conn, _, err := dial(server, headers)
+		Expect(err).NotTo(HaveOccurred())
+		DeferCleanup(func() { _ = conn.Close() })
+		Eventually(opened).Should(Receive())
+		return conn
+	}
+
+	// endedWith reads until the server ends the connection and returns the
+	// close code, failing if nothing ends it within limit.
+	endedWith := func(conn *websocket.Conn, limit time.Duration) int {
+		GinkgoHelper()
+		Expect(conn.SetReadDeadline(time.Now().Add(limit))).To(Succeed())
+		_, _, err := conn.ReadMessage()
+		var closed *websocket.CloseError
+		Expect(errors.As(err, &closed)).To(BeTrue(), "the connection was not ended: %v", err)
+		return closed.Code
+	}
+
+	It("ends a token's connection with 4401 when the token expires", func() {
+		conn := connected(bearerUntil(time.Now().Add(2 * time.Second)))
+
+		Expect(endedWith(conn, 5*time.Second)).To(Equal(int(wskit.CloseCredentialInvalid)))
+	})
+
+	It("ends a session's connection with 4401 once the session is signed out", func() {
+		session, err := store.Create(context.Background(), &sessionkit.Snapshot{Subject: "usr_1"}, false)
+		Expect(err).NotTo(HaveOccurred())
+		headers := http.Header{}
+		headers.Set("Cookie", e2eWSCookie+"="+session.ID)
+		conn := connected(headers)
+
+		Expect(store.Revoke(context.Background(), session.ID)).To(Succeed())
+
+		Expect(endedWith(conn, 5*time.Second)).To(Equal(int(wskit.CloseCredentialInvalid)))
+	})
+
+	// The session keeps the claims of the token it was traded for, exp
+	// included. That exp is the token's, and the session outlives it.
+	It("keeps a session's connection open past the exp of the token it was traded for", func() {
+		session, err := store.Create(context.Background(), &sessionkit.Snapshot{
+			Subject: "usr_1",
+			Claims:  map[string]any{"exp": float64(time.Now().Add(time.Second).Unix())},
+		}, false)
+		Expect(err).NotTo(HaveOccurred())
+		headers := http.Header{}
+		headers.Set("Cookie", e2eWSCookie+"="+session.ID)
+		conn := connected(headers)
+
+		Expect(conn.SetReadDeadline(time.Now().Add(2500 * time.Millisecond))).To(Succeed())
+		_, _, err = conn.ReadMessage()
+
+		var timeout interface{ Timeout() bool }
+		Expect(errors.As(err, &timeout) && timeout.Timeout()).To(BeTrue(),
+			"the connection should still be open, but reading ended with: %v", err)
 	})
 })
