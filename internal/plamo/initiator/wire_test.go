@@ -3,6 +3,8 @@ package initiator_test
 import (
 	"context"
 	"encoding/json"
+	"reflect"
+	"strings"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -29,6 +31,37 @@ var _ = Describe("the wire form", func() {
 		Expect(initiator.HeaderKind).To(Equal("ce_authtype"))
 		Expect(initiator.HeaderID).To(Equal("ce_authid"))
 		Expect(initiator.HeaderClaims).To(Equal("ce_authclaims"))
+	})
+
+	// The struct is what the generated documentation describes the headers
+	// with, so a header added, renamed or reordered without it would leave the
+	// document saying something else than the wire.
+	Describe("WireHeaders", func() {
+		t := reflect.TypeFor[initiator.WireHeaders]()
+
+		It("has one field per header, named and ordered as ReservedHeaders lists them", func() {
+			var names []string
+			for field := range t.Fields() {
+				name, _, _ := strings.Cut(field.Tag.Get("json"), ",")
+				names = append(names, name)
+			}
+			Expect(names).To(Equal(initiator.ReservedHeaders()))
+		})
+
+		It("requires none of them", func() {
+			for field := range t.Fields() {
+				_, options, _ := strings.Cut(field.Tag.Get("json"), ",")
+				Expect(strings.Split(options, ",")).To(ContainElement("omitempty"), field.Name)
+			}
+		})
+
+		It("names the Go fields after the headers they stand for", func() {
+			for name, header := range map[string]string{"Kind": initiator.HeaderKind, "ID": initiator.HeaderID, "Claims": initiator.HeaderClaims} {
+				field, ok := t.FieldByName(name)
+				Expect(ok).To(BeTrue(), name)
+				Expect(field.Tag.Get("json")).To(HavePrefix(header+","), name)
+			}
+		})
 	})
 
 	Describe("Headers", func() {

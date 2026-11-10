@@ -1,7 +1,6 @@
 package describe
 
 import (
-	"reflect"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -72,15 +71,6 @@ var _ = Describe("initiatorHeaderSchema", func() {
 		claims := fieldNamed(initiatorHeaderSchema(nil), initiator.HeaderClaims)
 
 		Expect(claims.Meaning).To(ContainSubstring("none"))
-	})
-
-	It("names the Go fields after the headers they stand for", func() {
-		t := reflect.TypeFor[InitiatorHeaders]()
-		for name, header := range map[string]string{"Kind": initiator.HeaderKind, "ID": initiator.HeaderID, "Claims": initiator.HeaderClaims} {
-			field, ok := t.FieldByName(name)
-			Expect(ok).To(BeTrue(), name)
-			Expect(field.Tag.Get("json")).To(Equal(header+",omitempty"), name)
-		}
 	})
 })
 

@@ -144,13 +144,20 @@ noise, and a WARN that suddenly fires a thousand times is an incident.**
 | `session_not_ended_log` | ERROR | A sign-out did not take effect; the session still works | **Yes** |
 | `declaration_drift_log` | ERROR | The generated documentation no longer matches the code | On a trend |
 | `authorization_drift_log` | ERROR | An endpoint's resource check and its declaration disagree | **Yes** |
+| `initiator_claims_unencodable_log` | ERROR | Claims could not be written as JSON and were left off what was published or enqueued | On a trend |
 | `upgrade_origin_denied_log` | WARN | A WebSocket upgrade was refused for where it came from | On a rate |
+| `ws_recheck_unavailable_log` | WARN | The store behind an open WebSocket connection's credential could not be asked about it; the connection was kept | On a rate |
+| `initiator_header_malformed_log` | WARN | A message or job carried an unreadable record of who started it; it was handled as `unknown` | On a rate |
+| `mb_initiator_not_carried_log` | WARN | At startup: the broker cannot carry metadata, so who started the work is not sent | No |
 | `cross_origin_denied_log` | WARN | A state-changing request was refused for where it came from | On a rate |
 | `replaced_session_kept_log` | WARN | A session left behind by a new sign-in could not be ended | No |
 | `session_rejected_log` | INFO | A request presented a session cookie that no longer resolves | No |
+| `ws_credential_invalid_log` | INFO | A WebSocket connection was closed with 4401: its credential no longer holds | No |
+| `ws_connection_forbidden_log` | INFO | A WebSocket connection was closed with 4403: its caller no longer meets the channel's conditions | No |
+| `initiator_claim_dropped_log` | INFO | A claim arrived that this application does not carry, and was dropped (once per name) | No |
 | `access_log` | INFO | One request was served | No |
 
-Five of these deserve a word about why they sit where they do.
+Several of these deserve a word about why they sit where they do.
 
 **`authorization_drift_log` pages, while `declaration_drift_log` only trends.**
 Both mean a declaration and the code disagree, but the consequences are not
@@ -187,6 +194,33 @@ the same browser could not end the session it replaced. The record left behind i
 unreachable from that browser and expires on its own, so nothing is broken; a
 steady stream of them says the store is unhealthy, and one now and then says
 nothing at all.
+
+**`ws_recheck_unavailable_log` is the outage seen from connections already
+open.** When the session store cannot be reached, new requests are what
+`session_store_unavailable_log` reports, and that is the one to page on. This one
+says the open WebSocket connections are affected too: they are kept, since an
+outage says nothing about anybody's credential, and asked about again at the next
+interval. It comes once per connection per interval, so its volume follows how
+many connections are open, not how bad the outage is — alert on its rate, not on
+a count.
+
+**`ws_credential_invalid_log` and `ws_connection_forbidden_log` are Tuesday.** A
+token expired under an open connection, somebody signed out on another tab, a
+key lost a scope: the connection was ended the way it should be. A sudden burst
+of `ws_credential_invalid_log` right after a deploy is worth a look — it is the
+shape a key store that answers "not found" for everything takes.
+
+**`initiator_header_malformed_log` names a producer that broke the convention.**
+The message or job was handled anyway, as `unknown`, so nothing failed; what was
+lost is who started it. The record carries the `source` (the channel or the job)
+and what was wrong, never the values. A steady rate from one source is a
+producer to talk to.
+
+**`initiator_claim_dropped_log` answers "why is the claim missing?".** Another
+service sent a claim this application does not list, and it was dropped — which
+is the rule working, not a fault. It is written once per claim name per process,
+so it cannot flood; look for it when a handler does not see a claim you expected,
+and add the name to the list if you meant to read it.
 
 ### 誰が呼べるか: `Security`
 
@@ -235,6 +269,15 @@ Security: &restkit.SecuritySpec{
 > 続ける設定ミスを、最初のリクエストではなく起動時に潰すためです。
 > 同様に、`Schemes` で限定した資格情報を検証できない場合も停止します。
 > ローカル開発用の既定値は `internal/config/.env` に入っています。
+
+> **`Public` admits everyone, so it cannot carry conditions.** A public endpoint
+> is served before `Schemes` and `Scopes` are looked at, so a declaration with
+> both would read as protected and serve everybody — and the generated documents
+> would show it as public, the scopes nowhere. The application refuses to start
+> on one instead, naming each endpoint by method and path. Drop `Public` to
+> require the conditions, or drop the conditions to serve everyone. `Public` with
+> `Resource` is refused for the same reason, and a WebSocket channel is held to
+> the same rule (see [WebSocket channels](#websocket-channels)).
 
 > **生 Controller には効きません。** `Security` は `restkit.Endpoint` のアダプタが評価します。
 > `rest.Controller` を自分で実装した場合はこの判定を通らないので、認可は自分で書く必要が
@@ -1389,6 +1432,407 @@ BodyRules: []*rule.RuleSet{
 > 区別が要らない場所で使うと、`Handle` の分岐が無駄に増えます。
 
 
+## WebSocket channels
+
+A WebSocket channel is an entry point from outside, exactly as an HTTP endpoint
+is, and it is held to the same rules. A connection is authenticated with the
+credentials HTTP accepts: a browser's session cookie, a machine's bearer token
+or API key. A channel that declares nothing is closed, and opening one has to be
+written down. What a channel adds is time: a request is over in milliseconds,
+while a connection may stay open for hours — longer than the credential it was
+opened with stays valid.
+
+### Who may connect: `Security` on the channel
+
+```go
+// Anyone, anonymous callers included.
+Security: &wskit.SecuritySpec{Public: true},
+
+// A verified caller holding every scope listed.
+Security: &wskit.SecuritySpec{Scopes: []string{"orders:read"}},
+
+// Only callers who connected with a session cookie.
+Security: &wskit.SecuritySpec{Schemes: []string{authkit.SchemeSession}},
+
+// Nothing declared: a verified caller, with any credential the application verifies.
+```
+
+The fields mean what they mean on `restkit.SecuritySpec`. The declaration is
+judged before the upgrade, while the handshake is still an HTTP request, so a
+refused caller gets an ordinary HTTP response in the shared error shape and no
+connection is ever opened:
+
+| Situation | Answer |
+|---|---|
+| `Public: true` | upgraded, whoever is calling |
+| No verified caller | **401** `unauthenticated` |
+| A credential of a kind not in `Schemes` | **403** `forbidden` |
+| A scope in `Scopes` missing | **403** `forbidden` |
+
+These checks run before anything the channel adds in `Configure`, in this order:
+`upgrade-origin` (did the page come from an origin this application serves?),
+`auth-upgrade` (verify the credential), `channel-security` (this declaration),
+`caller-watch` (start following the caller — see
+[A connection does not outlive its credential](#a-connection-does-not-outlive-its-credential)).
+
+A channel built with `wskit.Raw`, for framing that is not the envelope, takes the
+same declaration as its second argument, with the same meaning: `nil` is closed.
+"Raw" describes the messages, not the access.
+
+The startup checks are HTTP's as well. A channel — or a message on it, see below
+— that needs a caller when nothing is configured to verify one, a channel that
+limits itself to a kind of credential the application cannot verify, and one
+declaring `Public` together with `Schemes` or `Scopes` all stop the application
+from starting.
+
+Whether a caller may join *this* room — `/ws/rooms/{id}` — is not something a
+declaration can know. Decide it where the room is known: in a pre-upgrade
+middleware added in `Configure`, which answers with an HTTP status before any
+connection exists, or in `OnOpen`.
+
+### Conditions on one message
+
+A channel can be open to everyone and still keep some of its messages for some
+callers. A received message says so on its `ReceiveOpts`:
+
+```go
+// Anyone connected may echo: no Security.
+wskit.Receive[dto.UserEcho](EchoMessage, wskit.ReceiveOpts{ /* ... */ }, c.handleEcho),
+
+// Only a signed-in caller may ask who they are.
+wskit.Receive[dto.UserWhoAmI](WhoAmIMessage, wskit.ReceiveOpts{
+	Security: &wskit.MessageSecurity{},
+}, c.handleWhoAmI),
+
+// Only a caller holding announcements:write may announce.
+wskit.Receive[dto.UserAnnounce](AnnounceMessage, wskit.ReceiveOpts{
+	Security: &wskit.MessageSecurity{Scopes: []string{"announcements:write"}},
+}, c.handleAnnounce),
+```
+
+⚠ **`nil` means the opposite of what it means on the channel.** On a channel,
+`nil` is closed. On a message, `nil` adds nothing: the message asks only what the
+channel asked. A message's declaration can only add to the channel's conditions
+— a connection exists only because it met them, so there is nothing left to
+relax. Any non-nil value requires a verified caller, and `Scopes` add to that.
+
+A refused message is answered with the error message, and the connection stays
+open:
+
+```json
+{"type": "error", "data": {"code": "forbidden", "message": "this operation is not allowed for the caller", "message_type": "user.announce"}}
+```
+
+`unauthenticated` (nobody is signed in on this connection) and `forbidden` (a
+scope is missing) mean what 401 and 403 mean. The message is judged before its
+payload is decoded, so a caller who may not send it learns nothing about what
+its payload has to look like. Scopes are judged through the
+[implication table](#the-implication-table), so `admin` may announce although
+nothing in the channel mentions `admin`.
+
+There is no `Security` on `SendOpts`, on purpose. Nothing judges who a sent
+message reaches (see [Broadcasting, and who it reaches](#broadcasting-and-who-it-reaches)),
+and a field there would read as a promise that something did.
+
+### A connection does not outlive its credential
+
+The caller is verified once, at the handshake. From then on, the connection is
+followed for as long as it is open:
+
+| The connection was opened with | What ends it |
+|---|---|
+| a bearer token (JWT) | the token's `exp`, on time. Nothing can end a token earlier, so nobody is asked |
+| a session cookie | the session being signed out, ended or expired — found by asking the session store again |
+| an API key | the key being removed — found by asking the key store again |
+| nothing (a public channel) | nothing: there is no credential to follow |
+
+Sessions and keys are asked about again every `AUTH_WS_RECHECK_INTERVAL`
+(default `5m`; under `1s` is refused as a mistyped unit). That interval is the
+longest a connection outlives a signed-out session or a removed key, and
+shorter means more lookups. Each wait is shortened by a random amount of up to a
+fifth, so that connections opened together — right after a deploy — do not all
+ask at once. A recheck also extends the session's idle limit: a tab with a live
+connection is a tab in use.
+
+| A recheck finds | What happens |
+|---|---|
+| The credential still holds | The connection's caller is replaced by the one just found, scopes included, and every handler sees it from the next message on — `authkit.PrincipalFrom`, `initiator.From` and a message's declaration alike. If that caller no longer meets the channel's declaration, the connection is closed with **4403** |
+| The session or the key is gone | Closed with **4401** |
+| The store did not answer | **Nothing is closed.** A warning is logged (`ws_recheck_unavailable_log`), and the next recheck asks again |
+
+The last row is deliberate. An outage says nothing about anybody's credential,
+and closing every connection because a store blinked would turn a store outage
+into an outage of every channel. A single question to the store is cut off after
+10 seconds, so a store that hangs delays the next recheck instead of stopping
+them.
+
+Which row of the first table applies is decided by the kind of credential the
+connection was opened with, never by the caller's claims. A session keeps the
+claims of the token it was traded for, `exp` included, and that `exp` is not the
+session's.
+
+#### What a client should do with 4401 and 4403
+
+The two codes are HTTP's 401 and 403, moved into the range WebSocket leaves to
+applications, and they ask a client for opposite things:
+
+| Close code | Meaning | The client should |
+|---|---|---|
+| **4401** | The credential the connection was opened with is no longer valid: a token expired, a session was signed out or ended, a key was removed | authenticate again — refresh the token, or send the user to sign in — and **then** reconnect |
+| **4403** | The caller is still who they were, but no longer meets the channel's conditions: a scope it requires was taken away | **not** reconnect on its own: the handshake is refused with a 403 until the caller's permissions change |
+
+A client that reconnects on every close without looking at the code retries,
+on 4401, with the credential that just stopped working, and on 4403 into a 403
+for ever. Reconnecting with a backoff is still right for a connection that was
+dropped (1006) or a server that went away (1001).
+
+The generated AsyncAPI document states both codes with these meanings
+(`x-conventions.websocket.recheck`), so a client team can find them without this
+page. Each closure is also recorded, at INFO: `ws_credential_invalid_log` for
+4401, `ws_connection_forbidden_log` for 4403.
+
+### Broadcasting, and who it reaches
+
+```go
+err := Announcement.Broadcast(ctx, event.Session.Connections(), msg)
+```
+
+A broadcast reaches **every connection on the same path, on this instance**: the
+full path, path parameters included (`/ws/rooms/1` and `/ws/rooms/2` are separate
+groups), and only the connections this process holds. Nothing judges, connection
+by connection, who may receive what.
+
+That is safe for what it is. Every connection on a path met the channel's
+declaration when it connected and goes on meeting it, or the recheck closes it:
+access is decided when a client joins, which is the usual model for real-time
+channels. What it does not give you, today:
+
+- **No way to send to a connection from outside its handlers** — from an HTTP
+  request, a broker message or a job.
+- **No addressing by user or group, and no delivery across instances.** Two
+  instances behind a load balancer each broadcast to their own connections only.
+
+Until there is:
+
+- **Never broadcast what only some recipients may see and let the client discard
+  the rest.** Every connection on the path receives it, and anyone can read it in
+  their browser's developer tools.
+- Answer the caller who asked on their own connection only, with the sender's
+  `Send(ctx, event.Conn, msg)` rather than `Broadcast`.
+- Make rooms out of paths — `/ws/rooms/{id}`, with a check on joining that room —
+  so that a broadcast reaches only those who were let in.
+
+
+## Who started the work: `Initiator`
+
+Work often travels further than the request that started it: an HTTP request
+publishes a message, a consumer enqueues a job, a scheduled task fans out.
+`initiator.From(ctx)` answers *whose action started this* the same way on every
+one of those paths:
+
+```go
+from := initiator.From(ctx)
+from.Kind()   // initiator.KindAppUser, initiator.KindAPIKey, initiator.KindSystem, ...
+from.ID()     // who, within that kind; "" when nobody is known
+from.Claims() // the claims this application carries, or nil
+```
+
+It always answers. Not knowing is an answer too: `initiator.KindUnknown`.
+
+### Authorize with the Principal; ask the Initiator who did it
+
+The two look alike and are not interchangeable:
+
+| | `authkit.Principal` | `initiator.Initiator` |
+|---|---|---|
+| What it is | the caller *this process verified* | who started the work, as it was handed along |
+| Where it exists | only at an entry point (HTTP, WebSocket) | everywhere: entry points, consumers, jobs, scheduled tasks |
+| Scopes | yes | **no** |
+| Use it to | authorize | record, audit, attribute — and look the party up in your own data |
+
+A consumer on the far side of a broker reads an Initiator that a producer wrote,
+and nothing on that path verified it. Were it a Principal, a service method
+shared by an endpoint and a consumer, authorizing with `authkit.PrincipalFrom`,
+would let a message through on the strength of data nobody checked — an access
+check nobody declared, resting on a trust nobody can see. A separate type with no
+scopes makes that impossible to write: there is nothing on an Initiator to
+authorize with.
+
+So a consumer or a job that needs a decision about a particular user makes it
+from **its own data, keyed by the ID**, never from what another service wrote
+into a header. The broker, worker and scheduler code does not even import
+`authkit`, and a spec keeps it that way.
+
+### Where the value comes from
+
+| The work started from | `Kind()` | `ID()` |
+|---|---|---|
+| An HTTP or WebSocket request with a session cookie | `app_user` | the caller's subject |
+| … with a bearer token (JWT) | `app_user` — a service's client-credentials token included | the caller's subject |
+| … with an API key | `api_key` | the caller's subject |
+| … with no credential | `unauthenticated` | — |
+| A scheduled task | `system` | — |
+| A broker message | what its producer wrote, as written | the same |
+| A worker job | what the code that enqueued it had | the same |
+| A context nobody marked: work that lost track of its origin, or a gRPC call | `unknown` | — |
+
+- The kinds are the CloudEvents `authtype` values, verbatim. Ensoria writes five
+  of them. `user` and `service_account` — accounts on the infrastructure, such as
+  an IAM user — arrive only from producers that are not Ensoria, and are kept as
+  they arrive.
+- `system` is a label, not a principal: it holds no permission of any kind.
+- The ID is the caller's subject unchanged, so that a consumer can look the party
+  up in its own data. Every key listed in `AUTH_API_KEYS` has the same subject,
+  so their ID does not tell them apart; a `KeyStore` of your own can give each
+  key its own.
+- At an entry point the value is derived from the Principal whenever it is read,
+  so on a WebSocket connection it follows the caller the latest recheck found.
+
+### The claims an Initiator carries
+
+By default an Initiator carries its kind and its ID and nothing else. Which
+claims it carries besides is listed in Go, in
+[internal/app/auth/initiator_claims.go](internal/app/auth/initiator_claims.go),
+next to the scope policy and for the same reason: which claims leave this service
+is a decision about personal data, and it belongs in review — not in an
+environment variable that can differ between staging and production by accident.
+
+**That one list decides both what this application reads and what it sends.** A
+claim another service sends is invisible here unless it is listed here, and what
+this application passes on carries only what is listed. With service A listing
+`tenant` and `email`, and this application, B, listing `tenant` only:
+
+| Step | What the Initiator carries |
+|---|---|
+| A publishes | `{"tenant":"t1","email":"x@example.com"}` |
+| B's handler reads, having received it | `{"tenant":"t1"}` |
+| B's handler publishes onwards | `{"tenant":"t1"}` |
+
+So a claim B wants to read has to be in B's own list, even when A sends it, and
+a service in the middle of a chain that does not list a claim stops it there.
+Each dropped name is logged once per process (`initiator_claim_dropped_log`,
+with the name and the channel or job, never the value): that is where to look
+when a claim you expected is missing. The generated AsyncAPI document says the
+same in its description of `ce_authclaims`, so a producing team can learn it
+from your document alone.
+
+Refused at startup, whatever the list says: `scope` — an Initiator never
+authorizes anything — and the registered JWT claims of RFC 7519 (`iss`, `sub`,
+`aud`, `exp`, `nbf`, `iat`, `jti`), which describe the original token rather
+than who started the work. `sub` travels as the ID already.
+
+Read the claims with the typed accessors (`String`, `Int`, ...): a value that
+crossed a broker has JSON's types.
+
+### What it is, and what it is not
+
+- **A fact as of the moment the work was handed on.** A message published by a
+  user who signs out a minute later still says that user started it, and nobody
+  checks it again. That is what a record of who did something should say — and
+  the reason it must never be the basis for granting anything.
+- **Possibly personal data.** The ID is the `sub` claim as the identity provider
+  wrote it; an identity provider that puts an email address there sends that
+  address to every consumer of every message. So does every claim you list. Keep
+  the list short, and prefer opaque identifiers.
+- **Not a credential.** Nothing in it lets a consumer act as that party, and
+  nothing that would should be added to it.
+
+### Across a message broker
+
+Every message published through an `mbkit.Publication` carries the Initiator of
+the context it was published from, and every subscription handler reads it back
+with `initiator.From(ctx)`. A consumer that publishes in turn passes the same
+value on, so a chain of services goes on knowing who started it. Neither side
+writes any code for this.
+
+#### The wire convention
+
+This is everything a producer that is not Ensoria has to write to be understood.
+The names and their meanings are those of the CloudEvents authcontext extension,
+with the `ce_` prefix of its Kafka binding. **The messages themselves are not
+CloudEvents**: only the attribute names and what they mean are shared.
+
+| Header | Value | Written |
+|---|---|---|
+| `ce_authtype` | the kind: `app_user`, `user`, `service_account`, `api_key`, `system`, `unauthenticated` or `unknown` | always — `unknown` when the producer lost track |
+| `ce_authid` | who, within that kind: an account's or a key's identifier | only when there is one |
+| `ce_authclaims` | the claims, as a JSON object in plain UTF-8 — not base64, and on one line | only when there are some |
+
+- The names are the same on every broker: AMQP headers on RabbitMQ, NATS
+  headers, Kafka record headers, SNS and SQS message attributes of type `String`.
+- A message with none of them reads as `unknown`, quietly. That is a producer
+  which does not follow the convention, and it is allowed to.
+- A message that breaks it reads as `unknown` with a warning
+  (`initiator_header_malformed_log`), and is handled all the same: an ID or
+  claims without a kind, claims that are not a JSON object, or claims naming
+  `scope` or a registered JWT claim.
+- A kind not listed above is kept as it is: CloudEvents lets implementations add
+  values.
+- Claims the receiving application does not list are dropped, as described above.
+- `ce_authclaims` must not hold anything that would let a consumer act as that
+  party.
+
+Inside the application, the three headers are the framework's alone. They are
+removed from the metadata a subscription handler is given, so `initiator.From`
+is the one way to read them, and left out of the record of a handler that
+panicked. Metadata of your own that names one of them is refused at publish time
+(`mbApp.ErrReservedMetadata`): they are written from the context and from
+nowhere else, so a hand-written value cannot send another origin than the one
+the work has.
+
+#### Trust comes from the broker, not from the headers
+
+Whoever can write to a channel decides everything a message on it says, these
+headers included. Nothing at the application layer can be stronger than that — a
+token attached to a message is readable by every consumer of that message, and
+any of them could attach it to one of their own. So:
+
+- **Decide who may publish with the broker's own authentication and access
+  control**, per channel.
+- **Do not mix writers you trust differently on one channel.** A channel only
+  internal services write to, and one a partner writes to, are two channels with
+  two ACLs.
+- **Authorize at the entry point** (HTTP, WebSocket), where there is a Principal.
+  A consumer that needs a decision about a user looks the ID up in its own data.
+
+#### What a broker can carry
+
+| Broker | Carries it | Worth knowing |
+|---|---|---|
+| RabbitMQ | yes, as AMQP headers | the headers have to fit in one frame (`frame_max`, 128 KB by default) |
+| NATS | yes, as headers | — |
+| SNS / SQS | yes, as message attributes | **at most 10 attributes per message**. Ensoria uses up to 3, which leaves 7 for your own metadata |
+| Kafka / Redpanda | yes, as record headers | — |
+| Kinesis | **no**: it has no headers | the publisher leaves them off and says so once, at startup (`mb_initiator_not_carried_log`); consumers read `unknown` |
+
+The rows for Kafka, Redpanda and Kinesis describe the `mb` library: the template
+itself connects to RabbitMQ, NATS and SQS. Ensoria sets no size limit of its own,
+and every claim you list makes every message bigger.
+
+#### Publishing around the publication
+
+`mb.Publisher` is in the dependency graph too, and code that injects it and calls
+`Publish` directly sends no Initiator at all — besides publishing something the
+generated document does not know about. Publish through an `mbkit.Publication`.
+
+### Across the worker queue
+
+A job carries the Initiator of the context it was enqueued with, and its handler
+reads it with `initiator.From(ctx)`, as a consumer does. A job enqueued by a
+scheduled task runs as `system`, and one retried from the dead-letter queue keeps
+the value it was first enqueued with.
+
+**Enqueue with the caller's context, cancellation detached:**
+
+```go
+id, err := s.jobQueue.Enqueue(context.WithoutCancel(ctx), "send_report", payload)
+```
+
+`context.Background()` loses who started the work — the job runs as `unknown` —
+and the caller's `ctx` as it is lets a request that finishes first cancel the
+enqueue. `context.WithoutCancel` keeps the values and drops the cancellation.
+
+
 ## API ドキュメントの生成
 
 HTTP API のドキュメントは、**実装から自動生成**します。アノテーションやコメントを書く必要はありません。
@@ -1580,15 +2024,39 @@ A `TODO` in the output means the corresponding declaration is empty.
 |---|---|
 | Title, version, summary, license | [internal/app/apiinfo](internal/app/apiinfo/apiinfo.go) |
 | Summary, description, field meanings, related operations | `Summary` / `Description` / `FieldDocs` / `Related` on the declaration |
-| Side effects, idempotency, preconditions, scopes, ordering | `Behavior` on the declaration |
+| Side effects, idempotency, preconditions, ordering | `Behavior` on the declaration |
 | Delivery guarantee | `Behavior.Delivery` on the mb declaration |
 | Payload type, required fields, constraints | the type parameter and `BodyRules` |
-| Broker and WebSocket endpoints | `BROKER_*` and `HTTP_PORT` in the environment configuration |
+| Who may connect to a WebSocket channel, and what a received message asks of its sender | `Security` on `wskit.Channel` (or `wskit.Raw`) and on `wskit.ReceiveOpts` |
+| The claims the Initiator headers may hold | [internal/app/auth/initiator_claims.go](internal/app/auth/initiator_claims.go) |
+| Scope implications | the scope policy in [internal/app/auth/scopes.go](internal/app/auth/scopes.go) |
+| Broker and WebSocket endpoints | `BROKER_*`, and `HTTP_PUBLIC_URL` (from `HTTP_PORT` when it is unset), in the environment configuration |
+| How a client authenticates to the broker — the kind, never the credential | the `BROKER_*` credentials in the environment configuration |
+| The WebSocket recheck interval | `AUTH_WS_RECHECK_INTERVAL` in the environment configuration |
 
 The delivery section carries two things: the guarantee the author declared, and
 the settings the subscribe/publish options actually resolve to. Both are kept
 because they can disagree — a document showing only the prose would hide a
 subscription whose options contradict it.
+
+### Who may connect, in the document
+
+AsyncAPI has a place for how a client authenticates and none for most of the
+rest, so the document uses both its own fields and extensions:
+
+| Where | What it says |
+|---|---|
+| A broker server's `security` | how a client authenticates to the broker: `userPassword`, `plain`, `scramSha256` or `scramSha512`. Only the kind is written, never a credential |
+| A broker server's `x-unsupported-security` | the kinds AsyncAPI has no type for — a NATS token, AWS IAM on SQS, SNS and Kinesis — which in `security` would make a parser reject the whole document |
+| A WebSocket operation's `security` | the credentials its channel accepts, as alternatives: any one of them is enough |
+| A WebSocket operation's `x-security` | what `security` cannot say: `public: true`, the `scopes` required, and accepted kinds AsyncAPI has no type for (`unsupported_schemes`) |
+| A received WebSocket message's `x-security` | what it asks of its sender beyond the channel: `requires_caller`, `scopes` |
+| Every broker message's `headers` | the [Initiator headers](#the-wire-convention), with the claims `ce_authclaims` may hold |
+| `x-conventions` | what holds everywhere: the scope implications, what the Initiator headers are and are not, how a WebSocket connection is authenticated, the error message and every code it carries, and the recheck interval with the close codes |
+
+encli's own tests validate what it generates against the official AsyncAPI 3.0
+schema: the extensions add to the document without making it one an AsyncAPI
+tool refuses.
 
 ### Not overwritten
 

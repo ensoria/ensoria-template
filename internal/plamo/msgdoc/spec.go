@@ -12,7 +12,10 @@
 // apidoc), because a message payload is described exactly like an HTTP body.
 package msgdoc
 
-import "github.com/ensoria/ensoria-template/internal/plamo/apidoc"
+import (
+	"github.com/ensoria/encli/pkg/apicontract"
+	"github.com/ensoria/ensoria-template/internal/plamo/apidoc"
+)
 
 // MessagingSpec is the neutral model of the whole messaging surface.
 type MessagingSpec struct {
@@ -85,19 +88,24 @@ type ServerSecurity struct {
 // The kinds of credential a broker may require. The first four are the kinds
 // AsyncAPI has a name for, spelt as it spells them; the last two have none, and
 // a renderer for AsyncAPI carries them in an extension instead.
+//
+// The values belong to apicontract, and these re-export them: the renderer
+// branches on them, and it lives in another module that cannot see this one,
+// so a kind spelt on both sides would turn a mismatch into a document that
+// silently drops the requirement. See the apicontract package comment.
 const (
 	// ServerAuthUserPassword is a user name and password (RabbitMQ, NATS).
-	ServerAuthUserPassword = "userPassword"
+	ServerAuthUserPassword = apicontract.ServerAuthUserPassword
 	// ServerAuthPlain is SASL PLAIN (Kafka, Redpanda).
-	ServerAuthPlain = "plain"
+	ServerAuthPlain = apicontract.ServerAuthPlain
 	// ServerAuthScramSHA256 is SASL SCRAM-SHA-256 (Kafka, Redpanda).
-	ServerAuthScramSHA256 = "scramSha256"
+	ServerAuthScramSHA256 = apicontract.ServerAuthScramSHA256
 	// ServerAuthScramSHA512 is SASL SCRAM-SHA-512 (Kafka, Redpanda).
-	ServerAuthScramSHA512 = "scramSha512"
+	ServerAuthScramSHA512 = apicontract.ServerAuthScramSHA512
 	// ServerAuthToken is a token presented to the broker (NATS).
-	ServerAuthToken = "token"
+	ServerAuthToken = apicontract.ServerAuthToken
 	// ServerAuthAWSIAM is AWS credentials authorized by IAM (SQS, SNS, Kinesis).
-	ServerAuthAWSIAM = "awsIam"
+	ServerAuthAWSIAM = apicontract.ServerAuthAWSIAM
 )
 
 // OperationSpec is one direction of one channel: what this application sends to

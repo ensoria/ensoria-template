@@ -26,6 +26,22 @@ const (
 	HeaderClaims = "ce_authclaims"
 )
 
+// WireHeaders is the wire form as a struct, one field per header, for the
+// generated documentation to read its shape from. Nothing at run time uses it:
+// Headers writes, and FromHeaders reads, plain metadata.
+//
+// The json tags are the header names, in the order ReservedHeaders lists them,
+// which a spec holds them to. Every field is omitempty because no header can be
+// required of a producer: one that does not follow the convention writes none.
+type WireHeaders struct {
+	// Kind is HeaderKind.
+	Kind string `json:"ce_authtype,omitempty"`
+	// ID is HeaderID.
+	ID string `json:"ce_authid,omitempty"`
+	// Claims is HeaderClaims.
+	Claims string `json:"ce_authclaims,omitempty"`
+}
+
 // ReservedHeaders lists the header names the wire form uses.
 func ReservedHeaders() []string {
 	return []string{HeaderKind, HeaderID, HeaderClaims}

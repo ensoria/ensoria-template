@@ -12,16 +12,6 @@ import (
 	"github.com/ensoria/validator/pkg/rule"
 )
 
-// InitiatorHeaders is the shape of the headers that say who started the work a
-// broker message belongs to, written down for the generated document only: on
-// the wire they are plain message headers. The json tags are
-// initiator.HeaderKind, HeaderID and HeaderClaims, which a spec checks.
-type InitiatorHeaders struct {
-	Kind   string `json:"ce_authtype,omitempty"`
-	ID     string `json:"ce_authid,omitempty"`
-	Claims string `json:"ce_authclaims,omitempty"`
-}
-
 // strAnyOf is the rule the kind header is documented with. Nothing is
 // validated with it, so it carries no messages.
 var strAnyOf = rule.CreateStrAnyOf(nil)
@@ -41,7 +31,7 @@ func initiatorHeaderSchema(claimNames []string) *apidoc.Schema {
 		kinds = append(kinds, string(k))
 	}
 	rules := []*rule.RuleSet{{Field: initiator.HeaderKind, Rules: []rule.Rule{strAnyOf(kinds...)}}}
-	return apidoc.BodySchema(reflect.TypeFor[InitiatorHeaders](), rules, apidoc.ExampleOptions{}, map[string]string{
+	return apidoc.BodySchema(reflect.TypeFor[initiator.WireHeaders](), rules, apidoc.ExampleOptions{}, map[string]string{
 		initiator.HeaderKind: "What kind of party started the work (the CloudEvents authtype values). " +
 			"This application writes it on every message it publishes; other producers may leave it out.",
 		initiator.HeaderID: "Who, within that kind: an account's or an API key's identifier. " +
