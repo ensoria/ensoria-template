@@ -196,7 +196,9 @@ steady stream of them says the store is unhealthy, and one now and then says
 nothing at all.
 
 **`ws_recheck_unavailable_log` is the outage seen from connections already
-open.** When the session store cannot be reached, new requests are what
+open.** It covers both stores an open connection is asked about again — the
+session store and the API key store — and its `scheme` says which. When the
+session store cannot be reached, new requests are what
 `session_store_unavailable_log` reports, and that is the one to page on. This one
 says the open WebSocket connections are affected too: they are kept, since an
 outage says nothing about anybody's credential, and asked about again at the next
@@ -204,11 +206,22 @@ interval. It comes once per connection per interval, so its volume follows how
 many connections are open, not how bad the outage is — alert on its rate, not on
 a count.
 
+An API key store that cannot be reached — the built-in one in Redis or a
+database (`AUTH_KEYSTORE`), or a `KeyStore` of your own — has no record of its
+own on the HTTP side: a request presenting a key is answered with a 503 and
+nothing else is logged. Watch `access_log` for `status_code` 503 to see it.
+
 **`ws_credential_invalid_log` and `ws_connection_forbidden_log` are Tuesday.** A
 token expired under an open connection, somebody signed out on another tab, a
-key lost a scope: the connection was ended the way it should be. A sudden burst
-of `ws_credential_invalid_log` right after a deploy is worth a look — it is the
-shape a key store that answers "not found" for everything takes.
+key lost a scope: the connection was ended the way it should be. Most
+`ws_credential_invalid_log` records are tokens reaching their `exp` — every
+connection opened with a token ends that way — so their number follows how many
+such connections are open and how long tokens last. What is worth a look is a
+burst among the records whose `scheme` is `session` or `apiKey`: a store that
+suddenly answers "not found" for everybody — a Redis that restarted empty, a
+flushed table — has every connection it backs closed within one recheck
+interval. Nothing else in this table pages for that, because the store is
+answering.
 
 **`initiator_header_malformed_log` names a producer that broke the convention.**
 The message or job was handled anyway, as `unknown`, so nothing failed; what was
